@@ -10,6 +10,7 @@ import { PlaceHolderImages } from "@/lib/placeholder-images";
 import { ArrowRight, Truck, ShieldCheck, Flower2, Clock } from "lucide-react";
 import AffiliateBanner from "@/app/homepage/components/AffiliateBanner";
 import CategorySection from "@/app/homepage/components/CategorySection";
+import HeroSection from "@/app/homepage/components/HeroSection";
 
 export default function Home() {
   const featuredPlants = PRODUCTS.slice(0, 4);
@@ -20,44 +21,7 @@ export default function Home() {
       
       <main className="flex-grow">
         {/* Hero Section */}
-        <section className="relative h-[500px] md:h-[600px] flex items-center overflow-hidden">
-          <div className="absolute inset-0 z-0">
-            <Image
-              src={PlaceHolderImages.find(img => img.id === "hero-banner")?.imageUrl || ""}
-              alt="Hero Banner"
-              fill
-              className="object-cover"
-              priority
-              data-ai-hint="lush greenhouse"
-            />
-            <div className="absolute inset-0 bg-gradient-to-r from-black/60 to-transparent" />
-          </div>
-          <div className="container mx-auto px-4 relative z-10">
-            <div className="max-w-2xl text-white animate-fade-in">
-              <span className="inline-block bg-primary/20 backdrop-blur-md px-4 py-1.5 rounded-full text-sm font-bold border border-primary/30 mb-6">
-                🌱 Premium Nursery Collection
-              </span>
-              <h1 className="text-4xl md:text-6xl font-headline font-extrabold mb-6 leading-tight">
-                Bring Nature Into <br />Your Living Space
-              </h1>
-              <p className="text-lg md:text-xl text-white/90 mb-8 max-w-lg">
-                Discover our hand-picked selection of indoor and outdoor plants that purify air and uplift your mood.
-              </p>
-              <div className="flex flex-wrap gap-4">
-                <Link href="/plants">
-                  <Button size="lg" className="rounded-full px-8 text-lg font-bold">
-                    Shop Collection
-                  </Button>
-                </Link>
-                <Link href="/plants?cat=Indoor">
-                  <Button size="lg" variant="outline" className="rounded-full px-8 text-lg font-bold bg-white/10 text-white border-white/40 hover:bg-white hover:text-primary">
-                    Indoor Plants
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          </div>
-        </section>
+        <HeroSection />
 
         {/* Categories Section */}
         <CategorySection />

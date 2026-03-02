@@ -67,3 +67,16 @@
 .plant-card-hover {
   @apply transition-all duration-300 hover:-translate-y-1 hover:shadow-xl;
 }
+
+@keyframes float-y {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

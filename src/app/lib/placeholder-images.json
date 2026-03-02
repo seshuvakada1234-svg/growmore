@@ -8,6 +8,24 @@
       "imageHint": "indoor plants"
     },
     {
+      "id": "hero-slide-1",
+      "description": "New arrivals lush greenery",
+      "imageUrl": "https://picsum.photos/seed/hero1/1200/800",
+      "imageHint": "lush plants"
+    },
+    {
+      "id": "hero-slide-2",
+      "description": "Curated succulent collection",
+      "imageUrl": "https://picsum.photos/seed/hero2/1200/800",
+      "imageHint": "succulent collection"
+    },
+    {
+      "id": "hero-slide-3",
+      "description": "Beautifully packed gift plants",
+      "imageUrl": "https://picsum.photos/seed/hero3/1200/800",
+      "imageHint": "plant gifts"
+    },
+    {
       "id": "plant-monstera",
       "description": "Monstera Deliciosa",
       "imageUrl": "https://picsum.photos/seed/monstera/600/600",
