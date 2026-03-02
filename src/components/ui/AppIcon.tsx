@@ -16,6 +16,10 @@ const IconMap: Record<string, any> = {
   ShoppingCartIcon: LucideIcons.ShoppingCart,
   BoltIcon: LucideIcons.Zap,
   HeartIcon: LucideIcons.Heart,
+  FunnelIcon: LucideIcons.Filter,
+  ChevronDownIcon: LucideIcons.ChevronDown,
+  ChevronUpIcon: LucideIcons.ChevronUp,
+  CheckIcon: LucideIcons.Check,
 };
 
 interface AppIconProps {

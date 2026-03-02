@@ -84,3 +84,15 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Custom UI Components */
+.custom-checkbox {
+  @apply w-4 h-4 rounded border-2 border-[#D8EDD5] flex items-center justify-center transition-all bg-white flex-shrink-0;
+}
+.custom-checkbox.checked {
+  @apply bg-[#1B5E20] border-[#1B5E20];
+}
+
+.font-mono-custom {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
