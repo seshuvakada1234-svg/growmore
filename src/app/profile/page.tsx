@@ -1,4 +1,3 @@
-
 "use client";
 
 import { Header } from "@/components/layout/Header";
@@ -36,7 +35,7 @@ export default function ProfilePage() {
       window.dispatchEvent(new Event('cart-updated'));
       window.dispatchEvent(new Event('storage'));
       
-      router.push('/login');
+      router.push('/');
     } catch (error) {
       console.error("Error signing out:", error);
     }

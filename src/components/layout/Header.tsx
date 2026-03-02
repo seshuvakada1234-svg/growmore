@@ -71,6 +71,8 @@ export function Header() {
     try {
       await signOut(auth);
       localStorage.removeItem('plantshop_cart');
+      localStorage.removeItem('plantshop_wishlist');
+      localStorage.removeItem('plantshop_user');
       window.dispatchEvent(new Event('cart-updated'));
       router.push('/');
     } catch (error) {

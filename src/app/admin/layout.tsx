@@ -20,14 +20,16 @@ import { useState, useEffect } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
+import { useUser, useFirestore, useDoc, useMemoFirebase, useAuth } from "@/firebase";
 import { doc } from "firebase/firestore";
+import { signOut } from "firebase/auth";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const { user, isUserLoading } = useUser();
+  const auth = useAuth();
   const db = useFirestore();
 
   // Fetch the role to ensure only admins can enter
@@ -46,6 +48,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       router.push('/');
     }
   }, [user, isUserLoading, profile, isProfileLoading, router]);
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      // Clear local state for safety
+      localStorage.removeItem('plantshop_cart');
+      localStorage.removeItem('plantshop_wishlist');
+      localStorage.removeItem('plantshop_user');
+      window.dispatchEvent(new Event('cart-updated'));
+      router.push('/');
+    } catch (error) {
+      console.error("Admin logout error", error);
+    }
+  };
 
   if (isUserLoading || isProfileLoading) {
     return (
@@ -106,11 +122,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:bg-accent hover:text-primary font-bold transition-all">
           <Settings className="h-5 w-5" /> Settings
         </button>
-        <Link href="/">
-          <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-destructive font-bold transition-all">
-            <LogOut className="h-5 w-5" /> Exit Admin
-          </button>
-        </Link>
+        <button 
+          onClick={handleLogout}
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-destructive font-bold transition-all"
+        >
+          <LogOut className="h-5 w-5" /> Exit Admin
+        </button>
       </div>
     </div>
   );
