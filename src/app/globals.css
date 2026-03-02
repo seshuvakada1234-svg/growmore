@@ -1,4 +1,3 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -120,6 +119,37 @@
   .sticky-cart-bar {
     @apply fixed bottom-0 left-0 right-0 bg-white border-t p-3 flex items-center gap-3 z-50 shadow-[0_-4px_20px_rgba(0,0,0,0.1)];
   }
+
+  .offer-strip {
+    @apply bg-[#1B5E20] text-white text-center py-2 text-xs font-semibold tracking-wide fixed top-0 left-0 right-0 z-[110];
+  }
+
+  .nav-sticky {
+    @apply sticky z-[100] bg-white/90 backdrop-blur-md border-b border-[#D8EDD5] transition-all duration-300;
+  }
+
+  .modal-overlay {
+    @apply fixed inset-0 z-[300] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4;
+  }
+
+  .modal-card {
+    @apply bg-white w-full max-w-md rounded-2xl shadow-2xl p-6 relative animate-scale-in;
+  }
+
+  .gallery-thumb {
+    @apply relative h-20 w-20 rounded-lg overflow-hidden cursor-pointer border-2 transition-all border-transparent;
+  }
+  .gallery-thumb.active {
+    @apply border-[#1B5E20];
+  }
+
+  .review-card {
+    @apply bg-white border border-[#D8EDD5] p-5 rounded-2xl shadow-sm hover:shadow-md transition-shadow;
+  }
+
+  .offer-tag {
+    @apply bg-white/20 backdrop-blur-md border border-white/30 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider;
+  }
 }
 
 @keyframes marquee-scroll {
@@ -137,9 +167,29 @@
   to { transform: translate(-50%, 0); opacity: 1; }
 }
 
+@keyframes scale-in {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes slide-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes badge-pop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
 .animate-toast-in {
   animation: toast-in 0.3s ease-out forwards;
 }
+
+.animate-scale-in { animation: scale-in 0.2s ease-out forwards; }
+.animate-slide-right { animation: slide-right 0.3s ease-out forwards; }
+.animate-badge-pop { animation: badge-pop 0.3s ease-out; }
 
 .hide-scrollbar::-webkit-scrollbar { display: none; }
 .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
