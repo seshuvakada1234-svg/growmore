@@ -1,0 +1,77 @@
+import React from 'react';
+import type { Metadata } from 'next';
+import { Header } from "@/components/layout/Header";
+import { Footer } from "@/components/layout/Footer";
+import HeroSection from './components/HeroSection';
+import StatsBar from './components/StatsBar';
+import CategorySection from './components/CategorySection';
+import ProductGrid from './components/ProductGrid';
+import OfferBanner from './components/OfferBanner';
+import AffiliateBanner from './components/AffiliateBanner';
+import MarqueeStrip from './components/MarqueeStrip';
+
+export const metadata: Metadata = {
+  title: 'PlantShop – India\'s Best Online Plant Store | Buy Plants Online',
+  description: 'Shop 500+ indoor plants, succulents, and outdoor plants online. Free delivery above ₹499. 100% live plant guarantee. Bestsellers, new arrivals & exclusive deals.',
+  keywords: 'buy plants online, indoor plants, succulents, air purifying plants, plant delivery India',
+};
+
+export default function HomepagePage() {
+  return (
+    <div className="min-h-screen bg-[#FAFAF7]">
+      <Header />
+
+      <main>
+        {/* Hero */}
+        <HeroSection />
+
+        {/* Stats */}
+        <StatsBar />
+
+        {/* Marquee */}
+        <MarqueeStrip />
+
+        {/* Categories */}
+        <CategorySection />
+
+        {/* Bestsellers */}
+        <ProductGrid
+          title="Bestselling Plants"
+          subtitle="Most Loved"
+          filterKey="bestseller"
+          limit={8}
+          showViewAll
+          viewAllHref="/plants"
+        />
+
+        {/* Offer Banners */}
+        <OfferBanner />
+
+        {/* New Arrivals */}
+        <ProductGrid
+          title="New Arrivals"
+          subtitle="Just In"
+          filterKey="new"
+          limit={4}
+          showViewAll
+          viewAllHref="/plants"
+        />
+
+        {/* Affiliate Banner */}
+        <AffiliateBanner />
+
+        {/* All Featured */}
+        <ProductGrid
+          title="Featured Plants"
+          subtitle="Handpicked For You"
+          filterKey="featured"
+          limit={8}
+          showViewAll
+          viewAllHref="/plants"
+        />
+      </main>
+
+      <Footer />
+    </div>
+  );
+}
