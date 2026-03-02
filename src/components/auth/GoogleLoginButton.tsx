@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useAuth, useFirestore } from '@/firebase';
@@ -34,6 +35,7 @@ export function GoogleLoginButton() {
         const role = user.email === ADMIN_EMAIL ? 'admin' : 'user';
         const names = user.displayName?.split(' ') || [];
         
+        // 1. Set main user document
         await setDoc(userRef, {
           id: user.uid,
           email: user.email,
@@ -44,6 +46,29 @@ export function GoogleLoginButton() {
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
+
+        // 2. If this is the master admin, ensure they exist in the roles_admin DBAC collection
+        if (role === 'admin') {
+          const roleAdminRef = doc(db, 'roles_admin', user.uid);
+          await setDoc(roleAdminRef, {
+            id: user.uid,
+            assignedAt: serverTimestamp(),
+            isMasterAdmin: true
+          });
+        }
+      } else {
+        // If user document exists but master admin is missing from roles_admin, patch it
+        if (user.email === ADMIN_EMAIL) {
+          const roleAdminRef = doc(db, 'roles_admin', user.uid);
+          const roleSnap = await getDoc(roleAdminRef);
+          if (!roleSnap.exists()) {
+            await setDoc(roleAdminRef, {
+              id: user.uid,
+              assignedAt: serverTimestamp(),
+              isMasterAdmin: true
+            });
+          }
+        }
       }
 
       toast({

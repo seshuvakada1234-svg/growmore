@@ -6,7 +6,15 @@ service cloud.firestore {
     // --- Helpers ---
     function isSignedIn() { return request.auth != null; }
     function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
-    function isAdmin() { return isSignedIn() && exists(/databases/$(database)/documents/roles_admin/$(request.auth.uid)); }
+    
+    // Admin check: checks DBAC collection OR role field in user document
+    function isAdmin() { 
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/roles_admin/$(request.auth.uid)) || 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+      ); 
+    }
+    
     function isAffiliate(userId) { return isSignedIn() && get(/databases/$(database)/documents/users/$(userId)).data.role == 'affiliate'; }
 
     // --- Users ---
