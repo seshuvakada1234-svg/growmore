@@ -1,4 +1,3 @@
-
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { Truck, ShieldCheck, Flower2, Clock } from "lucide-react";
@@ -8,6 +7,7 @@ import HeroSection from "@/app/homepage/components/HeroSection";
 import MarqueeStrip from "@/app/homepage/components/MarqueeStrip";
 import OfferBanner from "@/app/homepage/components/OfferBanner";
 import ProductGrid from "@/app/homepage/components/ProductGrid";
+import StatsBar from "@/app/homepage/components/StatsBar";
 
 export default function Home() {
   return (
@@ -20,6 +20,9 @@ export default function Home() {
 
         {/* Marquee Benefits Strip */}
         <MarqueeStrip />
+
+        {/* Real-time Stats Bar */}
+        <StatsBar />
 
         {/* Categories Section */}
         <CategorySection />
