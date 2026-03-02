@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -13,7 +14,8 @@ import {
   Award,
   Bell,
   Loader2,
-  ShieldAlert
+  ShieldAlert,
+  Banknote
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
@@ -88,8 +90,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: "Products", href: "/admin/products", icon: Leaf },
     { name: "Orders", href: "/admin/orders", icon: ShoppingBag },
     { name: "Affiliates", href: "/admin/affiliates", icon: Award },
+    { name: "Payout Requests", href: "/admin/affiliate-payouts", icon: Banknote },
     { name: "Users", href: "/admin/users", icon: Users },
-    { name: "Payments", href: "/admin/payments", icon: CreditCard },
   ];
 
   const SidebarContent = () => (
@@ -170,7 +172,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <p className="text-xs text-muted-foreground uppercase tracking-widest font-bold opacity-70">Administrator</p>
               </div>
               <div className="h-10 w-10 rounded-full bg-accent flex items-center justify-center text-primary border-2 border-white shadow-sm overflow-hidden">
-                {user.photoURL ? (
+                {user?.photoURL ? (
                   <img src={user.photoURL} alt="Profile" className="h-full w-full object-cover" />
                 ) : (
                   <Users className="h-5 w-5" />
