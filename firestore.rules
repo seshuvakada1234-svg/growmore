@@ -7,83 +7,42 @@ service cloud.firestore {
      *
      * CORE PHILOSOPHY:
      * This ruleset enforces a strict user-ownership model combined with administrative access 
-     * controlled via a dedicated "Existence over Content" collection. It is designed for 
-     * rapid prototyping, focusing on robust authorization while remaining flexible regarding 
-     * specific data shapes.
-     *
-     * DATA STRUCTURE:
-     * - User-specific data (Profiles, Addresses, Cart, Orders, Affiliate data) is nested 
-     *   under `/users/{userId}/` for high-performance path-based authorization.
-     * - Public catalog data (Categories, Products) is top-level for easy global access.
-     * - Administrative roles are stored in the `/roles_admin/` collection.
-     *
-     * KEY SECURITY DECISIONS:
-     * - Path-Based Authorization: We prioritize matching the `request.auth.uid` directly 
-     *   against the `{userId}` wildcard in paths to avoid costly `get()` calls.
-     * - Administrative Override: Users whose UIDs exist in `/roles_admin/` are granted 
-     *   broad management permissions over the product catalog and affiliate financials.
-     * - Relationship Integrity: On creation, we enforce that ownership fields (e.g., userId) 
-     *   match the authenticated user's ID to prevent identity spoofing.
-     * - State Immutability: Critical relational links (like the `id` on a profile or 
-     *   `userId` on a review) are made immutable during updates.
+     * controlled via a dedicated "Existence over Content" collection.
      */
 
     // --- Helper Functions ---
 
-    /** @description Checks if the user is authenticated. */
     function isSignedIn() {
       return request.auth != null;
     }
 
-    /** @description Checks if the authenticated user's UID matches the provided userId. */
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    /** @description Checks if the document exists and the current user is the owner. */
     function isExistingOwner(userId) {
       return resource != null && isOwner(userId);
     }
 
-    /** @description Checks if the current user is an administrator via the roles_admin collection. */
     function isAdmin() {
       return isSignedIn() && exists(/databases/$(database)/documents/roles_admin/$(request.auth.uid));
     }
 
     // --- Collection Rules ---
 
-    /**
-     * @description Rules for user profile documents.
-     * @path /users/{userId}
-     * @allow (get) request.auth.uid == 'user_123' (list) same (create) same (update) same
-     * @deny (create) userId 'user_456' tried to create profile for 'user_123'
-     * @principle Ensures users can only access and manage their own profile data.
-     */
     match /users/{userId} {
-      allow get, list: if isOwner(userId);
+      allow get, list: if isOwner(userId) || isAdmin();
       allow create: if isOwner(userId) && request.resource.data.id == userId;
-      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
-      allow delete: if isExistingOwner(userId);
+      allow update: if (isExistingOwner(userId) || isAdmin()) && request.resource.data.id == resource.data.id;
+      allow delete: if isAdmin();
 
-      /**
-       * @description Private addresses for a specific user.
-       * @path /users/{userId}/addresses/{addressId}
-       * @allow (create) authenticated user matching userId in path.
-       * @deny (create) authenticated user mismatching userId in path.
-       * @principle Path-based ownership for private sub-resources.
-       */
       match /addresses/{addressId} {
-        allow get, list: if isOwner(userId);
+        allow get, list: if isOwner(userId) || isAdmin();
         allow create: if isOwner(userId) && request.resource.data.userId == userId;
-        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
-        allow delete: if isExistingOwner(userId);
+        allow update: if (isExistingOwner(userId) || isAdmin()) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId) || isAdmin();
       }
 
-      /**
-       * @description User's private shopping cart items.
-       * @path /users/{userId}/cartItems/{cartItemId}
-       * @principle Users manage their own ephemeral cart data.
-       */
       match /cartItems/{cartItemId} {
         allow get, list: if isOwner(userId);
         allow create: if isOwner(userId) && request.resource.data.userId == userId;
@@ -91,11 +50,6 @@ service cloud.firestore {
         allow delete: if isExistingOwner(userId);
       }
 
-      /**
-       * @description User's private order history.
-       * @path /users/{userId}/orders/{orderId}
-       * @principle Users can create and view their orders; admins can manage order status.
-       */
       match /orders/{orderId} {
         allow get, list: if isOwner(userId) || isAdmin();
         allow create: if isOwner(userId) && request.resource.data.userId == userId;
@@ -110,11 +64,6 @@ service cloud.firestore {
         }
       }
 
-      /**
-       * @description Affiliate profile and financial records.
-       * @path /users/{userId}/affiliateProfile
-       * @principle Affiliates view their earnings; admins control approvals and payouts.
-       */
       match /affiliateProfile {
         allow get: if isOwner(userId) || isAdmin();
         allow list: if isOwner(userId) || isAdmin();
@@ -134,34 +83,15 @@ service cloud.firestore {
       }
     }
 
-    /**
-     * @description Global product categories.
-     * @path /categories/{categoryId}
-     * @allow (get/list) public access (create/update/delete) admin access.
-     * @principle Publicly readable catalog with protected management.
-     */
     match /categories/{categoryId} {
       allow get, list: if true;
       allow create, update, delete: if isAdmin();
     }
 
-    /**
-     * @description Global product catalog.
-     * @path /products/{productId}
-     * @allow (get/list) public access (create/update/delete) admin access.
-     * @principle Publicly readable catalog with protected management.
-     */
     match /products/{productId} {
       allow get, list: if true;
       allow create, update, delete: if isAdmin();
 
-      /**
-       * @description Reviews for specific products.
-       * @path /products/{productId}/reviews/{reviewId}
-       * @allow (create) signed-in user where userId field matches their UID.
-       * @deny (update) user trying to change the userId of an existing review.
-       * @principle Publicly readable reviews with user-ownership for writes.
-       */
       match /reviews/{reviewId} {
         allow get, list: if true;
         allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
@@ -170,15 +100,10 @@ service cloud.firestore {
       }
     }
 
-    /**
-     * @description Administrative role assignments (DBAC).
-     * @path /roles_admin/{userId}
-     * @principle Existence-based authorization. Only readable by admins or system.
-     */
     match /roles_admin/{userId} {
       allow get: if isSignedIn();
       allow list: if isAdmin();
-      allow create, update, delete: if false; // Managed by Admin SDK/Cloud Functions only
+      allow create, update, delete: if isAdmin(); 
     }
 
   }
