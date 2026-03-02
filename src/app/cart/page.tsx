@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Header } from "@/components/layout/Header";
@@ -9,27 +10,67 @@ import { PRODUCTS } from "@/lib/mock-data";
 import { Trash2, Minus, Plus, ArrowRight, ShoppingBag, ShieldCheck } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export default function CartPage() {
-  const [items, setItems] = useState([
-    { ...PRODUCTS[0], quantity: 1 },
-    { ...PRODUCTS[1], quantity: 2 },
-  ]);
+  const [items, setItems] = useState<any[]>([]);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  useEffect(() => {
+    const loadCart = () => {
+      try {
+        const savedCart = JSON.parse(localStorage.getItem('plantshop_cart') || '[]');
+        const enrichedItems = savedCart.map((cartItem: any) => {
+          const product = PRODUCTS.find(p => p.id === (cartItem.id || cartItem.productId || cartItem.plantId));
+          if (product) {
+            return { ...product, quantity: cartItem.quantity };
+          }
+          return null;
+        }).filter(Boolean);
+        setItems(enrichedItems);
+      } catch (e) {
+        setItems([]);
+      }
+      setIsLoaded(true);
+    };
+
+    loadCart();
+    window.addEventListener('cart-updated', loadCart);
+    return () => window.removeEventListener('cart-updated', loadCart);
+  }, []);
 
   const subtotal = items.reduce((acc, item) => acc + item.price * item.quantity, 0);
-  const shipping = subtotal > 1500 ? 0 : 150;
+  const shipping = subtotal === 0 ? 0 : subtotal > 1500 ? 0 : 150;
   const total = subtotal + shipping;
 
   const updateQty = (id: string, delta: number) => {
-    setItems(items.map(item => 
-      item.id === id ? { ...item, quantity: Math.max(1, item.quantity + delta) } : item
-    ));
+    const cart = JSON.parse(localStorage.getItem('plantshop_cart') || '[]');
+    const item = cart.find((i: any) => (i.id || i.productId || i.plantId) === id);
+    if (item) {
+      item.quantity = Math.max(1, item.quantity + delta);
+      localStorage.setItem('plantshop_cart', JSON.stringify(cart));
+      window.dispatchEvent(new Event('cart-updated'));
+    }
   };
 
   const removeItem = (id: string) => {
-    setItems(items.filter(item => item.id !== id));
+    const cart = JSON.parse(localStorage.getItem('plantshop_cart') || '[]');
+    const updatedCart = cart.filter((i: any) => (i.id || i.productId || i.plantId) !== id);
+    localStorage.setItem('plantshop_cart', JSON.stringify(updatedCart));
+    window.dispatchEvent(new Event('cart-updated'));
   };
+
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <main className="flex-grow flex items-center justify-center">
+          <div className="animate-pulse text-primary font-bold">Loading your cart...</div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   if (items.length === 0) {
     return (

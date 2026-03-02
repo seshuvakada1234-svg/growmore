@@ -18,10 +18,27 @@ export function ProductCard({ product }: ProductCardProps) {
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    toast({
-      title: "Added to cart!",
-      description: `${product.name} has been added to your shopping cart.`,
-    });
+    
+    try {
+      const cart = JSON.parse(localStorage.getItem('plantshop_cart') || '[]');
+      const existingItem = cart.find((item: any) => (item.id || item.productId || item.plantId) === product.id);
+      
+      if (existingItem) {
+        existingItem.quantity += 1;
+      } else {
+        cart.push({ id: product.id, quantity: 1 });
+      }
+      
+      localStorage.setItem('plantshop_cart', JSON.stringify(cart));
+      window.dispatchEvent(new Event('cart-updated'));
+
+      toast({
+        title: "Added to cart!",
+        description: `${product.name} has been added to your shopping cart.`,
+      });
+    } catch (error) {
+      console.error("Failed to add to cart", error);
+    }
   };
 
   return (

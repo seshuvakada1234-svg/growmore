@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -30,17 +31,21 @@ function PlantCard({ plant }: { plant: Product }) {
 
   const addToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const cart: { productId: string; quantity: number }[] = JSON.parse(localStorage.getItem('plantshop_cart') || '[]');
-    const existing = cart.find(i => i.productId === plant.id);
-    if (existing) {
-      existing.quantity += 1;
-    } else {
-      cart.push({ productId: plant.id, quantity: 1 });
+    try {
+      const cart: { id: string; quantity: number }[] = JSON.parse(localStorage.getItem('plantshop_cart') || '[]');
+      const existing = cart.find(i => (i.id || (i as any).productId || (i as any).plantId) === plant.id);
+      if (existing) {
+        existing.quantity += 1;
+      } else {
+        cart.push({ id: plant.id, quantity: 1 });
+      }
+      localStorage.setItem('plantshop_cart', JSON.stringify(cart));
+      window.dispatchEvent(new Event('cart-updated'));
+      setAddedToCart(true);
+      setTimeout(() => setAddedToCart(false), 1500);
+    } catch (err) {
+      console.error("Cart error", err);
     }
-    localStorage.setItem('plantshop_cart', JSON.stringify(cart));
-    window.dispatchEvent(new Event('cart-updated'));
-    setAddedToCart(true);
-    setTimeout(() => setAddedToCart(false), 1500);
   };
 
   const careLevel = plant.careLevel || 'easy';
@@ -52,7 +57,7 @@ function PlantCard({ plant }: { plant: Product }) {
   return (
     <div 
       className="group bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer border border-border/50" 
-      onClick={() => router.push(`/plant-detail?id=${plant.id}`)}
+      onClick={() => router.push(`/plants/${plant.id}`)}
     >
       {/* Image Container */}
       <div className="relative aspect-square overflow-hidden bg-muted">
@@ -159,7 +164,7 @@ function applyFilter(plants: Product[], filterKey?: FilterKey): Product[] {
   }
 }
 
-export default function ProductGrid({ title, subtitle, filterKey, limit = 8, showViewAll = true, viewAllHref = '/plant-listing' }: ProductGridProps) {
+export default function ProductGrid({ title, subtitle, filterKey, limit = 8, showViewAll = true, viewAllHref = '/plants' }: ProductGridProps) {
   const plants = applyFilter(PRODUCTS, filterKey).slice(0, limit);
   const router = useRouter();
 

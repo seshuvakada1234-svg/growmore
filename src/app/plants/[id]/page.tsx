@@ -12,6 +12,7 @@ import { Star, Truck, ShieldCheck, Heart, Share2, ShoppingCart, Minus, Plus, Lea
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
+import Link from "next/link";
 
 export default function PlantDetailPage() {
   const { id } = useParams();
@@ -19,10 +20,26 @@ export default function PlantDetailPage() {
   const [qty, setQty] = useState(1);
 
   const handleAddToCart = () => {
-    toast({
-      title: "Success!",
-      description: `${qty} x ${product.name} added to your cart.`,
-    });
+    try {
+      const cart = JSON.parse(localStorage.getItem('plantshop_cart') || '[]');
+      const existingItem = cart.find((item: any) => (item.id || item.productId || item.plantId) === product.id);
+      
+      if (existingItem) {
+        existingItem.quantity += qty;
+      } else {
+        cart.push({ id: product.id, quantity: qty });
+      }
+      
+      localStorage.setItem('plantshop_cart', JSON.stringify(cart));
+      window.dispatchEvent(new Event('cart-updated'));
+
+      toast({
+        title: "Success!",
+        description: `${qty} x ${product.name} added to your cart.`,
+      });
+    } catch (error) {
+      console.error("Failed to add to cart", error);
+    }
   };
 
   return (
@@ -129,9 +146,11 @@ export default function PlantDetailPage() {
                   <ShoppingCart className="h-5 w-5" /> Add to Cart
                 </Button>
               </div>
-              <Button size="lg" variant="outline" className="w-full h-12 rounded-full border-primary text-primary hover:bg-primary hover:text-white font-bold text-lg">
-                Buy It Now
-              </Button>
+              <Link href="/cart" className="block w-full">
+                <Button onClick={handleAddToCart} size="lg" variant="outline" className="w-full h-12 rounded-full border-primary text-primary hover:bg-primary hover:text-white font-bold text-lg">
+                  Buy It Now
+                </Button>
+              </Link>
             </div>
 
             <div className="mt-10 grid grid-cols-2 gap-4 border-t pt-8">
