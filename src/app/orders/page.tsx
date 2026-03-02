@@ -1,16 +1,41 @@
-
 "use client";
 
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
-import { MOCK_ORDERS } from "@/lib/mock-data";
+import { MOCK_PLANTS, MOCK_ORDERS } from "@/lib/mock-data";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusChip } from "@/components/shared/StatusChip";
-import { Package, ChevronRight, Calendar, ArrowUpRight } from "lucide-react";
+import { Package, Calendar, ArrowUpRight, Loader2 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
+import { useUser } from "@/firebase";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 export default function OrdersPage() {
+  const { user, isUserLoading } = useUser();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isUserLoading && !user) {
+      router.push('/login');
+    }
+  }, [user, isUserLoading, router]);
+
+  if (isUserLoading) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <main className="flex-grow flex items-center justify-center bg-neutral/30">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (!user) return null;
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />

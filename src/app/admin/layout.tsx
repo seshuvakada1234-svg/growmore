@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from "next/link";
@@ -12,17 +11,37 @@ import {
   Leaf,
   Menu,
   Award,
-  Bell
+  Bell,
+  Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { useUser } from "@/firebase";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const { user, isUserLoading } = useUser();
+
+  useEffect(() => {
+    if (!isUserLoading && !user) {
+      router.push('/login');
+    }
+  }, [user, isUserLoading, router]);
+
+  if (isUserLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-neutral">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!user) return null;
 
   const navItems = [
     { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
@@ -106,11 +125,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </Button>
             <div className="flex items-center gap-3 pl-4 border-l">
               <div className="text-right hidden sm:block">
-                <p className="text-sm font-bold leading-none">Admin User</p>
+                <p className="text-sm font-bold leading-none">{user.displayName || "Admin User"}</p>
                 <p className="text-xs text-muted-foreground">Manager</p>
               </div>
-              <div className="h-10 w-10 rounded-full bg-accent flex items-center justify-center text-primary border-2 border-white shadow-sm">
-                <Users className="h-5 w-5" />
+              <div className="h-10 w-10 rounded-full bg-accent flex items-center justify-center text-primary border-2 border-white shadow-sm overflow-hidden">
+                {user.photoURL ? (
+                  <img src={user.photoURL} alt="Profile" className="h-full w-full object-cover" />
+                ) : (
+                  <Users className="h-5 w-5" />
+                )}
               </div>
             </div>
           </div>

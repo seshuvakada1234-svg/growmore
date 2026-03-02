@@ -1,17 +1,29 @@
 "use client";
 
 import Link from "next/link";
-import { Search, ShoppingCart, User, Leaf, Menu, Home } from "lucide-react";
+import { Search, ShoppingCart, User, Leaf, Menu, Home, LogOut, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useState, useEffect } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { useUser } from "@/firebase";
+import { useUser, useAuth } from "@/firebase";
+import { signOut } from "firebase/auth";
+import { useRouter } from "next/navigation";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export function Header() {
   const [cartCount, setCartCount] = useState(0);
   const { user } = useUser();
+  const auth = useAuth();
+  const router = useRouter();
 
   useEffect(() => {
     const updateCount = () => {
@@ -32,6 +44,17 @@ export function Header() {
       window.removeEventListener('storage', updateCount);
     };
   }, []);
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      localStorage.removeItem('plantshop_cart');
+      window.dispatchEvent(new Event('cart-updated'));
+      router.push('/');
+    } catch (error) {
+      console.error("Logout error", error);
+    }
+  };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -77,21 +100,61 @@ export function Header() {
             <Button variant="ghost" size="icon" className="relative">
               <ShoppingCart className="h-6 w-6" />
               {cartCount > 0 && (
-                <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-[10px] bg-primary">
+                <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-[10px] bg-primary text-white">
                   {cartCount}
                 </Badge>
               )}
             </Button>
           </Link>
-          <Link href={user ? "/profile" : "/login"}>
-            <Button variant="ghost" size="icon" className="rounded-full bg-accent text-primary">
-              {user?.photoURL ? (
-                <img src={user.photoURL} alt="Profile" className="h-6 w-6 rounded-full" />
-              ) : (
-                <User className="h-5 w-5" />
-              )}
-            </Button>
-          </Link>
+          
+          {user ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="rounded-full bg-accent text-primary p-0 overflow-hidden">
+                  {user?.photoURL ? (
+                    <img src={user.photoURL} alt="Profile" className="h-full w-full object-cover" />
+                  ) : (
+                    <User className="h-5 w-5" />
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56 rounded-xl mt-2">
+                <DropdownMenuLabel className="font-headline font-bold">My Account</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild className="cursor-pointer rounded-lg">
+                  <Link href="/profile" className="flex items-center gap-2 w-full">
+                    <User className="h-4 w-4" /> Profile
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className="cursor-pointer rounded-lg">
+                  <Link href="/orders" className="flex items-center gap-2 w-full">
+                    <ShoppingCart className="h-4 w-4" /> Orders
+                  </Link>
+                </DropdownMenuItem>
+                {user && (
+                  <DropdownMenuItem asChild className="cursor-pointer rounded-lg lg:hidden">
+                    <Link href="/admin" className="flex items-center gap-2 w-full">
+                      <LayoutDashboard className="h-4 w-4" /> Admin Panel
+                    </Link>
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  className="cursor-pointer text-destructive focus:text-destructive rounded-lg"
+                  onClick={handleLogout}
+                >
+                  <LogOut className="h-4 w-4" /> Logout
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <Link href="/login">
+              <Button className="rounded-full px-6 font-bold">
+                Login
+              </Button>
+            </Link>
+          )}
+
           {user && (
             <Link href="/admin" className="hidden lg:block">
               <Button variant="outline" size="sm" className="rounded-full border-primary/20 text-primary">Admin</Button>

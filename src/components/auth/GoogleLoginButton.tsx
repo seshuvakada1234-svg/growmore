@@ -51,7 +51,7 @@ export function GoogleLoginButton() {
         description: `Successfully signed in as ${user.displayName}`,
       });
       
-      router.push('/profile');
+      router.push('/');
     } catch (error: any) {
       console.error("Auth error:", error);
       toast({
