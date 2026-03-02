@@ -14,10 +14,10 @@
         "role": { "type": "string", "enum": ["admin", "user", "affiliate"] },
         "affiliateStatus": { "type": "string", "enum": ["none", "pending", "approved", "rejected", "disabled"] },
         "referralCode": { "type": "string" },
-        "totalClicks": { "type": "number" },
-        "totalEarnings": { "type": "number" },
-        "paidEarnings": { "type": "number" },
-        "totalReferrals": { "type": "number" },
+        "totalClicks": { "type": "number", "default": 0 },
+        "totalEarnings": { "type": "number", "default": 0 },
+        "paidEarnings": { "type": "number", "default": 0 },
+        "totalReferrals": { "type": "number", "default": 0 },
         "bankAccountName": { "type": "string" },
         "bankAccountNumber": { "type": "string" },
         "bankIfscCode": { "type": "string" },
@@ -28,7 +28,6 @@
       "required": ["id", "email", "role"]
     },
     "Product": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Product",
       "type": "object",
       "properties": {
@@ -37,9 +36,8 @@
         "category": { "type": "string" },
         "price": { "type": "number" },
         "stock": { "type": "number" },
-        "affiliateCommission": { "type": "number", "description": "Percentage 0-10" },
-        "images": { "type": "array", "items": { "type": "string" } },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "affiliateCommission": { "type": "number" },
+        "images": { "type": "array", "items": { "type": "string" } }
       }
     },
     "Order": {
@@ -52,33 +50,42 @@
         "status": { "type": "string" },
         "referrerUserId": { "type": "string", "nullable": true },
         "commissionAmount": { "type": "number" },
-        "rejectedSelfReferral": { "type": "boolean" },
         "createdAt": { "type": "string", "format": "date-time" }
       }
     },
-    "Payout": {
-      "title": "Payout",
+    "AffiliatePayout": {
+      "title": "AffiliatePayout",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
         "affiliateId": { "type": "string" },
         "payoutAmount": { "type": "number" },
         "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
-        "payoutDate": { "type": "string", "format": "date-time" }
+        "payoutDate": { "type": "string", "format": "date-time" },
+        "bankDetails": { "type": "object" }
+      }
+    },
+    "AffiliateCommission": {
+      "title": "AffiliateCommission",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "affiliateId": { "type": "string" },
+        "orderId": { "type": "string" },
+        "amount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
       }
     }
   },
   "auth": {
-    "providers": ["google", "password"]
+    "providers": ["google"]
   },
   "firestore": {
-    "structure": [
-      { "path": "/users/{userId}", "definition": { "entityName": "UserProfile" } },
-      { "path": "/users/{userId}/affiliateProfile/payouts/{payoutId}", "definition": { "entityName": "Payout" } },
-      { "path": "/products/{productId}", "definition": { "entityName": "Product" } },
-      { "path": "/orders/{orderId}", "definition": { "entityName": "Order" } },
-      { "path": "/affiliateClicks/{clickId}", "definition": { "entityName": "AffiliateClick" } },
-      { "path": "/roles_admin/{userId}", "definition": { "entityName": "UserProfile" } }
-    ]
+    "/users/{userId}": { "schema": { "$ref": "#/entities/UserProfile" }, "description": "User profiles and aggregate affiliate stats" },
+    "/products/{productId}": { "schema": { "$ref": "#/entities/Product" }, "description": "Catalog of plants" },
+    "/orders/{orderId}": { "schema": { "$ref": "#/entities/Order" }, "description": "Global order records" },
+    "/affiliatePayouts/{payoutId}": { "schema": { "$ref": "#/entities/AffiliatePayout" }, "description": "Withdrawal requests" },
+    "/affiliateCommissions/{commId}": { "schema": { "$ref": "#/entities/AffiliateCommission" }, "description": "Audit trail for earned commissions" },
+    "/affiliateClicks/{clickId}": { "schema": "object", "description": "Raw click logs for anti-fraud" }
   }
 }

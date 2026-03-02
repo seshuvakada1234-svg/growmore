@@ -7,6 +7,9 @@ service cloud.firestore {
     function isSignedIn() { return request.auth != null; }
     function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
     function isAdmin() { return isSignedIn() && exists(/databases/$(database)/documents/roles_admin/$(request.auth.uid)); }
+    function isApprovedAffiliate() { 
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.affiliateStatus == 'approved';
+    }
 
     // --- User Profiles ---
     match /users/{userId} {
@@ -18,26 +21,19 @@ service cloud.firestore {
       allow update: if isOwner(userId) || isAdmin() || 
                     (request.resource.data.diff(resource.data).affectedKeys().hasAny(['totalClicks', 'totalEarnings', 'totalReferrals']) && isSignedIn());
       
-      // Affiliate sub-data
-      match /affiliateProfile/{allPaths=**} {
-        allow read: if isOwner(userId) || isAdmin();
-        allow create: if isOwner(userId);
-        allow update, delete: if isAdmin();
-      }
-      
-      // Private User Orders
       match /orders/{orderId} {
         allow read: if isOwner(userId) || isAdmin();
         allow create: if isOwner(userId);
       }
     }
 
-    // --- Global Collections ---
+    // --- Catalog ---
     match /products/{productId} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
+    // --- Global Orders ---
     match /orders/{orderId} {
       allow get: if isOwner(resource.data.userId) || isAdmin();
       allow list: if isAdmin();
@@ -46,16 +42,26 @@ service cloud.firestore {
       allow update: if isAdmin();
     }
 
+    // --- Affiliate Payouts (Flattened) ---
+    match /affiliatePayouts/{payoutId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.affiliateId == request.auth.uid);
+      allow create: if isApprovedAffiliate() && request.resource.data.affiliateId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // --- Affiliate Commissions (Flattened) ---
+    match /affiliateCommissions/{commId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.affiliateId == request.auth.uid);
+      allow create: if isSignedIn(); // Logged during checkout
+    }
+
+    // --- Affiliate Clicks ---
     match /affiliateClicks/{clickId} {
       allow create: if true;
       allow read: if isAdmin();
     }
 
-    match /affiliateCommissions/{commId} {
-      allow read: if isAdmin();
-      allow create: if isSignedIn();
-    }
-
+    // --- Role Management ---
     match /roles_admin/{userId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
