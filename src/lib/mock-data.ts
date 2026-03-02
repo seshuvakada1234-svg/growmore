@@ -12,14 +12,24 @@ export interface Product {
   description: string;
   careGuide: string;
   imageUrl: string;
+  images: string[];
   rating: number;
-  reviewsCount: number;
+  reviewCount: number;
+  reviewsCount: number; // For compatibility
   stock: number;
   isBestseller?: boolean;
   isNew?: boolean;
   isFeatured?: boolean;
-  careLevel?: 'easy' | 'moderate' | 'hard';
+  careLevel: 'easy' | 'moderate' | 'hard';
+  watering: string;
+  sunlight: 'low' | 'medium' | 'bright' | 'full-sun';
+  weight: string;
+  height: string;
+  benefits: string[];
+  potIncluded: boolean;
 }
+
+export type Plant = Product; // Alias for compatibility
 
 export const CATEGORIES: Category[] = ["Indoor", "Outdoor", "Seeds", "Bonsai"];
 
@@ -30,15 +40,27 @@ export const PRODUCTS: Product[] = [
     category: "Indoor",
     price: 1299,
     oldPrice: 1599,
-    description: "The Monstera Deliciosa, also known as the Swiss Cheese Plant, is a stunning tropical plant famous for its large, heart-shaped leaves with unique natural holes (fenestrations).",
+    description: "The Monstera Deliciosa, also known as the Swiss Cheese Plant, is a stunning tropical plant famous for its large, heart-shaped leaves with unique natural holes (fenestrations). It adds an instant jungle vibe to any interior space.",
     careGuide: "Keep in bright, indirect light. Water when the top inch of soil is dry. Mist leaves occasionally.",
     imageUrl: PlaceHolderImages.find(img => img.id === "plant-monstera")?.imageUrl || "",
+    images: [
+      PlaceHolderImages.find(img => img.id === "plant-monstera")?.imageUrl || "",
+      "https://picsum.photos/seed/monstera2/800/800",
+      "https://picsum.photos/seed/monstera3/800/800"
+    ],
     rating: 4.8,
+    reviewCount: 124,
     reviewsCount: 124,
     stock: 15,
     isBestseller: true,
     isFeatured: true,
-    careLevel: 'moderate'
+    careLevel: 'moderate',
+    watering: 'Once a week',
+    sunlight: 'medium',
+    weight: '2.5 kg',
+    height: '24-30 inches',
+    benefits: ['Air Purifying', 'Low Maintenance', 'Statement Piece'],
+    potIncluded: true
   },
   {
     id: "2",
@@ -46,71 +68,68 @@ export const PRODUCTS: Product[] = [
     category: "Indoor",
     price: 499,
     oldPrice: 699,
-    description: "Snake Plants are architectural marvels that thrive on neglect. They are excellent air purifiers and can tolerate low light conditions.",
+    description: "Snake Plants are architectural marvels that thrive on neglect. They are excellent air purifiers and can tolerate low light conditions, making them perfect for beginners or low-light rooms.",
     careGuide: "Low to bright light. Water every 2-3 weeks. Do not overwater.",
     imageUrl: PlaceHolderImages.find(img => img.id === "plant-snake")?.imageUrl || "",
+    images: [
+      PlaceHolderImages.find(img => img.id === "plant-snake")?.imageUrl || "",
+      "https://picsum.photos/seed/snake2/800/800"
+    ],
     rating: 4.9,
+    reviewCount: 89,
     reviewsCount: 89,
     stock: 20,
     isNew: true,
     isFeatured: true,
-    careLevel: 'easy'
+    careLevel: 'easy',
+    watering: 'Every 2 weeks',
+    sunlight: 'low',
+    weight: '1.2 kg',
+    height: '12-18 inches',
+    benefits: ['Oxygen Booster', 'Drought Tolerant', 'Sleep Better'],
+    potIncluded: true
   },
   {
     id: "3",
     name: "Fiddle Leaf Fig",
     category: "Indoor",
     price: 2499,
-    description: "The Fiddle Leaf Fig is the ultimate statement piece for any modern home. Its broad, violin-shaped leaves create a dramatic aesthetic.",
+    description: "The Fiddle Leaf Fig is the ultimate statement piece for any modern home. Its broad, violin-shaped leaves create a dramatic aesthetic that complements minimalist decor perfectly.",
     careGuide: "Bright indirect light is essential. Water only when top soil is dry. Rotate occasionally.",
     imageUrl: PlaceHolderImages.find(img => img.id === "plant-fiddle")?.imageUrl || "",
+    images: [
+      PlaceHolderImages.find(img => img.id === "plant-fiddle")?.imageUrl || "",
+      "https://picsum.photos/seed/fiddle2/800/800"
+    ],
     rating: 4.5,
+    reviewCount: 56,
     reviewsCount: 56,
     stock: 8,
     isFeatured: true,
-    careLevel: 'hard'
-  },
-  {
-    id: "4",
-    name: "Japanese Juniper Bonsai",
-    category: "Bonsai",
-    price: 3200,
-    oldPrice: 3800,
-    description: "A meticulously pruned Juniper bonsai that represents peace and patience. Perfect for a desk or side table.",
-    careGuide: "Needs bright sunlight. Water daily to keep soil moist but not soggy. Prune to maintain shape.",
-    imageUrl: PlaceHolderImages.find(img => img.id === "plant-bonsai")?.imageUrl || "",
-    rating: 4.7,
-    reviewsCount: 34,
-    stock: 5,
-    isBestseller: true,
-    careLevel: 'moderate'
-  },
-  {
-    id: "5",
-    name: "English Lavender",
-    category: "Outdoor",
-    price: 299,
-    description: "Fragrant, beautiful, and hardy. This lavender is perfect for sunny gardens or patio pots.",
-    careGuide: "Full sun is a must. Well-draining soil. Minimal water once established.",
-    imageUrl: PlaceHolderImages.find(img => img.id === "plant-lavender")?.imageUrl || "",
-    rating: 4.6,
-    reviewsCount: 78,
-    stock: 45,
-    isNew: true,
-    careLevel: 'easy'
+    careLevel: 'hard',
+    watering: 'Weekly',
+    sunlight: 'bright',
+    weight: '5 kg',
+    height: '4-5 feet',
+    benefits: ['Interior Icon', 'Large Leaves', 'Humidity Loving'],
+    potIncluded: true
   }
 ];
 
-export interface CartItem extends Product {
-  quantity: number;
-}
+export const MOCK_PLANTS = PRODUCTS;
+
+export const formatPrice = (price: number) => `₹${price.toLocaleString('en-IN')}`;
+
+export const getRelatedPlants = (plant: Product, count: number) => {
+  return PRODUCTS.filter(p => p.id !== plant.id && p.category === plant.category).slice(0, count);
+};
 
 export type OrderStatus = "Pending" | "Approved" | "Paid" | "Delivered" | "Cancelled";
 
 export interface Order {
   id: string;
   date: string;
-  items: CartItem[];
+  items: any[];
   total: number;
   status: OrderStatus;
 }
@@ -124,34 +143,10 @@ export const MOCK_ORDERS: Order[] = [
     ],
     total: 1299,
     status: "Delivered"
-  },
-  {
-    id: "ORD-9922",
-    date: "2024-03-20",
-    items: [
-      { ...PRODUCTS[1], quantity: 2 }
-    ],
-    total: 998,
-    status: "Pending"
   }
 ];
 
-export type AffiliateStatus = "None" | "Pending" | "Approved";
-
-export interface UserProfile {
-  name: string;
-  email: string;
-  role: "User" | "Admin";
-  affiliateStatus: AffiliateStatus;
-  earnings?: {
-    total: number;
-    pending: number;
-    paid: number;
-    referrals: number;
-  };
-}
-
-export const MOCK_USER: UserProfile = {
+export const MOCK_USER = {
   name: "Jane Doe",
   email: "jane@example.com",
   role: "User",
