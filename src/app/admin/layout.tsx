@@ -6,7 +6,6 @@ import {
   LayoutDashboard, 
   ShoppingBag, 
   Users, 
-  CreditCard, 
   Settings, 
   LogOut, 
   Leaf,
@@ -15,7 +14,8 @@ import {
   Bell,
   Loader2,
   ShieldAlert,
-  Banknote
+  Banknote,
+  BarChart3
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
@@ -89,6 +89,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
     { name: "Products", href: "/admin/products", icon: Leaf },
     { name: "Orders", href: "/admin/orders", icon: ShoppingBag },
+    { name: "Earnings", href: "/admin/earnings", icon: BarChart3 },
     { name: "Affiliates", href: "/admin/affiliates", icon: Award },
     { name: "Payout Requests", href: "/admin/affiliate-payouts", icon: Banknote },
     { name: "Users", href: "/admin/users", icon: Users },
