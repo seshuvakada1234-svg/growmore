@@ -83,5 +83,8 @@ service cloud.firestore {
     match /{path=**}/commissions/{id} {
       allow read: if isAdmin();
     }
+    match /{path=**}/profile/{id} {
+      allow read: if isAdmin();
+    }
   }
 }

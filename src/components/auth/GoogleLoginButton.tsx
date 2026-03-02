@@ -3,7 +3,7 @@
 
 import { useAuth, useFirestore } from '@/firebase';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
@@ -57,8 +57,17 @@ export function GoogleLoginButton() {
           });
         }
       } else {
-        // If user document exists but master admin is missing from roles_admin, patch it
+        // PATCH: If user document exists, ensure master admin permissions are in sync
         if (user.email === ADMIN_EMAIL) {
+          // 1. Ensure user document role is 'admin'
+          if (userSnap.data()?.role !== 'admin') {
+            await updateDoc(userRef, { 
+              role: 'admin',
+              updatedAt: serverTimestamp()
+            });
+          }
+
+          // 2. Ensure record exists in roles_admin DBAC collection
           const roleAdminRef = doc(db, 'roles_admin', user.uid);
           const roleSnap = await getDoc(roleAdminRef);
           if (!roleSnap.exists()) {
