@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Header } from "@/components/layout/Header";
@@ -14,7 +15,6 @@ import {
   Link as LinkIcon, 
   CheckCircle2, 
   Clock, 
-  Check, 
   Award,
   Zap,
   Loader2
@@ -26,6 +26,7 @@ import { PRODUCTS } from "@/lib/mock-data";
 import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function AffiliatePage() {
   const { user, isUserLoading } = useUser();
@@ -250,9 +251,9 @@ export default function AffiliatePage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
             {[
               { label: "Total Earnings", value: `₹${profile?.totalEarnings || 0}`, icon: Wallet, color: "bg-blue-50 text-blue-600" },
-              { label: "Pending Payout", value: `₹${profile?.pendingEarnings || 0}`, icon: Clock, color: "bg-yellow-50 text-yellow-600" },
+              { label: "Paid Earnings", value: `₹${profile?.paidEarnings || 0}`, icon: Clock, color: "bg-yellow-50 text-yellow-600" },
               { label: "Total Referrals", value: profile?.totalReferrals || 0, icon: Users, color: "bg-purple-50 text-purple-600" },
-              { label: "Conversion Rate", value: "12.5%", icon: TrendingUp, color: "bg-emerald-50 text-emerald-600" }
+              { label: "Total Clicks", value: profile?.totalClicks || 0, icon: TrendingUp, color: "bg-emerald-50 text-emerald-600" }
             ].map((stat, i) => (
               <Card key={i} className="rounded-3xl border-none shadow-sm p-6 bg-white">
                 <div className="flex items-center justify-between mb-4">
@@ -336,18 +337,31 @@ export default function AffiliatePage() {
               </Card>
             </div>
 
-            {/* Recent Payouts */}
+            {/* Wallet Quick View */}
             <Card className="rounded-[2rem] border-none shadow-sm bg-white overflow-hidden p-8">
               <h3 className="text-xl font-headline font-extrabold text-primary mb-6 flex items-center gap-2">
-                <Wallet className="h-5 w-5" /> Recent Earnings
+                <Wallet className="h-5 w-5" /> Wallet & Payouts
               </h3>
-              <div className="space-y-4">
-                <div className="flex flex-col items-center justify-center py-12 text-center space-y-2 border-2 border-dashed rounded-2xl">
-                  <p className="text-sm text-muted-foreground">No earnings recorded yet.</p>
-                  <p className="text-xs text-muted-foreground">Referral sales will appear here once confirmed.</p>
+              <div className="space-y-6">
+                <div className="bg-accent rounded-3xl p-6 border border-primary/5">
+                  <p className="text-xs text-muted-foreground uppercase font-bold tracking-widest mb-1">Available for Withdrawal</p>
+                  <h4 className="text-3xl font-extrabold text-primary">₹{totalEarnings - paidEarnings}</h4>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-4 border rounded-2xl">
+                    <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Total Paid</p>
+                    <p className="font-bold">₹{paidEarnings}</p>
+                  </div>
+                  <div className="p-4 border rounded-2xl">
+                    <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Min. Payout</p>
+                    <p className="font-bold">₹500</p>
+                  </div>
                 </div>
               </div>
-              <Button variant="ghost" className="w-full mt-6 text-primary font-bold">View All Earnings</Button>
+              <Link href="/affiliate/payouts">
+                <Button className="w-full mt-8 h-12 rounded-full font-bold">Request Payout</Button>
+              </Link>
+              <Button variant="ghost" className="w-full mt-2 text-muted-foreground text-xs font-bold">View Payout Rules</Button>
             </Card>
           </div>
         </div>
