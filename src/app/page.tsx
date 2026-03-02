@@ -27,9 +27,6 @@ export default function Home() {
         {/* Categories Section */}
         <CategorySection />
 
-        {/* Offers Section */}
-        <OfferBanner />
-
         {/* Featured Plants / New Arrivals */}
         <ProductGrid 
           title="New Arrivals" 
@@ -37,6 +34,9 @@ export default function Home() {
           filterKey="new" 
           limit={4} 
         />
+
+        {/* Offers Section */}
+        <OfferBanner />
 
         {/* Bestsellers Grid */}
         <ProductGrid 

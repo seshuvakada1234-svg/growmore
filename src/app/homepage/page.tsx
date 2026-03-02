@@ -34,12 +34,12 @@ export default function HomepagePage() {
         {/* Categories */}
         <CategorySection />
 
-        {/* Bestsellers */}
+        {/* New Arrivals */}
         <ProductGrid
-          title="Bestselling Plants"
-          subtitle="Most Loved"
-          filterKey="bestseller"
-          limit={8}
+          title="New Arrivals"
+          subtitle="Just In"
+          filterKey="new"
+          limit={4}
           showViewAll
           viewAllHref="/plant-listing"
         />
@@ -47,12 +47,12 @@ export default function HomepagePage() {
         {/* Offer Banners */}
         <OfferBanner />
 
-        {/* New Arrivals */}
+        {/* Bestsellers */}
         <ProductGrid
-          title="New Arrivals"
-          subtitle="Just In"
-          filterKey="new"
-          limit={4}
+          title="Bestselling Plants"
+          subtitle="Most Loved"
+          filterKey="bestseller"
+          limit={8}
           showViewAll
           viewAllHref="/plant-listing"
         />
