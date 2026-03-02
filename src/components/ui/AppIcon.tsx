@@ -21,6 +21,8 @@ const IconMap: Record<string, any> = {
   ChevronUpIcon: LucideIcons.ChevronUp,
   CheckIcon: LucideIcons.Check,
   ArrowRightIcon: LucideIcons.ArrowRight,
+  ArrowLeftIcon: LucideIcons.ArrowLeft,
+  HomeIcon: LucideIcons.Home,
   Squares2X2Icon: LucideIcons.LayoutGrid,
   ListBulletIcon: LucideIcons.List,
   MagnifyingGlassIcon: LucideIcons.Search,
