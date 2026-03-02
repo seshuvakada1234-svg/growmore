@@ -3,11 +3,11 @@
 
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
-import { Search, Loader2, CheckCircle2, XCircle, Clock, ShieldAlert, Award } from "lucide-react";
+import { Search, Loader2, Clock, Award } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
-import { collection, doc, updateDoc, deleteDoc, setDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
+import { collection, doc, updateDoc, deleteDoc, setDoc, serverTimestamp, query, orderBy, collectionGroup } from "firebase/firestore";
 import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 
@@ -20,9 +20,9 @@ export default function AdminAffiliates() {
   const appsQuery = useMemoFirebase(() => query(collection(db, 'affiliateApplications'), orderBy('createdAt', 'desc')), [db]);
   const { data: applications, isLoading: appsLoading } = useCollection(appsQuery);
 
-  // Fetch Approved Affiliates
-  const usersQuery = useMemoFirebase(() => query(collection(db, 'affiliateProfiles'), orderBy('createdAt', 'desc')), [db]);
-  const { data: affiliates, isLoading: affLoading } = useCollection(usersQuery);
+  // Fetch Approved Affiliates using collectionGroup
+  const profilesQuery = useMemoFirebase(() => collectionGroup(db, 'profile'), [db]);
+  const { data: affiliates, isLoading: affLoading } = useCollection(profilesQuery);
 
   const handleApprove = async (userId: string) => {
     setIsProcessing(userId);
@@ -30,8 +30,8 @@ export default function AdminAffiliates() {
       // 1. Update User Role
       await updateDoc(doc(db, 'users', userId), { role: 'affiliate', updatedAt: serverTimestamp() });
       
-      // 2. Create Profile
-      await setDoc(doc(db, 'affiliateProfiles', userId), {
+      // 2. Create Profile in nested path
+      await setDoc(doc(db, 'users', userId, 'affiliate', 'profile'), {
         affiliateId: userId,
         totalEarnings: 0,
         paidEarnings: 0,
@@ -123,7 +123,7 @@ export default function AdminAffiliates() {
             <tbody className="divide-y divide-muted">
               {affiliates?.map(aff => (
                 <tr key={aff.id} className="hover:bg-accent/20 transition-colors">
-                  <td className="p-6 font-mono text-xs font-bold text-primary">{aff.affiliateId.substring(0, 12)}...</td>
+                  <td className="p-6 font-mono text-xs font-bold text-primary">{aff.affiliateId?.substring(0, 12)}...</td>
                   <td className="p-6 font-bold">{aff.totalClicks || 0}</td>
                   <td className="p-6 font-bold text-emerald-600">₹{aff.totalEarnings || 0}</td>
                   <td className="p-6 font-bold">₹{(aff.totalEarnings || 0) - (aff.paidEarnings || 0)}</td>

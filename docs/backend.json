@@ -62,10 +62,10 @@
   "firestore": {
     "/users/{userId}": { "schema": { "$ref": "#/entities/UserProfile" }, "description": "Global user roles" },
     "/affiliateApplications/{userId}": { "schema": { "$ref": "#/entities/AffiliateApplication" }, "description": "Pending applications" },
-    "/affiliateProfiles/{userId}": { "schema": { "$ref": "#/entities/AffiliateProfile" }, "description": "Earnings and stats" },
-    "/affiliateCommissions/{id}": { "schema": { "$ref": "#/entities/AffiliateCommission" }, "description": "Individual earning logs" },
-    "/affiliatePayouts/{id}": { "schema": { "$ref": "#/entities/AffiliatePayout" }, "description": "Withdrawal requests" },
-    "/affiliateClicks/{id}": { "schema": "object", "description": "Raw click logs" },
+    "/users/{userId}/affiliate/profile": { "schema": { "$ref": "#/entities/AffiliateProfile" }, "description": "Earnings and stats" },
+    "/users/{userId}/affiliate/profile/commissions/{id}": { "schema": { "$ref": "#/entities/AffiliateCommission" }, "description": "Individual earning logs" },
+    "/users/{userId}/affiliate/profile/payouts/{id}": { "schema": { "$ref": "#/entities/AffiliatePayout" }, "description": "Withdrawal requests" },
+    "/affiliateClicks/{id}": { "schema": "object", "description": "Raw click logs (top-level for anonymous tracking)" },
     "/orders/{orderId}": { "schema": "object", "description": "Orders with referral attribution" }
   }
 }

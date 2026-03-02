@@ -7,11 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Wallet, ArrowLeft, Clock, CheckCircle2, AlertCircle, Loader2, Banknote } from "lucide-react";
+import { Wallet, ArrowLeft, Clock, AlertCircle, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "@/hooks/use-toast";
 import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase";
-import { doc, collection, addDoc, serverTimestamp, query, orderBy, where } from "firebase/firestore";
+import { doc, collection, addDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { format } from "date-fns";
@@ -23,42 +23,29 @@ export default function AffiliatePayoutsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [amount, setAmount] = useState("");
 
-  const userProfileRef = useMemoFirebase(() => {
-    if (!db || !user?.uid) return null;
-    return doc(db, 'users', user.uid);
-  }, [db, user?.uid]);
-  
+  const userProfileRef = useMemoFirebase(() => (!db || !user?.uid) ? null : doc(db, 'users', user.uid), [db, user?.uid]);
   const { data: profile, isLoading: isProfileLoading } = useDoc(userProfileRef);
 
-  // FIXED: Query top-level affiliatePayouts collection instead of nested path
+  // Fetch Siloed Stats
+  const statsRef = useMemoFirebase(() => (!db || !user?.uid) ? null : doc(db, 'users', user.uid, 'affiliate', 'profile'), [db, user?.uid]);
+  const { data: stats } = useDoc(statsRef);
+
+  // Fetch Siloed Payouts
   const payoutsQuery = useMemoFirebase(() => {
     if (!db || !user?.uid) return null;
-    return query(
-      collection(db, 'affiliatePayouts'),
-      where('affiliateId', '==', user.uid),
-      orderBy('payoutDate', 'desc')
-    );
+    return query(collection(db, 'users', user.uid, 'affiliate', 'profile', 'payouts'), orderBy('requestedAt', 'desc'));
   }, [db, user?.uid]);
-
   const { data: payouts, isLoading: isPayoutsLoading } = useCollection(payoutsQuery);
 
   useEffect(() => {
-    if (!isUserLoading && !user) {
-      router.push('/login?redirect=/affiliate/payouts');
-    }
+    if (!isUserLoading && !user) router.push('/login?redirect=/affiliate/payouts');
   }, [user, isUserLoading, router]);
 
   if (isUserLoading || isProfileLoading) {
-    return (
-      <div className="min-h-screen flex flex-col">
-        <Header />
-        <main className="flex-grow flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></main>
-        <Footer />
-      </div>
-    );
+    return <div className="min-h-screen flex flex-col"><Header /><main className="flex-grow flex items-center justify-center"><Loader2 className="animate-spin text-primary" /></main><Footer /></div>;
   }
 
-  const isApprovedAffiliate = profile?.role === 'affiliate' || profile?.affiliateStatus === 'approved';
+  const isApprovedAffiliate = profile?.role === 'affiliate';
   if (!isApprovedAffiliate) {
     return (
       <div className="min-h-screen flex flex-col">
@@ -73,9 +60,9 @@ export default function AffiliatePayoutsPage() {
     );
   }
 
-  const totalEarnings = profile?.totalEarnings || 0;
-  const paidEarnings = profile?.paidEarnings || 0;
-  const pendingRequestsTotal = payouts?.filter(p => p.status === 'pending').reduce((acc, p) => acc + (p.payoutAmount || 0), 0) || 0;
+  const totalEarnings = stats?.totalEarnings || 0;
+  const paidEarnings = stats?.paidEarnings || 0;
+  const pendingRequestsTotal = payouts?.filter(p => p.status === 'pending').reduce((acc, p) => acc + (p.amount || 0), 0) || 0;
   const availableBalance = Math.max(0, totalEarnings - paidEarnings - pendingRequestsTotal);
   const hasPendingRequest = payouts?.some(p => p.status === 'pending');
 
@@ -94,22 +81,15 @@ export default function AffiliatePayoutsPage() {
     }
 
     setIsSubmitting(true);
-    // FIXED: Write to top-level affiliatePayouts collection
     const payoutData = {
       affiliateId: user!.uid,
-      payoutAmount: requestAmount,
-      payoutDate: serverTimestamp(),
-      status: "pending",
-      bankDetails: {
-        accountName: profile?.bankAccountName || "",
-        accountNumber: profile?.bankAccountNumber || "",
-        ifsc: profile?.bankIfscCode || "",
-        upiId: profile?.upiId || ""
-      }
+      amount: requestAmount,
+      requestedAt: serverTimestamp(),
+      status: "pending"
     };
 
     try {
-      await addDoc(collection(db, 'affiliatePayouts'), payoutData);
+      await addDoc(collection(db, 'users', user!.uid, 'affiliate', 'profile', 'payouts'), payoutData);
       toast({ title: "Request Submitted", description: "Your payout request is now pending approval." });
       setAmount("");
     } catch (error) {
@@ -167,8 +147,8 @@ export default function AffiliatePayoutsPage() {
                     {payouts?.map((payout) => (
                       <Card key={payout.id} className="rounded-2xl border-none shadow-sm bg-white p-5 flex items-center justify-between">
                         <div>
-                          <p className="font-bold text-primary">₹{payout.payoutAmount}</p>
-                          <p className="text-xs text-muted-foreground uppercase font-bold">{payout.payoutDate?.seconds ? format(new Date(payout.payoutDate.seconds * 1000), "MMM d, yyyy") : 'Recent'}</p>
+                          <p className="font-bold text-primary">₹{payout.amount}</p>
+                          <p className="text-xs text-muted-foreground uppercase font-bold">{payout.requestedAt?.seconds ? format(new Date(payout.requestedAt.seconds * 1000), "MMM d, yyyy") : 'Recent'}</p>
                         </div>
                         <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${payout.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : payout.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{payout.status}</span>
                       </Card>

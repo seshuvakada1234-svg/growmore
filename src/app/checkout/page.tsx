@@ -58,7 +58,6 @@ export default function CheckoutPage() {
     try {
       let calculatedCommission = 0;
       if (finalReferrerId) {
-        // In a real app, we fetch the latest rates from Firestore
         const productPromises = cartItems.map(item => getDoc(doc(db, 'products', item.id)));
         const productSnaps = await Promise.all(productPromises);
         
@@ -83,26 +82,25 @@ export default function CheckoutPage() {
         commissionAmount: calculatedCommission,
         items: cartItems.map(i => ({ productId: i.id, name: i.name, qty: i.quantity, price: i.price })),
         createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
+        rejectedSelfReferral: isSelfReferral
       };
 
-      // 1. Create Order
       await setDoc(orderRef, orderData).catch(err => {
         errorEmitter.emit('permission-error', new FirestorePermissionError({ path: orderRef.path, operation: 'create', requestResourceData: orderData }));
       });
 
-      // 2. Attribute Commission (Simulating Cloud Function logic for prototype)
       if (finalReferrerId && calculatedCommission > 0) {
-        // Update Profile
-        const profileRef = doc(db, 'affiliateProfiles', finalReferrerId);
+        // Update Siloed Profile
+        const profileRef = doc(db, 'users', finalReferrerId, 'affiliate', 'profile');
         updateDoc(profileRef, {
           totalEarnings: increment(calculatedCommission),
           totalReferrals: increment(1),
           updatedAt: serverTimestamp()
-        }).catch(() => {/* Fallback if profile doesn't exist yet */});
+        }).catch(() => {});
 
-        // Log Commission
-        await addDoc(collection(db, 'affiliateCommissions'), {
+        // Log Commission in Siloed subcollection
+        await addDoc(collection(db, 'users', finalReferrerId, 'affiliate', 'profile', 'commissions'), {
           affiliateId: finalReferrerId,
           orderId: orderId,
           amount: calculatedCommission,
@@ -118,27 +116,13 @@ export default function CheckoutPage() {
 
     } catch (error) {
       console.error(error);
-      toast({ title: "Order Failed", description: "Something went wrong. Please try again.", variant: "destructive" });
+      toast({ title: "Order Failed", description: "Something went wrong.", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  if (cartItems.length === 0) {
-    return (
-      <div className="min-h-screen flex flex-col">
-        <Header />
-        <main className="flex-grow flex items-center justify-center">
-          <div className="text-center">
-            <ShoppingBag className="h-16 w-16 mx-auto text-muted-foreground opacity-20 mb-4" />
-            <h2 className="text-2xl font-bold">Your cart is empty</h2>
-            <Link href="/plants"><Button className="mt-4 rounded-full">Back to Shop</Button></Link>
-          </div>
-        </main>
-        <Footer />
-      </div>
-    );
-  }
+  if (cartItems.length === 0) return null;
 
   return (
     <div className="min-h-screen flex flex-col">

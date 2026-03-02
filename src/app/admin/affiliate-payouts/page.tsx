@@ -4,25 +4,24 @@
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Banknote, Loader2, CheckCircle2, XCircle, Clock, Calendar, User as UserIcon, Wallet, AlertCircle } from "lucide-react";
+import { Search, Banknote, Loader2, Clock, Wallet, AlertCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
-import { collection, doc, updateDoc, serverTimestamp, query, orderBy, increment } from "firebase/firestore";
+import { doc, updateDoc, serverTimestamp, increment, collectionGroup, query, orderBy } from "firebase/firestore";
 import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 export default function AdminAffiliatePayouts() {
   const db = useFirestore();
   const [searchTerm, setSearchTerm] = useState("");
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
 
-  // FIXED: Query top-level affiliatePayouts collection
+  // Fetch all payout requests across all users using collectionGroup
   const payoutsQuery = useMemoFirebase(() => 
-    query(collection(db, 'affiliatePayouts'), orderBy('payoutDate', 'desc')), 
+    query(collectionGroup(db, 'payouts'), orderBy('requestedAt', 'desc')), 
     [db]
   );
   
@@ -30,8 +29,12 @@ export default function AdminAffiliatePayouts() {
 
   const handleAction = async (payout: any, status: 'approved' | 'rejected') => {
     setIsProcessing(payout.id);
-    const payoutRef = doc(db, 'affiliatePayouts', payout.id);
-    const userRef = doc(db, 'users', payout.affiliateId);
+    
+    // In siloed structure, we need the parent path
+    // CollectionGroup data includes ID, but we need to derive the path or have it stored
+    // For simplicity, we'll assume payout doc contains affiliateId to rebuild path
+    const payoutRef = doc(db, 'users', payout.affiliateId, 'affiliate', 'profile', 'payouts', payout.id);
+    const profileRef = doc(db, 'users', payout.affiliateId, 'affiliate', 'profile');
 
     try {
       await updateDoc(payoutRef, {
@@ -41,13 +44,13 @@ export default function AdminAffiliatePayouts() {
       });
 
       if (status === 'approved') {
-        await updateDoc(userRef, {
-          paidEarnings: increment(payout.payoutAmount),
+        await updateDoc(profileRef, {
+          paidEarnings: increment(payout.amount),
           updatedAt: serverTimestamp()
         });
       }
 
-      toast({ title: `Request ${status}`, description: `Successfully processed payout of ₹${payout.payoutAmount}.` });
+      toast({ title: `Request ${status}`, description: `Successfully processed payout of ₹${payout.amount}.` });
     } catch (error: any) {
       errorEmitter.emit('permission-error', new FirestorePermissionError({ path: payoutRef.path, operation: 'update', requestResourceData: { status } }));
     } finally {
@@ -63,8 +66,8 @@ export default function AdminAffiliatePayouts() {
   const stats = {
     total: payouts?.length || 0,
     pending: payouts?.filter(p => p.status === 'pending').length || 0,
-    totalPaid: payouts?.filter(p => p.status === 'approved').reduce((acc, p) => acc + (p.payoutAmount || 0), 0) || 0,
-    pendingAmount: payouts?.filter(p => p.status === 'pending').reduce((acc, p) => acc + (p.payoutAmount || 0), 0) || 0
+    totalPaid: payouts?.filter(p => p.status === 'approved').reduce((acc, p) => acc + (p.amount || 0), 0) || 0,
+    pendingAmount: payouts?.filter(p => p.status === 'pending').reduce((acc, p) => acc + (p.amount || 0), 0) || 0
   };
 
   return (
@@ -109,9 +112,9 @@ export default function AdminAffiliatePayouts() {
             <TableBody>
               {filteredPayouts?.map((p) => (
                 <TableRow key={p.id} className="group hover:bg-accent/30 border-b border-muted">
-                  <TableCell className="p-6 font-mono text-xs">{p.affiliateId.substring(0, 12)}...</TableCell>
-                  <TableCell className="p-6 font-extrabold text-primary">₹{p.payoutAmount}</TableCell>
-                  <TableCell className="p-6 text-xs text-muted-foreground">{p.payoutDate?.seconds ? format(new Date(p.payoutDate.seconds * 1000), "MMM d, yyyy") : 'Recent'}</TableCell>
+                  <TableCell className="p-6 font-mono text-xs">{p.affiliateId?.substring(0, 12)}...</TableCell>
+                  <TableCell className="p-6 font-extrabold text-primary">₹{p.amount}</TableCell>
+                  <TableCell className="p-6 text-xs text-muted-foreground">{p.requestedAt?.seconds ? format(new Date(p.requestedAt.seconds * 1000), "MMM d, yyyy") : 'Recent'}</TableCell>
                   <TableCell className="p-6">
                     <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${p.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : p.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>{p.status}</span>
                   </TableCell>

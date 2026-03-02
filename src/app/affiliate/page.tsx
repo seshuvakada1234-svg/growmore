@@ -4,12 +4,8 @@
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { 
-  Users, TrendingUp, Wallet, Copy, Link as LinkIcon, 
-  CheckCircle2, Clock, Award, Zap, Loader2, ChevronRight, AlertCircle 
-} from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Users, TrendingUp, Wallet, Copy, Link as LinkIcon, CheckCircle2, Clock, Zap, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "@/hooks/use-toast";
 import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase";
@@ -23,7 +19,7 @@ export default function AffiliateDashboard() {
   const db = useFirestore();
   const router = useRouter();
 
-  // 1. Fetch Role
+  // 1. Fetch User Data
   const userRef = useMemoFirebase(() => !user?.uid ? null : doc(db, 'users', user.uid), [db, user?.uid]);
   const { data: profile } = useDoc(userRef);
 
@@ -31,14 +27,14 @@ export default function AffiliateDashboard() {
   const appRef = useMemoFirebase(() => !user?.uid ? null : doc(db, 'affiliateApplications', user.uid), [db, user?.uid]);
   const { data: application } = useDoc(appRef);
 
-  // 3. Fetch Stats
-  const statsRef = useMemoFirebase(() => !user?.uid ? null : doc(db, 'affiliateProfiles', user.uid), [db, user?.uid]);
+  // 3. Fetch Siloed Stats
+  const statsRef = useMemoFirebase(() => !user?.uid ? null : doc(db, 'users', user.uid, 'affiliate', 'profile'), [db, user?.uid]);
   const { data: stats } = useDoc(statsRef);
 
-  // 4. Fetch Commissions
+  // 4. Fetch Siloed Commissions
   const commQuery = useMemoFirebase(() => {
     if (!user?.uid) return null;
-    return query(collection(db, 'affiliateCommissions'), where('affiliateId', '==', user.uid), orderBy('createdAt', 'desc'));
+    return query(collection(db, 'users', user.uid, 'affiliate', 'profile', 'commissions'), orderBy('createdAt', 'desc'));
   }, [db, user?.uid]);
   const { data: commissions } = useCollection(commQuery);
 
@@ -65,7 +61,6 @@ export default function AffiliateDashboard() {
   const isApproved = role === 'affiliate';
   const isPending = !!application && application.status === 'pending';
 
-  // --- JOIN / PENDING VIEWS ---
   if (!isApproved) {
     return (
       <div className="min-h-screen flex flex-col">
@@ -76,27 +71,14 @@ export default function AffiliateDashboard() {
               <Card className="p-12 space-y-6 rounded-[3rem] border-none shadow-xl">
                 <div className="h-20 w-20 bg-yellow-50 text-yellow-600 rounded-full flex items-center justify-center mx-auto"><Clock className="h-10 w-10 animate-pulse" /></div>
                 <h1 className="text-4xl font-headline font-extrabold text-primary">Application Under Review</h1>
-                <p className="text-muted-foreground text-lg">Thanks for your interest! Our team is verifying your profile. You'll receive an update within 24 hours.</p>
+                <p className="text-muted-foreground text-lg">Thanks for your interest! Our team is verifying your profile.</p>
               </Card>
             ) : (
               <div className="space-y-12">
                 <div className="space-y-4">
                   <h1 className="text-5xl md:text-7xl font-headline font-extrabold text-primary">Grow With Us.</h1>
-                  <p className="text-xl text-muted-foreground max-w-2xl mx-auto">Join the GreenScape Partner Program and earn 5% commission on every referral. Turn your love for plants into earnings.</p>
+                  <p className="text-xl text-muted-foreground max-w-2xl mx-auto">Join the GreenScape Partner Program and earn up to 10% commission.</p>
                   <Button onClick={handleApply} size="lg" className="h-14 px-10 rounded-full text-lg font-bold mt-6 shadow-xl shadow-primary/20">Apply to Join</Button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                  {[
-                    { icon: Zap, t: "Instant Links", d: "Get your unique referral code immediately after approval." },
-                    { icon: TrendingUp, t: "5% Commission", d: "Earn on every single plant ordered through your link." },
-                    { icon: Wallet, t: "Direct Payouts", d: "Withdraw your earnings once you reach ₹500." }
-                  ].map((f, i) => (
-                    <Card key={i} className="p-8 rounded-3xl border-none shadow-sm text-left">
-                      <f.icon className="h-8 w-8 text-primary mb-4" />
-                      <h3 className="font-bold text-lg mb-2">{f.t}</h3>
-                      <p className="text-sm text-muted-foreground">{f.d}</p>
-                    </Card>
-                  ))}
                 </div>
               </div>
             )}
@@ -107,7 +89,6 @@ export default function AffiliateDashboard() {
     );
   }
 
-  // --- DASHBOARD VIEW ---
   const balance = (stats?.totalEarnings || 0) - (stats?.paidEarnings || 0);
 
   return (
@@ -154,31 +135,29 @@ export default function AffiliateDashboard() {
               <div className="space-y-4">
                 <h3 className="text-xl font-headline font-extrabold text-primary">Recent Commissions</h3>
                 <Card className="rounded-[2rem] border-none shadow-sm bg-white overflow-hidden">
-                  <div className="p-0">
-                    <table className="w-full text-left">
-                      <thead>
-                        <tr className="bg-muted/30 border-b border-muted">
-                          <th className="p-6 font-bold text-xs uppercase text-muted-foreground">Order ID</th>
-                          <th className="p-6 font-bold text-xs uppercase text-muted-foreground">Amount</th>
-                          <th className="p-6 font-bold text-xs uppercase text-muted-foreground">Date</th>
-                          <th className="p-6 font-bold text-xs uppercase text-muted-foreground">Status</th>
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="bg-muted/30 border-b border-muted">
+                        <th className="p-6 font-bold text-xs uppercase text-muted-foreground">Order ID</th>
+                        <th className="p-6 font-bold text-xs uppercase text-muted-foreground">Amount</th>
+                        <th className="p-6 font-bold text-xs uppercase text-muted-foreground">Date</th>
+                        <th className="p-6 font-bold text-xs uppercase text-muted-foreground">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-muted">
+                      {commissions?.map(c => (
+                        <tr key={c.id} className="hover:bg-accent/30 transition-colors">
+                          <td className="p-6 font-mono text-xs font-bold text-primary">#{c.orderId?.substring(0, 10)}</td>
+                          <td className="p-6 font-extrabold">₹{c.amount}</td>
+                          <td className="p-6 text-sm text-muted-foreground">{c.createdAt?.seconds ? format(new Date(c.createdAt.seconds * 1000), 'MMM d, yyyy') : 'Recent'}</td>
+                          <td className="p-6">
+                            <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${c.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>{c.status}</span>
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody className="divide-y divide-muted">
-                        {commissions?.map(c => (
-                          <tr key={c.id} className="hover:bg-accent/30 transition-colors">
-                            <td className="p-6 font-mono text-xs font-bold text-primary">#{c.orderId.substring(0, 10)}</td>
-                            <td className="p-6 font-extrabold">₹{c.amount}</td>
-                            <td className="p-6 text-sm text-muted-foreground">{c.createdAt?.seconds ? format(new Date(c.createdAt.seconds * 1000), 'MMM d, yyyy') : 'Recent'}</td>
-                            <td className="p-6">
-                              <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${c.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>{c.status}</span>
-                            </td>
-                          </tr>
-                        ))}
-                        {commissions?.length === 0 && <tr><td colSpan={4} className="p-20 text-center text-muted-foreground italic">No commissions earned yet. Start sharing!</td></tr>}
-                      </tbody>
-                    </table>
-                  </div>
+                      ))}
+                      {commissions?.length === 0 && <tr><td colSpan={4} className="p-20 text-center text-muted-foreground italic">No commissions earned yet.</td></tr>}
+                    </tbody>
+                  </table>
                 </Card>
               </div>
             </div>
@@ -192,7 +171,7 @@ export default function AffiliateDashboard() {
                     <h4 className="text-4xl font-extrabold">₹{balance}</h4>
                   </div>
                   <div className="pt-6 border-t border-white/10 space-y-4">
-                    <p className="text-xs text-white/70 italic">Minimum withdrawal is ₹500. Payouts are processed within 3-5 business days.</p>
+                    <p className="text-xs text-white/70 italic">Minimum withdrawal is ₹500.</p>
                     <Link href="/affiliate/payouts" className="block">
                       <Button disabled={balance < 500} className="w-full h-12 rounded-full bg-white text-primary hover:bg-emerald-50 font-bold">Request Payout</Button>
                     </Link>
