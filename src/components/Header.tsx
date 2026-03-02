@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -396,6 +395,12 @@ export default function Header() {
                   </Link>
                 )}
               </nav>
+
+              {/* Home */}
+              <Link href="/homepage"
+                className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-[#F1F8E9] text-[#4A6741] transition-colors">
+                <Icon name="HomeIcon" size={22} />
+              </Link>
 
               {/* Cart */}
               <button onClick={() => setShowCart(true)}

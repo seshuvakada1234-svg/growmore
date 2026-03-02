@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Search, ShoppingCart, User, Leaf, Menu } from "lucide-react";
+import { Search, ShoppingCart, User, Leaf, Menu, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -68,6 +68,11 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-4">
+          <Link href="/">
+            <Button variant="ghost" size="icon">
+              <Home className="h-6 w-6" />
+            </Button>
+          </Link>
           <Link href="/cart">
             <Button variant="ghost" size="icon" className="relative">
               <ShoppingCart className="h-6 w-6" />
