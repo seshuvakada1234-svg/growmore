@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from "next/link";
@@ -8,9 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useState, useEffect } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { useUser } from "@/firebase";
 
 export function Header() {
   const [cartCount, setCartCount] = useState(0);
+  const { user } = useUser();
 
   useEffect(() => {
     const updateCount = () => {
@@ -77,17 +78,20 @@ export function Header() {
               )}
             </Button>
           </Link>
-          <Link href="/profile">
-            <Button variant="ghost" size="icon" className="rounded-full bg-accent text-primary hidden sm:flex">
-              <User className="h-5 w-5" />
-            </Button>
-            <Button variant="ghost" size="icon" className="sm:hidden">
-              <User className="h-6 w-6" />
+          <Link href={user ? "/profile" : "/login"}>
+            <Button variant="ghost" size="icon" className="rounded-full bg-accent text-primary">
+              {user?.photoURL ? (
+                <img src={user.photoURL} alt="Profile" className="h-6 w-6 rounded-full" />
+              ) : (
+                <User className="h-5 w-5" />
+              )}
             </Button>
           </Link>
-          <Link href="/admin" className="hidden lg:block">
-            <Button variant="outline" size="sm" className="rounded-full border-primary/20 text-primary">Admin</Button>
-          </Link>
+          {user && (
+            <Link href="/admin" className="hidden lg:block">
+              <Button variant="outline" size="sm" className="rounded-full border-primary/20 text-primary">Admin</Button>
+            </Link>
+          )}
         </div>
       </div>
     </header>
