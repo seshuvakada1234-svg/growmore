@@ -35,8 +35,8 @@ service cloud.firestore {
       allow get, list: if isOwner(userId) || isAdmin();
       allow create: if isOwner(userId) && request.resource.data.id == userId;
       
-      // Allow public increment of totalClicks for affiliate tracking
-      // and standard updates for owners/admins
+      // Allow standard updates for owners/admins. 
+      // Public increment of totalClicks is restricted by key comparison logic
       allow update: if (isExistingOwner(userId) || isAdmin()) || 
                     (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['totalClicks']) && 
                      (resource.data.totalClicks == null ? request.resource.data.totalClicks == 1 : request.resource.data.totalClicks == resource.data.totalClicks + 1));
@@ -59,14 +59,20 @@ service cloud.firestore {
 
       match /orders/{orderId} {
         allow get, list: if isOwner(userId) || isAdmin();
-        allow create: if isOwner(userId) && request.resource.data.userId == userId;
-        allow update: if (isExistingOwner(userId) || isAdmin()) && request.resource.data.userId == resource.data.userId;
+        
+        // RULE: Prevent self-commission. referrerUserId must NOT be the same as the buyer UID.
+        allow create: if isOwner(userId) && 
+                      request.resource.data.userId == userId &&
+                      (!('referrerUserId' in request.resource.data) || request.resource.data.referrerUserId != userId) &&
+                      !('commissionAmount' in request.resource.data); // Client cannot set commissionAmount
+        
+        allow update: if isAdmin(); // Only admin can update global status or commissionAmount
         allow delete: if isAdmin();
 
         match /orderItems/{orderItemId} {
           allow get, list: if isOwner(userId) || isAdmin();
           allow create: if isOwner(userId);
-          allow update: if (isExistingOwner(userId) || isAdmin());
+          allow update: if isAdmin();
           allow delete: if isAdmin();
         }
       }
@@ -77,11 +83,6 @@ service cloud.firestore {
         allow create: if isOwner(userId) && request.resource.data.userId == userId;
         allow update: if (isExistingOwner(userId) || isAdmin()) && request.resource.data.userId == resource.data.userId;
         allow delete: if isAdmin();
-
-        match /commissions/{commissionId} {
-          allow get, list: if isOwner(userId) || isAdmin();
-          allow create, update, delete: if isAdmin();
-        }
 
         match /payouts/{payoutId} {
           allow get, list: if isOwner(userId) || isAdmin();
@@ -115,9 +116,15 @@ service cloud.firestore {
     }
 
     match /affiliateClicks/{clickId} {
-      // Allow silent logging from the client
       allow create: if true; 
       allow read, update, delete: if isAdmin();
+    }
+
+    match /orders/{orderId} {
+      allow get, list: if isAdmin();
+      // Users write their orders to the nested path users/{uid}/orders/{id}
+      // This root collection is for admin tracking and would typically be handled by a collectionGroup or a duplicated write
+      allow update: if isAdmin();
     }
 
   }

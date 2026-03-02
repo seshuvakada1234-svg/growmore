@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Header } from "@/components/layout/Header";
@@ -15,6 +16,8 @@ import { useUser, useFirestore } from "@/firebase";
 import { collection, doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useState, useEffect } from "react";
 import { PRODUCTS } from "@/lib/mock-data";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -49,22 +52,28 @@ export default function CheckoutPage() {
 
     setIsSubmitting(true);
 
-    try {
-      // 1. Get referral ID from localStorage
-      const referrerUserId = localStorage.getItem('affiliateRef');
+    // 1. Referral Check (Self-commission prevention)
+    const storedRef = localStorage.getItem('affiliate_ref');
+    const isSelfReferral = storedRef === user.uid;
+    const referrerUserId = isSelfReferral ? null : storedRef;
 
+    try {
       // 2. Prepare Order Data
       const orderId = `GS-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
-      const orderRef = doc(collection(db, 'users', user.uid, 'orders'), orderId);
+      const userOrderRef = doc(db, 'users', user.uid, 'orders', orderId);
+      const globalOrderRef = doc(db, 'orders', orderId);
       
       const orderData = {
         id: orderId,
         userId: user.uid,
+        customerName: user.displayName || "Customer",
+        customerEmail: user.email || "N/A",
         orderDate: new Date().toISOString(),
         totalAmount: total,
         status: "Pending",
-        paymentMethod: "Credit Card", // Default for mock flow
-        referrerUserId: referrerUserId || null, // Capture the referral here
+        paymentMethod: "Credit Card",
+        referrerUserId: referrerUserId || null,
+        rejectedSelfReferral: isSelfReferral, // Log for audit
         items: cartItems.map(item => ({
           productId: item.id,
           productName: item.name,
@@ -76,13 +85,35 @@ export default function CheckoutPage() {
         updatedAt: serverTimestamp()
       };
 
-      // 3. Save to Firestore (non-blocking write pattern)
-      setDoc(orderRef, orderData);
+      // 3. Save to Firestore (Non-blocking write pattern)
+      // Save to user private orders
+      setDoc(userOrderRef, orderData)
+        .catch(async (error) => {
+          const permissionError = new FirestorePermissionError({
+            path: userOrderRef.path,
+            operation: 'create',
+            requestResourceData: orderData
+          });
+          errorEmitter.emit('permission-error', permissionError);
+        });
+
+      // Save to global admin orders (requires rules update if separate)
+      setDoc(globalOrderRef, orderData)
+        .catch(async (error) => {
+          const permissionError = new FirestorePermissionError({
+            path: globalOrderRef.path,
+            operation: 'create',
+            requestResourceData: orderData
+          });
+          errorEmitter.emit('permission-error', permissionError);
+        });
 
       // 4. Success handling
       toast({
         title: "Order Placed!",
-        description: "Your green friends will be with you shortly.",
+        description: isSelfReferral 
+          ? "Your order was placed successfully. (Self-referral detected: commission skipped)" 
+          : "Your green friends will be with you shortly.",
       });
 
       // Clear cart
@@ -107,10 +138,13 @@ export default function CheckoutPage() {
       <div className="min-h-screen flex flex-col">
         <Header />
         <main className="flex-grow flex items-center justify-center p-4">
-          <div className="text-center">
-            <h2 className="text-2xl font-bold mb-4">Your cart is empty</h2>
+          <div className="text-center space-y-6">
+            <div className="h-24 w-24 bg-accent rounded-full flex items-center justify-center mx-auto text-primary">
+              <ShoppingBag className="h-12 w-12" />
+            </div>
+            <h2 className="text-2xl font-headline font-bold text-primary">Your cart is empty</h2>
             <Link href="/plants">
-              <Button>Start Shopping</Button>
+              <Button className="rounded-full px-8">Start Shopping</Button>
             </Link>
           </div>
         </main>
