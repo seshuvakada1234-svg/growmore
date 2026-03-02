@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "UserProfile": {
@@ -34,6 +35,10 @@
           "items": {
             "type": "string"
           }
+        },
+        "totalClicks": {
+          "type": "number",
+          "description": "Total number of referral clicks received by this user (if affiliate)."
         },
         "createdAt": {
           "type": "string",
@@ -501,6 +506,10 @@
         "totalReferrals": {
           "type": "number",
           "description": "The total number of orders referred by this affiliate."
+        },
+        "totalClicks": {
+          "type": "number",
+          "description": "Total number of unique clicks received on referral links."
         }
       },
       "required": [
@@ -516,6 +525,36 @@
         "pendingEarnings",
         "paidEarnings",
         "totalReferrals"
+      ]
+    },
+    "AffiliateClick": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "AffiliateClick",
+      "type": "object",
+      "description": "Represents a single click on an affiliate referral link.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the click."
+        },
+        "affiliateId": {
+          "type": "string",
+          "description": "The UID of the affiliate who owns the referral link."
+        },
+        "userAgent": {
+          "type": "string",
+          "description": "The browser user agent string of the visitor."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when the click was recorded.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "affiliateId",
+        "userAgent",
+        "createdAt"
       ]
     },
     "Commission": {
@@ -853,8 +892,23 @@
             }
           ]
         }
+      },
+      {
+        "path": "/affiliateClicks/{clickId}",
+        "definition": {
+          "entityName": "AffiliateClick",
+          "schema": {
+            "$ref": "#/backend/entities/AffiliateClick"
+          },
+          "description": "Public log of affiliate referral link clicks.",
+          "params": [
+            {
+              "name": "clickId",
+              "description": "Auto-generated ID for the click log."
+            }
+          ]
+        }
       }
-    ],
-    "reasoning": "The Firestore structure for GreenScape Nursery is designed with a strong emphasis on Authorization Independence, Structural Segregation, and consistent Access Modeling to ensure security, scalability, and debuggability. \n\n**Authorization Independence via Denormalization:**\nOur core strategy is to avoid `get()` calls in security rules. For user-owned data, such as `addresses`, `cartItems`, `orders`, `affiliateProfile`, `commissions`, and `payouts`, the `userId` is always embedded in the document's path (e.g., `/users/{userId}/addresses/{addressId}`). This means that when a user tries to access their data, the `userId` in `request.auth.uid` can be directly compared against the `userId` wildcard in the path, making the authorization check atomic and highly efficient. For `Review` documents, which are subcollections of `products` but owned by users, the `userId` is denormalized directly into the `Review` document itself. This allows for direct ownership checks (`resource.data.userId == request.auth.uid`) without needing to fetch a parent user document.\n\n**QAPs (Rules are not Filters):**\nThe structure inherently supports secure `list` operations without relying on filtering. \n*   **User-specific lists:** By segregating user data under `/users/{userId}/...`, any `list` query within these paths for a specific `userId` will naturally only return data belonging to that user. Security rules can simply enforce that the `userId` in the path matches `request.auth.uid` for read/list operations.\n*   **Public lists:** `categories` and `products` are top-level collections with no user-specific authorization. `list` operations are open to all authenticated or unauthenticated users, as intended, with simple `allow read: true;` rules.\n*   **Product Reviews:** Reviews are stored as a subcollection of `products` (`/products/{productId}/reviews`). This allows for efficient listing of all reviews for a given product (`/products/{productId}/reviews`) while still enforcing that individual reviews can only be written by the `userId` specified within the review document itself.\n\n**Structural Segregation:**\nPublicly accessible entities like `categories` and `products` are placed in top-level collections (`/categories`, `/products`). User-specific and private data, such as `user profiles`, `addresses`, `cart items`, `orders`, and `affiliate profiles` are all nested under `/users/{userId}/`. This clear separation ensures that different security postures do not mix within the same collection, simplifying security rules and maintaining a homogeneous security profile per collection/subcollection.\n\n**DBAC (Database Access Control):**\nUser roles for authorization (e.g., 'admin') are implemented using the 'Existence over Content' pattern. An admin user is identified by the mere existence of a document in the `/roles_admin/{userId}` collection where the document ID matches their `request.auth.uid`. This provides a clean, easily auditable, and performant way to manage roles for authorization rules, separate from user profile data."
+    ]
   }
 }

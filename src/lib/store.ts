@@ -1,3 +1,4 @@
+
 // Global mock data store for PlantShop
 
 export type UserRole = 'guest' | 'user' | 'affiliate' | 'admin';
@@ -13,6 +14,7 @@ export interface User {
   isAffiliate: boolean;
   affiliateCode?: string;
   affiliateEarnings?: number;
+  totalClicks?: number; // Added for tracking
 }
 
 export interface Plant {
@@ -74,6 +76,7 @@ export interface AffiliateProfile {
   joinedAt: string;
   status: 'pending' | 'approved' | 'blocked';
   referrals: number;
+  totalClicks: number; // Added for tracking
 }
 
 // ── Mock Plants Data ──
