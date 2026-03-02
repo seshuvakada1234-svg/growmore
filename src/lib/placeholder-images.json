@@ -1,3 +1,118 @@
 {
-  "placeholderImages": []
+  "placeholderImages": [
+    {
+      "id": "hero-banner",
+      "description": "Lush indoor garden with sunlight",
+      "imageUrl": "https://images.unsplash.com/photo-1614594975525-e45190c55d0b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxMHx8aW5kb29yJTIwcGxhbnRzfGVufDB8fHx8MTc3MjM5ODI0OHww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "indoor plants"
+    },
+    {
+      "id": "hero-slide-1",
+      "description": "New arrivals lush greenery",
+      "imageUrl": "https://images.unsplash.com/photo-1763973799772-fd85d665bdd6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwzfHxsdXNoJTIwcGxhbnRzfGVufDB8fHx8MTc3MjQ0MTMzMnww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "lush plants"
+    },
+    {
+      "id": "hero-slide-2",
+      "description": "Curated succulent collection",
+      "imageUrl": "https://images.unsplash.com/photo-1761370366123-1e253e38e10c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHxzdWNjdWxlbnQlMjBjb2xsZWN0aW9ufGVufDB8fHx8MTc3MjQ0MTMzMnww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "succulent collection"
+    },
+    {
+      "id": "hero-slide-3",
+      "description": "Beautifully packed gift plants",
+      "imageUrl": "https://images.unsplash.com/photo-1608569434839-edaba69d386f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHxwbGFudCUyMGdpZnRzfGVufDB8fHx8MTc3MjQ0MTMzMnww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "plant gifts"
+    },
+    {
+      "id": "plant-monstera",
+      "description": "Monstera Deliciosa",
+      "imageUrl": "https://images.unsplash.com/photo-1611652890157-1ff892a4e4bc?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw2fHxtb25zdGVyYSUyMHBsYW50fGVufDB8fHx8MTc3MjQzNTM0OXww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "monstera plant"
+    },
+    {
+      "id": "plant-snake",
+      "description": "Snake Plant",
+      "imageUrl": "https://images.unsplash.com/photo-1565626929866-e11c64e607cf?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxMHx8c25ha2UlMjBwbGFudHxlbnwwfHx8fDE3NzIzNDA4MzR8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "snake plant"
+    },
+    {
+      "id": "plant-fiddle",
+      "description": "Fiddle Leaf Fig",
+      "imageUrl": "https://images.unsplash.com/photo-1622673037864-228c2fc559fd?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxMHx8ZmlkZGxlJTIwZmlnfGVufDB8fHx8MTc3MjQ0MTMzMnww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "fiddle fig"
+    },
+    {
+      "id": "plant-aloe",
+      "description": "Aloe Vera",
+      "imageUrl": "https://images.unsplash.com/photo-1509423350716-97f9360b4e09?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxMHx8YWxvZSUyMHZlcmF8ZW58MHx8fHwxNzcyNDQxMzMyfDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "aloe vera"
+    },
+    {
+      "id": "plant-bonsai",
+      "description": "Japanese Juniper Bonsai",
+      "imageUrl": "https://images.unsplash.com/photo-1561641250-c06551cf3b02?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw1fHxib25zYWklMjB0cmVlfGVufDB8fHx8MTc3MjM0NDg5MHww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "bonsai tree"
+    },
+    {
+      "id": "plant-lavender",
+      "description": "English Lavender",
+      "imageUrl": "https://images.unsplash.com/photo-1750551479025-f929bd089a6c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwzfHxsYXZlbmRlciUyMHBsYW50fGVufDB8fHx8MTc3MjMyMzM4Mnww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "lavender plant"
+    },
+    {
+      "id": "cat-indoor",
+      "description": "Indoor Plants Category",
+      "imageUrl": "https://images.unsplash.com/photo-1525498128493-380d1990a112?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw1fHxpbmRvb3IlMjBwbGFudHN8ZW58MHx8fHwxNzcyMzk4MjQ4fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "indoor plants"
+    },
+    {
+      "id": "cat-succulents",
+      "description": "Succulents Category",
+      "imageUrl": "https://images.unsplash.com/photo-1623225174112-881b99a33145?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw0fHxzdWNjdWxlbnQlMjBwbGFudHN8ZW58MHx8fHwxNzcyMzk4MjQ4fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "succulent plants"
+    },
+    {
+      "id": "cat-outdoor",
+      "description": "Outdoor Plants Category",
+      "imageUrl": "https://images.unsplash.com/photo-1761228606386-5fb81edaf519?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw2fHxvdXRkb29yJTIwZ2FyZGVufGVufDB8fHx8MTc3MjQ0MTMzMXww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "outdoor garden"
+    },
+    {
+      "id": "cat-tropical",
+      "description": "Tropical Plants Category",
+      "imageUrl": "https://images.unsplash.com/photo-1521706862577-47b053587f91?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw1fHx0cm9waWNhbCUyMGp1bmdsZXxlbnwwfHx8fDE3NzI0NDEzMzJ8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "tropical jungle"
+    },
+    {
+      "id": "cat-air-purifying",
+      "description": "Air Purifying Category",
+      "imageUrl": "https://images.unsplash.com/photo-1525865078758-cece94cd4f0f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw5fHxjbGVhbiUyMGFpcnxlbnwwfHx8fDE3NzI0NDEzMzF8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "clean air"
+    },
+    {
+      "id": "cat-gifting",
+      "description": "Gift Plants Category",
+      "imageUrl": "https://images.unsplash.com/photo-1647631703209-737e2a0f54d0?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw5fHxwbGFudCUyMGdpZnR8ZW58MHx8fHwxNzcyNDQxMzMyfDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "plant gift"
+    },
+    {
+      "id": "offer-starter-kit",
+      "description": "Gardening starter kit",
+      "imageUrl": "https://images.unsplash.com/photo-1621460248083-6271cc4437a8?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw2fHxnYXJkZW5pbmclMjB0b29sc3xlbnwwfHx8fDE3NzI0NDEzMzJ8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "gardening tools"
+    },
+    {
+      "id": "offer-monstera",
+      "description": "Monstera plant collection",
+      "imageUrl": "https://images.unsplash.com/photo-1685156216282-099e66bc33c8?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHxtb25zdGVyYSUyMGNvbGxlY3Rpb258ZW58MHx8fHwxNzcyNDQxMzMyfDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "monstera collection"
+    },
+    {
+      "id": "offer-watering-pots",
+      "description": "Self-watering plant pots",
+      "imageUrl": "https://images.unsplash.com/photo-1731412895331-85c52c00afc4?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw4fHxwbGFudCUyMHBvdHN8ZW58MHx8fHwxNzcyNDQxMzMyfDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "plant pots"
+    }
+  ]
 }

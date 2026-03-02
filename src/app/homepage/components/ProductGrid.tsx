@@ -1,9 +1,8 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
+import AppImage from '@/components/ui/AppImage';
 import { Heart, Star, ArrowRight } from 'lucide-react';
 import { PRODUCTS, Product } from '@/lib/mock-data';
 
@@ -53,15 +52,16 @@ function PlantCard({ plant }: { plant: Product }) {
   return (
     <div 
       className="group bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer border border-border/50" 
-      onClick={() => router.push(`/plants/${plant.id}`)}
+      onClick={() => router.push(`/plant-detail?id=${plant.id}`)}
     >
       {/* Image Container */}
       <div className="relative aspect-square overflow-hidden bg-muted">
-        <Image
-          src={plant.imageUrl}
+        <AppImage
+          src={plant.imageUrl || `https://picsum.photos/seed/${plant.id}/600/600`}
           alt={plant.name}
           fill
           className="object-cover transition-transform duration-500 group-hover:scale-110"
+          data-ai-hint="plant"
         />
         
         {/* Badges */}
@@ -115,7 +115,7 @@ function PlantCard({ plant }: { plant: Product }) {
               <span>{plant.rating}</span>
               <Star className="h-2.5 w-2.5 fill-current" />
             </div>
-            <span className="text-[10px] text-muted-foreground font-medium">({plant.reviewsCount})</span>
+            <span className="text-[10px] text-muted-foreground font-medium">({plant.reviewCount})</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="font-bold text-primary text-base">{formatPrice(plant.price)}</span>
@@ -159,7 +159,7 @@ function applyFilter(plants: Product[], filterKey?: FilterKey): Product[] {
   }
 }
 
-export default function ProductGrid({ title, subtitle, filterKey, limit = 8, showViewAll = true, viewAllHref = '/plants' }: ProductGridProps) {
+export default function ProductGrid({ title, subtitle, filterKey, limit = 8, showViewAll = true, viewAllHref = '/plant-listing' }: ProductGridProps) {
   const plants = applyFilter(PRODUCTS, filterKey).slice(0, limit);
   const router = useRouter();
 

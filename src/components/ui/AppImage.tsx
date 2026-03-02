@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 
 interface AppImageProps {
-    src: string;
+    src: string | null | undefined;
     alt: string;
     width?: number;
     height?: number;
@@ -33,16 +33,21 @@ function AppImage({
     fill = false,
     sizes,
     onClick,
-    fallbackSrc = 'https://picsum.photos/seed/error/400/300',
+    fallbackSrc = 'https://picsum.photos/seed/error/600/400',
     ...props
 }: AppImageProps) {
-    const [imageSrc, setImageSrc] = useState(src);
+    // Ensure src is never an empty string
+    const initialSrc = src === '' || !src ? fallbackSrc : src;
+    const [imageSrc, setImageSrc] = useState(initialSrc);
     const [isLoading, setIsLoading] = useState(true);
     const [hasError, setHasError] = useState(false);
 
-    // More reliable external URL detection
-    const isExternal = imageSrc.startsWith('http://') || imageSrc.startsWith('https://');
-    const isLocal = imageSrc.startsWith('/') || imageSrc.startsWith('./') || imageSrc.startsWith('data:');
+    useEffect(() => {
+        const nextSrc = src === '' || !src ? fallbackSrc : src;
+        setImageSrc(nextSrc);
+        setHasError(false);
+        setIsLoading(true);
+    }, [src, fallbackSrc]);
 
     const handleError = () => {
         if (!hasError && imageSrc !== fallbackSrc) {
@@ -59,10 +64,15 @@ function AppImage({
 
     const commonClassName = `${className} ${isLoading ? 'bg-muted animate-pulse' : ''} ${onClick ? 'cursor-pointer hover:opacity-90 transition-opacity' : ''}`;
 
-    // For external URLs or when in doubt, use regular img tag
+    // Detection for external vs local
+    const isExternal = typeof imageSrc === 'string' && (imageSrc.startsWith('http://') || imageSrc.startsWith('https://'));
+    const isLocal = typeof imageSrc === 'string' && (imageSrc.startsWith('/') || imageSrc.startsWith('./') || imageSrc.startsWith('data:'));
+
+    // If src is still somehow empty or null after effect, don't render to avoid crash
+    if (!imageSrc) return null;
+
     if (isExternal && !isLocal) {
         const imgStyle: React.CSSProperties = {};
-
         if (width) imgStyle.width = width;
         if (height) imgStyle.height = height;
 
@@ -97,7 +107,6 @@ function AppImage({
         );
     }
 
-    // For local images and data URLs, use Next.js Image component
     const imageProps = {
         src: imageSrc,
         alt,
