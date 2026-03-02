@@ -21,10 +21,18 @@ export function ProductCard({ product }: ProductCardProps) {
     
     try {
       const cart = JSON.parse(localStorage.getItem('plantshop_cart') || '[]');
-      const existingItem = cart.find((item: any) => (item.id || item.productId || item.plantId) === product.id);
+      
+      // Standardize check for existing items using any variation of ID key
+      const existingItem = cart.find((item: any) => 
+        (item.id || item.productId || item.plantId) === product.id
+      );
       
       if (existingItem) {
-        existingItem.quantity += 1;
+        existingItem.quantity = (existingItem.quantity || 0) + 1;
+        // Standardize the key to 'id' for future logic
+        existingItem.id = product.id;
+        delete existingItem.productId;
+        delete existingItem.plantId;
       } else {
         cart.push({ id: product.id, quantity: 1 });
       }

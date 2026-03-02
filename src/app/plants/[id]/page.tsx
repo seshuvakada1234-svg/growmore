@@ -22,10 +22,18 @@ export default function PlantDetailPage() {
   const handleAddToCart = () => {
     try {
       const cart = JSON.parse(localStorage.getItem('plantshop_cart') || '[]');
-      const existingItem = cart.find((item: any) => (item.id || item.productId || item.plantId) === product.id);
+      
+      // Standardize check for existing items using any variation of ID key
+      const existingItem = cart.find((item: any) => 
+        (item.id || item.productId || item.plantId) === product.id
+      );
       
       if (existingItem) {
-        existingItem.quantity += qty;
+        existingItem.quantity = (existingItem.quantity || 0) + qty;
+        // Standardize the key to 'id'
+        existingItem.id = product.id;
+        delete existingItem.productId;
+        delete existingItem.plantId;
       } else {
         cart.push({ id: product.id, quantity: qty });
       }

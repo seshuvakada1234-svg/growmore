@@ -10,34 +10,48 @@ import { PRODUCTS } from "@/lib/mock-data";
 import { Trash2, Minus, Plus, ArrowRight, ShoppingBag, ShieldCheck } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 export default function CartPage() {
   const [items, setItems] = useState<any[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  useEffect(() => {
-    const loadCart = () => {
-      try {
-        const savedCart = JSON.parse(localStorage.getItem('plantshop_cart') || '[]');
-        const enrichedItems = savedCart.map((cartItem: any) => {
-          const product = PRODUCTS.find(p => p.id === (cartItem.id || cartItem.productId || cartItem.plantId));
-          if (product) {
-            return { ...product, quantity: cartItem.quantity };
-          }
-          return null;
-        }).filter(Boolean);
-        setItems(enrichedItems);
-      } catch (e) {
-        setItems([]);
-      }
-      setIsLoaded(true);
-    };
+  const loadCart = useCallback(() => {
+    try {
+      const savedCart = JSON.parse(localStorage.getItem('plantshop_cart') || '[]');
+      
+      // Deduplicate items by ID to prevent key collisions
+      const grouped = savedCart.reduce((acc: any, cartItem: any) => {
+        const id = cartItem.id || cartItem.productId || cartItem.plantId;
+        if (!id) return acc;
+        if (acc[id]) {
+          acc[id].quantity += (cartItem.quantity || 1);
+        } else {
+          acc[id] = { id, quantity: cartItem.quantity || 1 };
+        }
+        return acc;
+      }, {});
 
+      const enrichedItems = Object.values(grouped).map((cartItem: any) => {
+        const product = PRODUCTS.find(p => p.id === cartItem.id);
+        if (product) {
+          return { ...product, quantity: cartItem.quantity };
+        }
+        return null;
+      }).filter(Boolean);
+      
+      setItems(enrichedItems);
+    } catch (e) {
+      setItems([]);
+    }
+    setIsLoaded(true);
+  }, []);
+
+  useEffect(() => {
     loadCart();
     window.addEventListener('cart-updated', loadCart);
     return () => window.removeEventListener('cart-updated', loadCart);
-  }, []);
+  }, [loadCart]);
 
   const subtotal = items.reduce((acc, item) => acc + item.price * item.quantity, 0);
   const shipping = subtotal === 0 ? 0 : subtotal > 1500 ? 0 : 150;
@@ -45,9 +59,12 @@ export default function CartPage() {
 
   const updateQty = (id: string, delta: number) => {
     const cart = JSON.parse(localStorage.getItem('plantshop_cart') || '[]');
-    const item = cart.find((i: any) => (i.id || i.productId || i.plantId) === id);
-    if (item) {
-      item.quantity = Math.max(1, item.quantity + delta);
+    const existingIndex = cart.findIndex((i: any) => (i.id || i.productId || i.plantId) === id);
+    
+    if (existingIndex !== -1) {
+      const newQty = Math.max(1, (cart[existingIndex].quantity || 1) + delta);
+      // Standardize to 'id'
+      cart[existingIndex] = { id, quantity: newQty };
       localStorage.setItem('plantshop_cart', JSON.stringify(cart));
       window.dispatchEvent(new Event('cart-updated'));
     }
@@ -105,7 +122,7 @@ export default function CartPage() {
             {/* Items List */}
             <div className="lg:col-span-2 space-y-4">
               {items.map(item => (
-                <Card key={item.id} className="rounded-2xl border-none shadow-sm overflow-hidden bg-white">
+                <Card key={`cart-item-${item.id}`} className="rounded-2xl border-none shadow-sm overflow-hidden bg-white">
                   <CardContent className="p-4 flex gap-4">
                     <div className="relative h-24 w-24 rounded-xl overflow-hidden flex-shrink-0">
                       <Image src={item.imageUrl} alt={item.name} fill className="object-cover" />

@@ -33,12 +33,21 @@ function PlantCard({ plant }: { plant: Product }) {
     e.stopPropagation();
     try {
       const cart: { id: string; quantity: number }[] = JSON.parse(localStorage.getItem('plantshop_cart') || '[]');
+      
+      // Standardize check for existing items using any variation of ID key
       const existing = cart.find(i => (i.id || (i as any).productId || (i as any).plantId) === plant.id);
+      
       if (existing) {
-        existing.quantity += 1;
+        existing.quantity = (existing.quantity || 0) + 1;
+        // Standardize the key to 'id'
+        existing.id = plant.id;
+        // Clean up legacy keys if present
+        delete (existing as any).productId;
+        delete (existing as any).plantId;
       } else {
         cart.push({ id: plant.id, quantity: 1 });
       }
+      
       localStorage.setItem('plantshop_cart', JSON.stringify(cart));
       window.dispatchEvent(new Event('cart-updated'));
       setAddedToCart(true);
@@ -62,7 +71,7 @@ function PlantCard({ plant }: { plant: Product }) {
       {/* Image Container */}
       <div className="relative aspect-square overflow-hidden bg-muted">
         <AppImage
-          src={plant.imageUrl || `https://picsum.photos/seed/${plant.id}/600/600`}
+          src={plant.imageUrl || null}
           alt={plant.name}
           fill
           className="object-cover transition-transform duration-500 group-hover:scale-110"
@@ -190,7 +199,7 @@ export default function ProductGrid({ title, subtitle, filterKey, limit = 8, sho
         {/* Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
           {plants.map(plant => (
-            <PlantCard key={plant.id} plant={plant} />
+            <PlantCard key={`grid-plant-${plant.id}`} plant={plant} />
           ))}
         </div>
       </div>
