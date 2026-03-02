@@ -1,4 +1,3 @@
-
 "use client";
 
 import { Header } from "@/components/layout/Header";
@@ -17,29 +16,62 @@ import {
   Clock, 
   Check, 
   Award,
-  Zap
+  Zap,
+  Loader2
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "@/hooks/use-toast";
 import { generateMarketingContent } from "@/ai/flows/affiliate-marketing-content-generator";
 import { PRODUCTS } from "@/lib/mock-data";
+import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
+import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { useRouter } from "next/navigation";
 
 export default function AffiliatePage() {
-  const [status, setStatus] = useState<"None" | "Pending" | "Approved">("None");
+  const { user, isUserLoading } = useUser();
+  const db = useFirestore();
+  const router = useRouter();
   const [isGenerating, setIsGenerating] = useState(false);
   const [marketingContent, setMarketingContent] = useState<any>(null);
 
-  const handleApply = (e: React.FormEvent) => {
+  const userProfileRef = useMemoFirebase(() => {
+    if (!db || !user?.uid) return null;
+    return doc(db, 'users', user.uid);
+  }, [db, user?.uid]);
+  
+  const { data: profile, isLoading: isProfileLoading } = useDoc(userProfileRef);
+
+  useEffect(() => {
+    if (!isUserLoading && !user) {
+      router.push('/login?redirect=/affiliate');
+    }
+  }, [user, isUserLoading, router]);
+
+  const handleApply = async (e: React.FormEvent) => {
     e.preventDefault();
-    setStatus("Pending");
-    toast({
-      title: "Application Submitted!",
-      description: "Our team will review your application within 24-48 hours.",
-    });
+    if (!user || !userProfileRef) return;
+
+    try {
+      await updateDoc(userProfileRef, {
+        affiliateStatus: "pending",
+        updatedAt: serverTimestamp()
+      });
+      toast({
+        title: "Application Submitted!",
+        description: "Our team will review your application within 24-48 hours.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to submit application. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   const handleCopyLink = () => {
-    navigator.clipboard.writeText("https://greenscape.in/ref/user9921");
+    const code = profile?.referralCode || user?.uid?.substring(0, 8);
+    navigator.clipboard.writeText(`https://greenscape.in/ref/${code}`);
     toast({ title: "Copied!", description: "Referral link copied to clipboard." });
   };
 
@@ -47,12 +79,13 @@ export default function AffiliatePage() {
     setIsGenerating(true);
     try {
       const plant = PRODUCTS[0];
+      const code = profile?.referralCode || user?.uid?.substring(0, 8);
       const result = await generateMarketingContent({
         plantName: plant.name,
         plantCategory: plant.category,
         plantDescription: plant.description,
         plantPrice: plant.price,
-        referralLink: "https://greenscape.in/ref/user9921",
+        referralLink: `https://greenscape.in/ref/${code}`,
         imageUrl: plant.imageUrl
       });
       setMarketingContent(result);
@@ -63,6 +96,20 @@ export default function AffiliatePage() {
       setIsGenerating(false);
     }
   };
+
+  if (isUserLoading || isProfileLoading) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <main className="flex-grow flex items-center justify-center bg-neutral/30">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  const status = profile?.role === 'affiliate' ? 'Approved' : (profile?.affiliateStatus || 'None');
 
   // 1. JOIN PAGE
   if (status === "None") {
@@ -121,11 +168,11 @@ export default function AffiliatePage() {
                 <form onSubmit={handleApply} className="space-y-4">
                   <div className="space-y-2">
                     <Label>Full Name</Label>
-                    <Input placeholder="Jane Doe" required className="rounded-xl" />
+                    <Input defaultValue={user?.displayName || ""} required className="rounded-xl" />
                   </div>
                   <div className="space-y-2">
                     <Label>Email Address</Label>
-                    <Input type="email" placeholder="jane@example.com" required className="rounded-xl" />
+                    <Input type="email" defaultValue={user?.email || ""} required className="rounded-xl" readOnly />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -157,7 +204,7 @@ export default function AffiliatePage() {
   }
 
   // 2. PENDING PAGE
-  if (status === "Pending") {
+  if (status === "pending") {
     return (
       <div className="min-h-screen flex flex-col">
         <Header />
@@ -174,9 +221,7 @@ export default function AffiliatePage() {
               Expected review time: 12-24 hours
             </div>
             <div className="pt-6">
-              <Button onClick={() => setStatus("Approved")} variant="outline" className="rounded-full px-8">
-                Simulation: Approve Application
-              </Button>
+              <p className="text-xs text-muted-foreground italic">Tip: Ensure your banking details are correct to speed up approval.</p>
             </div>
           </Card>
         </main>
@@ -203,9 +248,9 @@ export default function AffiliatePage() {
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
             {[
-              { label: "Total Earnings", value: "₹4,250", icon: Wallet, color: "bg-blue-50 text-blue-600" },
-              { label: "Pending Payout", value: "₹1,200", icon: Clock, color: "bg-yellow-50 text-yellow-600" },
-              { label: "Total Referrals", value: "124", icon: Users, color: "bg-purple-50 text-purple-600" },
+              { label: "Total Earnings", value: `₹${profile?.totalEarnings || 0}`, icon: Wallet, color: "bg-blue-50 text-blue-600" },
+              { label: "Pending Payout", value: `₹${profile?.pendingEarnings || 0}`, icon: Clock, color: "bg-yellow-50 text-yellow-600" },
+              { label: "Total Referrals", value: profile?.totalReferrals || 0, icon: Users, color: "bg-purple-50 text-purple-600" },
               { label: "Conversion Rate", value: "12.5%", icon: TrendingUp, color: "bg-emerald-50 text-emerald-600" }
             ].map((stat, i) => (
               <Card key={i} className="rounded-3xl border-none shadow-sm p-6 bg-white">
@@ -229,7 +274,7 @@ export default function AffiliatePage() {
                 </h3>
                 <div className="flex gap-2">
                   <div className="flex-grow p-4 bg-muted rounded-2xl font-mono text-sm overflow-hidden whitespace-nowrap">
-                    https://greenscape.in/ref/user9921
+                    https://greenscape.in/ref/{profile?.referralCode || user?.uid?.substring(0, 8)}
                   </div>
                   <Button onClick={handleCopyLink} size="icon" className="h-auto w-14 rounded-2xl">
                     <Copy className="h-5 w-5" />
@@ -296,28 +341,10 @@ export default function AffiliatePage() {
                 <Wallet className="h-5 w-5" /> Recent Earnings
               </h3>
               <div className="space-y-4">
-                {[
-                  { id: "ORD-1229", amount: "₹450", date: "Today, 10:30 AM", status: "Pending" },
-                  { id: "ORD-1225", amount: "₹120", date: "Yesterday", status: "Approved" },
-                  { id: "ORD-1210", amount: "₹980", date: "Mar 15, 2024", status: "Paid" },
-                  { id: "ORD-1198", amount: "₹340", date: "Mar 12, 2024", status: "Paid" }
-                ].map((txn, i) => (
-                  <div key={i} className="flex items-center justify-between p-4 border rounded-2xl hover:bg-muted/30 transition-all">
-                    <div className="flex items-center gap-4">
-                      <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${txn.status === "Paid" ? "bg-emerald-50 text-emerald-600" : "bg-yellow-50 text-yellow-600"}`}>
-                        {txn.status === "Paid" ? <Check className="h-5 w-5" /> : <Clock className="h-5 w-5" />}
-                      </div>
-                      <div>
-                        <p className="font-bold text-sm">Order #{txn.id}</p>
-                        <p className="text-xs text-muted-foreground">{txn.date}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-bold text-primary">{txn.amount}</p>
-                      <p className={`text-[10px] font-bold uppercase tracking-widest ${txn.status === "Paid" ? "text-emerald-600" : "text-yellow-600"}`}>{txn.status}</p>
-                    </div>
-                  </div>
-                ))}
+                <div className="flex flex-col items-center justify-center py-12 text-center space-y-2 border-2 border-dashed rounded-2xl">
+                  <p className="text-sm text-muted-foreground">No earnings recorded yet.</p>
+                  <p className="text-xs text-muted-foreground">Referral sales will appear here once confirmed.</p>
+                </div>
               </div>
               <Button variant="ghost" className="w-full mt-6 text-primary font-bold">View All Earnings</Button>
             </Card>

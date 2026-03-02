@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Search, ShoppingCart, User, Leaf, Menu, Home, LogOut, LayoutDashboard, ShieldCheck } from "lucide-react";
+import { Search, ShoppingCart, User, Leaf, Menu, Home, LogOut, LayoutDashboard, ShieldCheck, Award } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useUser, useAuth, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
 import { signOut } from "firebase/auth";
 import { doc } from "firebase/firestore";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +26,7 @@ export function Header() {
   const auth = useAuth();
   const db = useFirestore();
   const router = useRouter();
+  const pathname = usePathname();
 
   // Fetch user profile to check role
   const userProfileRef = useMemoFirebase(() => {
@@ -34,7 +35,17 @@ export function Header() {
   }, [db, user?.uid]);
   
   const { data: profile } = useDoc(userProfileRef);
-  const isAdmin = profile?.role === 'admin';
+  const role = profile?.role || 'user';
+  const isAdmin = role === 'admin';
+  const isAffiliate = role === 'affiliate';
+
+  // Strict rule: Admins should not be on storefront pages. 
+  // If they are logged in and on a public page, we show a simplified header or redirect.
+  useEffect(() => {
+    if (isAdmin && !pathname.startsWith('/admin')) {
+      router.push('/admin');
+    }
+  }, [isAdmin, pathname, router]);
 
   useEffect(() => {
     const updateCount = () => {
@@ -67,6 +78,27 @@ export function Header() {
     }
   };
 
+  if (isAdmin) {
+    return (
+      <header className="sticky top-0 z-50 w-full border-b bg-primary text-white shadow-lg">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link href="/admin" className="flex items-center gap-2">
+              <Leaf className="h-8 w-8 fill-current" />
+              <span className="font-headline font-extrabold text-xl tracking-tight">GreenScape Admin</span>
+            </Link>
+          </div>
+          <div className="flex items-center gap-4">
+            <span className="text-sm font-bold bg-white/20 px-3 py-1 rounded-full">Administrator Mode</span>
+            <Button variant="ghost" size="icon" onClick={handleLogout} className="text-white hover:bg-white/10">
+              <LogOut className="h-6 w-6" />
+            </Button>
+          </div>
+        </div>
+      </header>
+    );
+  }
+
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-4">
@@ -82,13 +114,7 @@ export function Header() {
                 <Link href="/plants" className="text-lg font-medium">All Plants</Link>
                 <Link href="/plants?cat=Indoor" className="text-lg font-medium">Indoor</Link>
                 <Link href="/plants?cat=Outdoor" className="text-lg font-medium">Outdoor</Link>
-                <Link href="/plants?cat=Bonsai" className="text-lg font-medium">Bonsai</Link>
                 <Link href="/affiliate" className="text-lg font-medium">Affiliate Program</Link>
-                {isAdmin && (
-                  <Link href="/admin" className="text-lg font-bold text-primary flex items-center gap-2">
-                    <ShieldCheck className="h-5 w-5" /> Admin Panel
-                  </Link>
-                )}
               </nav>
             </SheetContent>
           </Sheet>
@@ -137,7 +163,7 @@ export function Header() {
               <DropdownMenuContent align="end" className="w-56 rounded-xl mt-2">
                 <DropdownMenuLabel className="font-headline font-bold">
                   <div>{user.displayName || "My Account"}</div>
-                  {isAdmin && <div className="text-[10px] text-primary uppercase tracking-widest mt-0.5">Administrator</div>}
+                  {isAffiliate && <div className="text-[10px] text-emerald-600 uppercase tracking-widest mt-0.5">Partner Affiliate</div>}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild className="cursor-pointer rounded-lg">
@@ -150,13 +176,11 @@ export function Header() {
                     <ShoppingCart className="h-4 w-4" /> Orders
                   </Link>
                 </DropdownMenuItem>
-                {isAdmin && (
-                  <DropdownMenuItem asChild className="cursor-pointer rounded-lg">
-                    <Link href="/admin" className="flex items-center gap-2 w-full text-primary font-bold">
-                      <LayoutDashboard className="h-4 w-4" /> Admin Panel
-                    </Link>
-                  </DropdownMenuItem>
-                )}
+                <DropdownMenuItem asChild className="cursor-pointer rounded-lg">
+                  <Link href="/affiliate" className="flex items-center gap-2 w-full">
+                    <Award className="h-4 w-4" /> Affiliate Program
+                  </Link>
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem 
                   className="cursor-pointer text-destructive focus:text-destructive rounded-lg"
@@ -170,14 +194,6 @@ export function Header() {
             <Link href="/login">
               <Button className="rounded-full px-6 font-bold">
                 Login
-              </Button>
-            </Link>
-          )}
-
-          {isAdmin && (
-            <Link href="/admin" className="hidden lg:block">
-              <Button variant="outline" size="sm" className="rounded-full border-primary text-primary hover:bg-primary hover:text-white font-bold gap-2">
-                <ShieldCheck className="h-4 w-4" /> Admin
               </Button>
             </Link>
           )}

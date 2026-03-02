@@ -5,24 +5,35 @@ import { Footer } from "@/components/layout/Footer";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { GoogleLoginButton } from "@/components/auth/GoogleLoginButton";
 import { Leaf } from "lucide-react";
-import { useUser } from "@/firebase";
+import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { doc } from "firebase/firestore";
 
 export default function LoginPage() {
   const { user, isUserLoading } = useUser();
+  const db = useFirestore();
   const router = useRouter();
 
-  useEffect(() => {
-    // If the user is already authenticated, redirect them to the home page immediately
-    if (!isUserLoading && user) {
-      router.push('/');
-    }
-  }, [user, isUserLoading, router]);
+  const userProfileRef = useMemoFirebase(() => {
+    if (!db || !user?.uid) return null;
+    return doc(db, 'users', user.uid);
+  }, [db, user?.uid]);
+  
+  const { data: profile, isLoading: isProfileLoading } = useDoc(userProfileRef);
 
-  // To prevent UI flicker (showing the login card for a split second), 
-  // we show a loading state if the auth status is being checked OR if a user exists (pending redirect)
-  if (isUserLoading || user) {
+  useEffect(() => {
+    // If the user is already authenticated and profile is loaded, redirect based on role
+    if (!isUserLoading && user && !isProfileLoading && profile) {
+      if (profile.role === 'admin') {
+        router.push('/admin');
+      } else {
+        router.push('/');
+      }
+    }
+  }, [user, isUserLoading, profile, isProfileLoading, router]);
+
+  if (isUserLoading || (user && isProfileLoading) || (user && profile)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-neutral/30">
         <div className="animate-pulse text-primary font-bold flex flex-col items-center gap-4">
