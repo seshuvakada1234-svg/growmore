@@ -1,16 +1,13 @@
-
 import Link from "next/link";
-import Image from "next/image";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { ProductCard } from "@/components/shop/ProductCard";
-import { Button } from "@/components/ui/button";
 import { PRODUCTS } from "@/lib/mock-data";
-import { PlaceHolderImages } from "@/lib/placeholder-images";
 import { ArrowRight, Truck, ShieldCheck, Flower2, Clock } from "lucide-react";
 import AffiliateBanner from "@/app/homepage/components/AffiliateBanner";
 import CategorySection from "@/app/homepage/components/CategorySection";
 import HeroSection from "@/app/homepage/components/HeroSection";
+import MarqueeStrip from "@/app/homepage/components/MarqueeStrip";
 
 export default function Home() {
   const featuredPlants = PRODUCTS.slice(0, 4);
@@ -22,6 +19,9 @@ export default function Home() {
       <main className="flex-grow">
         {/* Hero Section */}
         <HeroSection />
+
+        {/* Marquee Benefits Strip */}
+        <MarqueeStrip />
 
         {/* Categories Section */}
         <CategorySection />
