@@ -70,8 +70,9 @@ export default function AffiliatePage() {
   };
 
   const handleCopyLink = () => {
-    const code = profile?.referralCode || user?.uid?.substring(0, 8);
-    navigator.clipboard.writeText(`https://greenscape.in/ref/${code}`);
+    if (!user?.uid) return;
+    const referralLink = `https://greenscape.app/?ref=${user.uid}`;
+    navigator.clipboard.writeText(referralLink);
     toast({ title: "Copied!", description: "Referral link copied to clipboard." });
   };
 
@@ -79,13 +80,13 @@ export default function AffiliatePage() {
     setIsGenerating(true);
     try {
       const plant = PRODUCTS[0];
-      const code = profile?.referralCode || user?.uid?.substring(0, 8);
+      const referralLink = `https://greenscape.app/?ref=${user?.uid}`;
       const result = await generateMarketingContent({
         plantName: plant.name,
         plantCategory: plant.category,
         plantDescription: plant.description,
         plantPrice: plant.price,
-        referralLink: `https://greenscape.in/ref/${code}`,
+        referralLink: referralLink,
         imageUrl: plant.imageUrl
       });
       setMarketingContent(result);
@@ -274,7 +275,7 @@ export default function AffiliatePage() {
                 </h3>
                 <div className="flex gap-2">
                   <div className="flex-grow p-4 bg-muted rounded-2xl font-mono text-sm overflow-hidden whitespace-nowrap">
-                    https://greenscape.in/ref/{profile?.referralCode || user?.uid?.substring(0, 8)}
+                    https://greenscape.app/?ref={user?.uid}
                   </div>
                   <Button onClick={handleCopyLink} size="icon" className="h-auto w-14 rounded-2xl">
                     <Copy className="h-5 w-5" />

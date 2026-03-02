@@ -1,4 +1,3 @@
-
 "use client";
 
 import { Header } from "@/components/layout/Header";
@@ -8,22 +7,117 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { ShoppingBag, ChevronLeft, CreditCard, Banknote, Wallet } from "lucide-react";
+import { ShoppingBag, ChevronLeft, CreditCard, Banknote, Wallet, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
+import { useUser, useFirestore } from "@/firebase";
+import { collection, doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { useState, useEffect } from "react";
+import { PRODUCTS } from "@/lib/mock-data";
 
 export default function CheckoutPage() {
   const router = useRouter();
+  const { user } = useUser();
+  const db = useFirestore();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [cartItems, setCartItems] = useState<any[]>([]);
 
-  const handlePlaceOrder = (e: React.FormEvent) => {
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem('plantshop_cart') || '[]');
+      const enriched = stored.map((item: any) => {
+        const product = PRODUCTS.find(p => p.id === (item.id || item.productId));
+        return product ? { ...product, quantity: item.quantity } : null;
+      }).filter(Boolean);
+      setCartItems(enriched);
+    } catch (e) {
+      setCartItems([]);
+    }
+  }, []);
+
+  const subtotal = cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
+  const shipping = subtotal > 1500 ? 0 : 150;
+  const total = subtotal + shipping;
+
+  const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
-    toast({
-      title: "Order Placed!",
-      description: "Your green friends will be with you shortly.",
-    });
-    router.push("/orders");
+    if (!user) {
+      router.push('/login?redirect=/checkout');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      // 1. Get referral ID from localStorage
+      const referrerUserId = localStorage.getItem('affiliateRef');
+
+      // 2. Prepare Order Data
+      const orderId = `GS-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+      const orderRef = doc(collection(db, 'users', user.uid, 'orders'), orderId);
+      
+      const orderData = {
+        id: orderId,
+        userId: user.uid,
+        orderDate: new Date().toISOString(),
+        totalAmount: total,
+        status: "Pending",
+        paymentMethod: "Credit Card", // Default for mock flow
+        referrerUserId: referrerUserId || null, // Capture the referral here
+        items: cartItems.map(item => ({
+          productId: item.id,
+          productName: item.name,
+          quantity: item.quantity,
+          unitPrice: item.price,
+          subtotal: item.price * item.quantity
+        })),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+
+      // 3. Save to Firestore (non-blocking write pattern)
+      setDoc(orderRef, orderData);
+
+      // 4. Success handling
+      toast({
+        title: "Order Placed!",
+        description: "Your green friends will be with you shortly.",
+      });
+
+      // Clear cart
+      localStorage.removeItem('plantshop_cart');
+      window.dispatchEvent(new Event('cart-updated'));
+      
+      router.push("/orders");
+    } catch (error) {
+      console.error("Order error:", error);
+      toast({
+        title: "Order Failed",
+        description: "Something went wrong. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+  if (cartItems.length === 0) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <main className="flex-grow flex items-center justify-center p-4">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold mb-4">Your cart is empty</h2>
+            <Link href="/plants">
+              <Button>Start Shopping</Button>
+            </Link>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -128,40 +222,37 @@ export default function CheckoutPage() {
                 <CardContent className="p-8 space-y-6">
                   <h3 className="text-2xl font-headline font-bold text-primary">Order Summary</h3>
                   
-                  <div className="space-y-4 max-h-[200px] overflow-y-auto pr-2">
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold bg-accent p-1 px-2 rounded-lg">1x</span>
-                        <span className="text-sm">Monstera Deliciosa</span>
+                  <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
+                    {cartItems.map((item, idx) => (
+                      <div key={idx} className="flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold bg-accent p-1 px-2 rounded-lg">{item.quantity}x</span>
+                          <span className="text-sm">{item.name}</span>
+                        </div>
+                        <span className="text-sm font-bold">₹{item.price * item.quantity}</span>
                       </div>
-                      <span className="text-sm font-bold">₹1,299</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold bg-accent p-1 px-2 rounded-lg">2x</span>
-                        <span className="text-sm">Snake Plant Zeylanica</span>
-                      </div>
-                      <span className="text-sm font-bold">₹998</span>
-                    </div>
+                    ))}
                   </div>
 
                   <div className="border-t pt-6 space-y-3">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Subtotal</span>
-                      <span className="font-bold">₹2,297</span>
+                      <span className="font-bold">₹{subtotal}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Shipping</span>
-                      <span className="font-bold text-emerald-600">FREE</span>
+                      <span className="font-bold text-emerald-600">
+                        {shipping === 0 ? "FREE" : `₹${shipping}`}
+                      </span>
                     </div>
                     <div className="flex justify-between text-xl font-headline font-extrabold pt-2 border-t mt-4">
                       <span>Total</span>
-                      <span className="text-primary">₹2,297</span>
+                      <span className="text-primary">₹{total}</span>
                     </div>
                   </div>
 
-                  <Button type="submit" className="w-full h-14 rounded-full text-lg font-bold">
-                    Place Order Now
+                  <Button type="submit" disabled={isSubmitting} className="w-full h-14 rounded-full text-lg font-bold">
+                    {isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : "Place Order Now"}
                   </Button>
 
                   <p className="text-xs text-center text-muted-foreground">

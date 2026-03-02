@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster"
 import { FirebaseClientProvider } from '@/firebase/client-provider';
+import { ReferralTracker } from '@/components/ReferralTracker';
+import { Suspense } from 'react';
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -32,6 +34,9 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased bg-background text-foreground">
         <FirebaseClientProvider>
+          <Suspense fallback={null}>
+            <ReferralTracker />
+          </Suspense>
           {children}
           <Toaster />
         </FirebaseClientProvider>
