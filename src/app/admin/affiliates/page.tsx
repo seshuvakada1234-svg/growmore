@@ -7,7 +7,7 @@ import { Search, Loader2, Clock, Award } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
-import { collection, doc, updateDoc, deleteDoc, setDoc, serverTimestamp, query, orderBy, collectionGroup } from "firebase/firestore";
+import { collection, doc, updateDoc, deleteDoc, setDoc, serverTimestamp, query, orderBy, where } from "firebase/firestore";
 import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 
@@ -20,9 +20,12 @@ export default function AdminAffiliates() {
   const appsQuery = useMemoFirebase(() => query(collection(db, 'affiliateApplications'), orderBy('createdAt', 'desc')), [db]);
   const { data: applications, isLoading: appsLoading } = useCollection(appsQuery);
 
-  // Fetch Approved Affiliates using collectionGroup
-  const profilesQuery = useMemoFirebase(() => collectionGroup(db, 'profile'), [db]);
-  const { data: affiliates, isLoading: affLoading } = useCollection(profilesQuery);
+  // Fetch Approved Affiliates directly from users collection (more reliable than collectionGroup for docs)
+  const affiliatesQuery = useMemoFirebase(() => 
+    query(collection(db, 'users'), where('role', '==', 'affiliate')), 
+    [db]
+  );
+  const { data: affiliates, isLoading: affLoading } = useCollection(affiliatesQuery);
 
   const handleApprove = async (userId: string) => {
     setIsProcessing(userId);
@@ -66,6 +69,12 @@ export default function AdminAffiliates() {
 
   if (appsLoading || affLoading) return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-primary" /></div>;
 
+  const filteredApps = applications?.filter(a => a.status === 'pending');
+  const filteredAffiliates = affiliates?.filter(a => 
+    a.email?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    a.firstName?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
     <div className="space-y-10">
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -79,7 +88,7 @@ export default function AdminAffiliates() {
       {/* Applications Section */}
       <section className="space-y-4">
         <h2 className="text-xl font-bold flex items-center gap-2"><Clock className="h-5 w-5 text-yellow-600" /> Pending Applications</h2>
-        <Card className="rounded-[2rem] border-none shadow-sm overflow-hidden">
+        <Card className="rounded-[2rem] border-none shadow-sm overflow-hidden bg-white">
           <table className="w-full text-left">
             <thead className="bg-muted/30 border-b">
               <tr>
@@ -89,9 +98,9 @@ export default function AdminAffiliates() {
               </tr>
             </thead>
             <tbody className="divide-y divide-muted">
-              {applications?.filter(a => a.status === 'pending').map(app => (
+              {filteredApps?.map(app => (
                 <tr key={app.id}>
-                  <td className="p-6 font-mono text-xs">{app.userId}</td>
+                  <td className="p-6 font-mono text-xs">{app.id}</td>
                   <td className="p-6 text-sm">{app.createdAt?.seconds ? format(new Date(app.createdAt.seconds * 1000), 'MMM d, yyyy') : 'Recent'}</td>
                   <td className="p-6 text-right">
                     <div className="flex items-center justify-end gap-2">
@@ -101,7 +110,7 @@ export default function AdminAffiliates() {
                   </td>
                 </tr>
               ))}
-              {applications?.length === 0 && <tr><td colSpan={3} className="p-12 text-center text-muted-foreground italic">No pending applications.</td></tr>}
+              {(!filteredApps || filteredApps.length === 0) && <tr><td colSpan={3} className="p-12 text-center text-muted-foreground italic">No pending applications.</td></tr>}
             </tbody>
           </table>
         </Card>
@@ -110,26 +119,29 @@ export default function AdminAffiliates() {
       {/* Partners Section */}
       <section className="space-y-4">
         <h2 className="text-xl font-bold flex items-center gap-2"><Award className="h-5 w-5 text-primary" /> Active Partners</h2>
-        <Card className="rounded-[2rem] border-none shadow-sm overflow-hidden">
+        <Card className="rounded-[2rem] border-none shadow-sm overflow-hidden bg-white">
           <table className="w-full text-left">
             <thead className="bg-muted/30 border-b">
               <tr>
                 <th className="p-6 text-xs uppercase font-bold text-muted-foreground">Partner</th>
-                <th className="p-6 text-xs uppercase font-bold text-muted-foreground">Clicks</th>
-                <th className="p-6 text-xs uppercase font-bold text-muted-foreground">Total Earned</th>
-                <th className="p-6 text-xs uppercase font-bold text-muted-foreground">Balance</th>
+                <th className="p-6 text-xs uppercase font-bold text-muted-foreground">Email</th>
+                <th className="p-6 text-xs uppercase font-bold text-muted-foreground text-right">Joined</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-muted">
-              {affiliates?.map(aff => (
+              {filteredAffiliates?.map(aff => (
                 <tr key={aff.id} className="hover:bg-accent/20 transition-colors">
-                  <td className="p-6 font-mono text-xs font-bold text-primary">{aff.affiliateId?.substring(0, 12)}...</td>
-                  <td className="p-6 font-bold">{aff.totalClicks || 0}</td>
-                  <td className="p-6 font-bold text-emerald-600">₹{aff.totalEarnings || 0}</td>
-                  <td className="p-6 font-bold">₹{(aff.totalEarnings || 0) - (aff.paidEarnings || 0)}</td>
+                  <td className="p-6">
+                    <p className="font-bold text-primary">{aff.firstName} {aff.lastName}</p>
+                    <p className="text-[10px] font-mono text-muted-foreground">ID: {aff.id.substring(0, 12)}...</p>
+                  </td>
+                  <td className="p-6 text-sm">{aff.email}</td>
+                  <td className="p-6 text-right text-sm text-muted-foreground">
+                    {aff.createdAt?.seconds ? format(new Date(aff.createdAt.seconds * 1000), 'MMM d, yyyy') : 'N/A'}
+                  </td>
                 </tr>
               ))}
-              {affiliates?.length === 0 && <tr><td colSpan={4} className="p-12 text-center text-muted-foreground italic">No approved affiliates yet.</td></tr>}
+              {(!filteredAffiliates || filteredAffiliates.length === 0) && <tr><td colSpan={3} className="p-12 text-center text-muted-foreground italic">No approved affiliates yet.</td></tr>}
             </tbody>
           </table>
         </Card>

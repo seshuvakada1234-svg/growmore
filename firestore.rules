@@ -8,14 +8,15 @@ service cloud.firestore {
     function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
     
     // Admin check: checks DBAC collection OR role field in user document
+    // Using .get() with a default to prevent rule crashes if field is missing
     function isAdmin() { 
       return isSignedIn() && (
         exists(/databases/$(database)/documents/roles_admin/$(request.auth.uid)) || 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == 'admin'
       ); 
     }
     
-    function isAffiliate(userId) { return isSignedIn() && get(/databases/$(database)/documents/users/$(userId)).data.role == 'affiliate'; }
+    function isAffiliate(userId) { return isSignedIn() && get(/databases/$(database)/documents/users/$(userId)).data.get('role', 'user') == 'affiliate'; }
 
     // --- Users ---
     match /users/{userId} {
@@ -28,17 +29,17 @@ service cloud.firestore {
       match /affiliate/profile {
         allow read: if isOwner(userId) || isAdmin();
         allow write: if isAdmin();
-        // Allow click increment via checkout/tracker flow
-        allow update: if isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['totalClicks']);
+        // Allow click increment via tracker
+        allow update: if isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['totalClicks', 'updatedAt']);
 
         match /commissions/{id} {
           allow read: if isOwner(userId) || isAdmin();
-          allow write: if isAdmin() || (isSignedIn() && !('affiliateId' in request.resource.data) || request.resource.data.affiliateId == request.auth.uid);
+          allow write: if isAdmin();
         }
 
         match /payouts/{id} {
           allow read: if isOwner(userId) || isAdmin();
-          allow create: if isOwner(userId) && get(/databases/$(database)/documents/users/$(userId)).data.role == 'affiliate';
+          allow create: if isOwner(userId) && isAffiliate(userId);
           allow update: if isAdmin();
         }
       }
@@ -57,7 +58,7 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // --- Global Click Logs (Top-level for performance) ---
+    // --- Global Click Logs ---
     match /affiliateClicks/{id} {
       allow create: if true;
       allow read: if isAdmin();
@@ -81,9 +82,6 @@ service cloud.firestore {
       allow read: if isAdmin();
     }
     match /{path=**}/commissions/{id} {
-      allow read: if isAdmin();
-    }
-    match /{path=**}/profile/{id} {
       allow read: if isAdmin();
     }
   }
