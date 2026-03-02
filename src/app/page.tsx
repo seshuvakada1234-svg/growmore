@@ -1,13 +1,15 @@
+
 import Link from "next/link";
 import Image from "next/image";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { ProductCard } from "@/components/shop/ProductCard";
 import { Button } from "@/components/ui/button";
-import { PRODUCTS, CATEGORIES } from "@/lib/mock-data";
+import { PRODUCTS } from "@/lib/mock-data";
 import { PlaceHolderImages } from "@/lib/placeholder-images";
 import { ArrowRight, Truck, ShieldCheck, Flower2, Clock } from "lucide-react";
 import AffiliateBanner from "@/app/homepage/components/AffiliateBanner";
+import CategorySection from "@/app/homepage/components/CategorySection";
 
 export default function Home() {
   const featuredPlants = PRODUCTS.slice(0, 4);
@@ -57,44 +59,11 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Categories */}
-        <section className="py-16 bg-neutral">
-          <div className="container mx-auto px-4">
-            <div className="flex flex-col md:flex-row items-end justify-between mb-10 gap-4">
-              <div className="space-y-2">
-                <h2 className="text-3xl font-headline font-extrabold text-primary">Browse Categories</h2>
-                <p className="text-muted-foreground">Find the perfect plant for every corner of your life.</p>
-              </div>
-              <Link href="/plants" className="text-primary font-bold flex items-center gap-1 hover:underline">
-                View All Categories <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
-            
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-              {CATEGORIES.map((cat, i) => (
-                <Link key={cat} href={`/plants?cat=${cat}`}>
-                  <div className="group relative h-64 rounded-3xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300">
-                    <Image
-                      src={`https://picsum.photos/seed/cat${i}/600/600`}
-                      alt={cat}
-                      fill
-                      className="object-cover group-hover:scale-110 transition-transform duration-500"
-                      data-ai-hint={`${cat} plants`}
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-                    <div className="absolute bottom-6 left-6 text-white">
-                      <h3 className="text-2xl font-headline font-bold">{cat}</h3>
-                      <p className="text-white/80 text-sm">Explore Collection</p>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </section>
+        {/* Categories Section */}
+        <CategorySection />
 
         {/* Featured Plants */}
-        <section className="py-16">
+        <section className="py-16 bg-neutral/30">
           <div className="container mx-auto px-4">
             <div className="flex flex-col md:flex-row items-end justify-between mb-10 gap-4">
               <div className="space-y-2">

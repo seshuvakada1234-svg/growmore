@@ -42,6 +42,42 @@
       "description": "English Lavender",
       "imageUrl": "https://picsum.photos/seed/lavender/600/600",
       "imageHint": "lavender plant"
+    },
+    {
+      "id": "cat-indoor",
+      "description": "Indoor Plants Category",
+      "imageUrl": "https://picsum.photos/seed/indoorcat/600/800",
+      "imageHint": "indoor plants"
+    },
+    {
+      "id": "cat-succulents",
+      "description": "Succulents Category",
+      "imageUrl": "https://picsum.photos/seed/succulentcat/600/800",
+      "imageHint": "succulent plants"
+    },
+    {
+      "id": "cat-outdoor",
+      "description": "Outdoor Plants Category",
+      "imageUrl": "https://picsum.photos/seed/outdoorcat/600/800",
+      "imageHint": "outdoor garden"
+    },
+    {
+      "id": "cat-tropical",
+      "description": "Tropical Plants Category",
+      "imageUrl": "https://picsum.photos/seed/tropicalcat/600/800",
+      "imageHint": "tropical jungle"
+    },
+    {
+      "id": "cat-air-purifying",
+      "description": "Air Purifying Category",
+      "imageUrl": "https://picsum.photos/seed/aircat/600/800",
+      "imageHint": "clean air"
+    },
+    {
+      "id": "cat-gifting",
+      "description": "Gift Plants Category",
+      "imageUrl": "https://picsum.photos/seed/giftcat/600/800",
+      "imageHint": "plant gift"
     }
   ]
 }
