@@ -1,0 +1,47 @@
+
+{
+  "placeholderImages": [
+    {
+      "id": "hero-banner",
+      "description": "Lush indoor garden with sunlight",
+      "imageUrl": "https://picsum.photos/seed/nursery1/1200/600",
+      "imageHint": "indoor plants"
+    },
+    {
+      "id": "plant-monstera",
+      "description": "Monstera Deliciosa",
+      "imageUrl": "https://picsum.photos/seed/monstera/600/600",
+      "imageHint": "monstera plant"
+    },
+    {
+      "id": "plant-snake",
+      "description": "Snake Plant",
+      "imageUrl": "https://picsum.photos/seed/snakeplant/600/600",
+      "imageHint": "snake plant"
+    },
+    {
+      "id": "plant-fiddle",
+      "description": "Fiddle Leaf Fig",
+      "imageUrl": "https://picsum.photos/seed/fiddle/600/600",
+      "imageHint": "fiddle fig"
+    },
+    {
+      "id": "plant-aloe",
+      "description": "Aloe Vera",
+      "imageUrl": "https://picsum.photos/seed/aloe/600/600",
+      "imageHint": "aloe vera"
+    },
+    {
+      "id": "plant-bonsai",
+      "description": "Japanese Juniper Bonsai",
+      "imageUrl": "https://picsum.photos/seed/bonsai/600/600",
+      "imageHint": "bonsai tree"
+    },
+    {
+      "id": "plant-lavender",
+      "description": "English Lavender",
+      "imageUrl": "https://picsum.photos/seed/lavender/600/600",
+      "imageHint": "lavender plant"
+    }
+  ]
+}

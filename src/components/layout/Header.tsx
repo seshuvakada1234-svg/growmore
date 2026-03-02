@@ -1,0 +1,75 @@
+
+"use client";
+
+import Link from "next/link";
+import { Search, ShoppingCart, User, Leaf, Menu } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { useState } from "react";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+
+export function Header() {
+  const [cartCount] = useState(2);
+
+  return (
+    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" className="md:hidden">
+                <Menu className="h-6 w-6" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left">
+              <nav className="flex flex-col gap-4 mt-8">
+                <Link href="/plants" className="text-lg font-medium">All Plants</Link>
+                <Link href="/plants?cat=Indoor" className="text-lg font-medium">Indoor</Link>
+                <Link href="/plants?cat=Outdoor" className="text-lg font-medium">Outdoor</Link>
+                <Link href="/plants?cat=Bonsai" className="text-lg font-medium">Bonsai</Link>
+                <Link href="/affiliate" className="text-lg font-medium">Affiliate Program</Link>
+              </nav>
+            </SheetContent>
+          </Sheet>
+          <Link href="/" className="flex items-center gap-2 text-primary">
+            <Leaf className="h-8 w-8 fill-current" />
+            <span className="font-headline font-extrabold text-xl tracking-tight hidden sm:inline-block">GreenScape</span>
+          </Link>
+        </div>
+
+        <div className="flex-1 max-w-md hidden md:flex items-center relative">
+          <Search className="absolute left-3 h-4 w-4 text-muted-foreground" />
+          <Input 
+            placeholder="Search for plants..." 
+            className="pl-10 h-10 bg-muted/50 border-none rounded-full"
+          />
+        </div>
+
+        <div className="flex items-center gap-2 sm:gap-4">
+          <Link href="/cart">
+            <Button variant="ghost" size="icon" className="relative">
+              <ShoppingCart className="h-6 w-6" />
+              {cartCount > 0 && (
+                <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-[10px] bg-primary">
+                  {cartCount}
+                </Badge>
+              )}
+            </Button>
+          </Link>
+          <Link href="/profile">
+            <Button variant="ghost" size="icon" className="rounded-full bg-accent text-primary hidden sm:flex">
+              <User className="h-5 w-5" />
+            </Button>
+            <Button variant="ghost" size="icon" className="sm:hidden">
+              <User className="h-6 w-6" />
+            </Button>
+          </Link>
+          <Link href="/admin" className="hidden lg:block">
+            <Button variant="outline" size="sm" className="rounded-full border-primary/20 text-primary">Admin</Button>
+          </Link>
+        </div>
+      </div>
+    </header>
+  );
+}

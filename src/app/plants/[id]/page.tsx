@@ -1,0 +1,213 @@
+
+"use client";
+
+import { useParams } from "next/navigation";
+import Image from "next/image";
+import { Header } from "@/components/layout/Header";
+import { Footer } from "@/components/layout/Footer";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { PRODUCTS } from "@/lib/mock-data";
+import { Star, Truck, ShieldCheck, Heart, Share2, ShoppingCart, Minus, Plus, Leaf, Sun, Droplets } from "lucide-react";
+import { useState } from "react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { toast } from "@/hooks/use-toast";
+
+export default function PlantDetailPage() {
+  const { id } = useParams();
+  const product = PRODUCTS.find(p => p.id === id) || PRODUCTS[0];
+  const [qty, setQty] = useState(1);
+
+  const handleAddToCart = () => {
+    toast({
+      title: "Success!",
+      description: `${qty} x ${product.name} added to your cart.`,
+    });
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Header />
+      
+      <main className="flex-grow container mx-auto px-4 py-8 md:py-12">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 mb-20">
+          {/* Image Gallery */}
+          <div className="space-y-4">
+            <div className="relative aspect-square rounded-[2rem] overflow-hidden bg-muted">
+              <Image 
+                src={product.imageUrl} 
+                alt={product.name} 
+                fill 
+                className="object-cover"
+                priority
+              />
+              <div className="absolute top-6 right-6 flex flex-col gap-2">
+                <Button variant="secondary" size="icon" className="rounded-full bg-white/80 backdrop-blur-sm shadow-sm">
+                  <Heart className="h-5 w-5 text-red-500" />
+                </Button>
+                <Button variant="secondary" size="icon" className="rounded-full bg-white/80 backdrop-blur-sm shadow-sm">
+                  <Share2 className="h-5 w-5 text-primary" />
+                </Button>
+              </div>
+            </div>
+            <div className="grid grid-cols-4 gap-4">
+              {[1, 2, 3, 4].map(i => (
+                <div key={i} className="aspect-square relative rounded-2xl overflow-hidden border-2 border-transparent hover:border-primary cursor-pointer transition-all">
+                  <Image src={`https://picsum.photos/seed/plant${i}${product.id}/400/400`} alt="Gallery" fill className="object-cover" />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Product Info */}
+          <div className="flex flex-col">
+            <div className="mb-6 space-y-4">
+              <Badge variant="secondary" className="rounded-full px-4 py-1 text-primary bg-accent font-bold">
+                {product.category}
+              </Badge>
+              <h1 className="text-4xl md:text-5xl font-headline font-extrabold text-primary leading-tight">
+                {product.name}
+              </h1>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-1 text-yellow-500">
+                  <Star className="h-5 w-5 fill-current" />
+                  <span className="font-bold text-lg">{product.rating}</span>
+                </div>
+                <span className="text-muted-foreground border-l pl-4 font-medium">
+                  {product.reviewsCount} verified reviews
+                </span>
+                <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-none">
+                  In Stock
+                </Badge>
+              </div>
+            </div>
+
+            <div className="mb-8 flex items-baseline gap-4">
+              <span className="text-4xl font-extrabold text-primary">₹{product.price}</span>
+              {product.oldPrice && (
+                <span className="text-2xl text-muted-foreground line-through font-medium">₹{product.oldPrice}</span>
+              )}
+            </div>
+
+            <p className="text-lg text-muted-foreground mb-8 leading-relaxed">
+              {product.description}
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+              <div className="bg-accent rounded-2xl p-4 flex items-center gap-4">
+                <div className="h-10 w-10 rounded-full bg-white flex items-center justify-center text-primary">
+                  <Sun className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm">Light Needs</h4>
+                  <p className="text-xs text-muted-foreground">Bright Indirect Light</p>
+                </div>
+              </div>
+              <div className="bg-accent rounded-2xl p-4 flex items-center gap-4">
+                <div className="h-10 w-10 rounded-full bg-white flex items-center justify-center text-primary">
+                  <Droplets className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm">Watering</h4>
+                  <p className="text-xs text-muted-foreground">Every 7-10 days</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-auto space-y-6">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center border rounded-full h-12 px-2 bg-muted/50">
+                  <Button variant="ghost" size="icon" className="rounded-full" onClick={() => setQty(Math.max(1, qty - 1))}>
+                    <Minus className="h-4 w-4" />
+                  </Button>
+                  <span className="w-12 text-center font-bold text-lg">{qty}</span>
+                  <Button variant="ghost" size="icon" className="rounded-full" onClick={() => setQty(qty + 1)}>
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                <Button className="h-12 rounded-full flex-1 text-lg font-bold gap-2" onClick={handleAddToCart}>
+                  <ShoppingCart className="h-5 w-5" /> Add to Cart
+                </Button>
+              </div>
+              <Button size="lg" variant="outline" className="w-full h-12 rounded-full border-primary text-primary hover:bg-primary hover:text-white font-bold text-lg">
+                Buy It Now
+              </Button>
+            </div>
+
+            <div className="mt-10 grid grid-cols-2 gap-4 border-t pt-8">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Truck className="h-5 w-5 text-primary" /> Free delivery over ₹1500
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <ShieldCheck className="h-5 w-5 text-primary" /> 15-day plant health guarantee
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="max-w-4xl mx-auto">
+          <Tabs defaultValue="care" className="w-full">
+            <TabsList className="w-full justify-start border-b rounded-none h-14 bg-transparent p-0 gap-8">
+              <TabsTrigger value="care" className="h-full rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-bold text-lg px-0">
+                Care Guide
+              </TabsTrigger>
+              <TabsTrigger value="details" className="h-full rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-bold text-lg px-0">
+                Product Details
+              </TabsTrigger>
+              <TabsTrigger value="reviews" className="h-full rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none font-bold text-lg px-0">
+                Reviews
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="care" className="py-8 space-y-6">
+              <div className="prose max-w-none text-muted-foreground">
+                <h3 className="text-primary font-headline font-bold text-2xl mb-4">How to keep your {product.name} happy</h3>
+                <p className="text-lg leading-relaxed">{product.careGuide}</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-10">
+                  <div className="space-y-4">
+                    <h4 className="font-bold text-primary text-lg">Temperature</h4>
+                    <p>Ideal between 18°C and 24°C. Avoid cold drafts or direct heat vents.</p>
+                  </div>
+                  <div className="space-y-4">
+                    <h4 className="font-bold text-primary text-lg">Humidity</h4>
+                    <p>Prefers moderate to high humidity. Consider placing near a humidifier or misting once a week.</p>
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
+            <TabsContent value="details" className="py-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-4">
+                <div className="flex justify-between border-b py-2">
+                  <span className="text-muted-foreground font-medium">SKU</span>
+                  <span className="font-bold">GS-{product.id}992</span>
+                </div>
+                <div className="flex justify-between border-b py-2">
+                  <span className="text-muted-foreground font-medium">Scientific Name</span>
+                  <span className="font-bold italic">Monstera deliciosa</span>
+                </div>
+                <div className="flex justify-between border-b py-2">
+                  <span className="text-muted-foreground font-medium">Difficulty Level</span>
+                  <span className="font-bold">Easy to Medium</span>
+                </div>
+                <div className="flex justify-between border-b py-2">
+                  <span className="text-muted-foreground font-medium">Pet Friendly</span>
+                  <span className="font-bold text-red-500">No</span>
+                </div>
+              </div>
+            </TabsContent>
+            <TabsContent value="reviews" className="py-8">
+              <div className="flex flex-col items-center justify-center py-12 bg-muted/30 rounded-3xl border-2 border-dashed">
+                <Leaf className="h-12 w-12 text-muted-foreground mb-4 opacity-20" />
+                <h3 className="text-xl font-bold">No reviews yet</h3>
+                <p className="text-muted-foreground">Be the first to review this plant!</p>
+                <Button className="mt-4 rounded-full">Write a Review</Button>
+              </div>
+            </TabsContent>
+          </Tabs>
+        </div>
+      </main>
+
+      <Footer />
+    </div>
+  );
+}
