@@ -91,7 +91,7 @@ export default function AffiliatePage() {
                   </div>
                   <div>
                     <h3 className="font-bold text-lg mb-1">High Commissions</h3>
-                    <p className="text-muted-foreground text-sm">Earn 10% on every order. The more they buy, the more you earn.</p>
+                    <p className="text-muted-foreground text-sm">Earn up to 10% on every order. The more they buy, the more you earn.</p>
                   </div>
                 </div>
                 <div className="flex gap-4">
@@ -140,6 +140,10 @@ export default function AffiliatePage() {
                   <div className="space-y-2">
                     <Label>Bank Account Number</Label>
                     <Input placeholder="XXXX XXXX XXXX XXXX" required className="rounded-xl" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Bank IFSC Code</Label>
+                    <Input placeholder="e.g. SBIN0001234" required className="rounded-xl uppercase" />
                   </div>
                   <Button className="w-full h-12 rounded-full font-bold text-lg mt-4">Submit Application</Button>
                 </form>
