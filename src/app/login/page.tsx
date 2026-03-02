@@ -14,12 +14,15 @@ export default function LoginPage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (user && !isUserLoading) {
+    // If the user is already authenticated, redirect them to the home page immediately
+    if (!isUserLoading && user) {
       router.push('/');
     }
   }, [user, isUserLoading, router]);
 
-  if (isUserLoading) {
+  // To prevent UI flicker (showing the login card for a split second), 
+  // we show a loading state if the auth status is being checked OR if a user exists (pending redirect)
+  if (isUserLoading || user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-neutral/30">
         <div className="animate-pulse text-primary font-bold flex flex-col items-center gap-4">
