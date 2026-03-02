@@ -1,7 +1,7 @@
 import React, { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { Header } from "@/components/layout/Header";
-import { Footer } from "@/components/layout/Footer";
+import Footer from '@/components/Footer';
 import PlantDetailClient from './components/PlantDetailClient';
 
 export const metadata: Metadata = {

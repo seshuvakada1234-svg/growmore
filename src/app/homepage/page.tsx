@@ -1,7 +1,7 @@
 import React from 'react';
 import type { Metadata } from 'next';
 import { Header } from "@/components/layout/Header";
-import { Footer } from "@/components/layout/Footer";
+import Footer from '@/components/Footer';
 import HeroSection from './components/HeroSection';
 import StatsBar from './components/StatsBar';
 import CategorySection from './components/CategorySection';
@@ -41,7 +41,7 @@ export default function HomepagePage() {
           filterKey="bestseller"
           limit={8}
           showViewAll
-          viewAllHref="/plants"
+          viewAllHref="/plant-listing"
         />
 
         {/* Offer Banners */}
@@ -54,7 +54,7 @@ export default function HomepagePage() {
           filterKey="new"
           limit={4}
           showViewAll
-          viewAllHref="/plants"
+          viewAllHref="/plant-listing"
         />
 
         {/* Affiliate Banner */}
@@ -67,7 +67,7 @@ export default function HomepagePage() {
           filterKey="featured"
           limit={8}
           showViewAll
-          viewAllHref="/plants"
+          viewAllHref="/plant-listing"
         />
       </main>
 
