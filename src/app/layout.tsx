@@ -1,11 +1,20 @@
-
-import type {Metadata} from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster"
 
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+};
+
 export const metadata: Metadata = {
-  title: 'GreenScape Nursery | Premium Plants E-commerce',
-  description: 'Design your space with the finest plants and greenery.',
+  title: 'Next.js with Tailwind CSS',
+  description: 'A boilerplate project with Next.js and Tailwind CSS',
+  icons: {
+    icon: [
+      { url: '/assets/images/app_logo.png', type: 'image/x-icon' }
+    ],
+  },
 };
 
 export default function RootLayout({
@@ -23,6 +32,9 @@ export default function RootLayout({
       <body className="font-body antialiased bg-background text-foreground">
         {children}
         <Toaster />
+        
+        <script type="module" async src="https://static.rocket.new/rocket-web.js?_cfg=https%3A%2F%2Fplantshop4126back.builtwithrocket.new&_be=https%3A%2F%2Fappanalytics.rocket.new&_v=0.1.17" />
+        <script type="module" defer src="https://static.rocket.new/rocket-shot.js?v=0.0.2" />
       </body>
     </html>
   );
