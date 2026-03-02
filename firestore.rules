@@ -3,127 +3,62 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    /**
-     * GreenScape Nursery Security Rules
-     */
-
     // --- Helper Functions ---
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function isAdmin() { return isSignedIn() && exists(/databases/$(database)/documents/roles_admin/$(request.auth.uid)); }
 
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    function isExistingOwner(userId) {
-      return resource != null && isOwner(userId);
-    }
-
-    function isAdmin() {
-      return isSignedIn() && exists(/databases/$(database)/documents/roles_admin/$(request.auth.uid));
-    }
-
-    // --- Collection Rules ---
-
+    // --- User Profiles ---
     match /users/{userId} {
-      allow get, list: if isOwner(userId) || isAdmin();
-      allow create: if isOwner(userId) && request.resource.data.id == userId;
-      
-      // Allow specific field updates for accounting (Earnings & Clicks)
-      // Restricted to owners/admins, OR public increment of clicks/earnings if certain conditions met
-      allow update: if (isExistingOwner(userId) || isAdmin()) || 
-                    (request.resource.data.diff(resource.data).affectedKeys().hasAny(['totalClicks', 'totalEarnings', 'totalReferrals']) && 
-                     isSignedIn()); // In production, we'd add more restrictive diff checks
-      
-      allow delete: if isAdmin();
-
-      match /addresses/{addressId} {
-        allow get, list: if isOwner(userId) || isAdmin();
-        allow create: if isOwner(userId) && request.resource.data.userId == userId;
-        allow update: if (isExistingOwner(userId) || isAdmin()) && request.resource.data.userId == resource.data.userId;
-        allow delete: if isExistingOwner(userId) || isAdmin();
-      }
-
-      match /cartItems/{cartItemId} {
-        allow get, list: if isOwner(userId);
-        allow create: if isOwner(userId) && request.resource.data.userId == userId;
-        allow update: if (isExistingOwner(userId) && request.resource.data.userId == resource.data.userId);
-        allow delete: if isExistingOwner(userId);
-      }
-
-      match /orders/{orderId} {
-        allow get, list: if isOwner(userId) || isAdmin();
-        
-        allow create: if isOwner(userId) && 
-                      request.resource.data.userId == userId &&
-                      (!('referrerUserId' in request.resource.data) || request.resource.data.referrerUserId != userId);
-        
-        allow update: if isAdmin();
-        allow delete: if isAdmin();
-
-        match /orderItems/{orderItemId} {
-          allow get, list: if isOwner(userId) || isAdmin();
-          allow create: if isOwner(userId);
-          allow update: if isAdmin();
-          allow delete: if isAdmin();
-        }
-      }
-
-      match /affiliateProfile {
-        allow get: if isOwner(userId) || isAdmin();
-        allow list: if isOwner(userId) || isAdmin();
-        allow create: if isOwner(userId) && request.resource.data.userId == userId;
-        allow update: if (isExistingOwner(userId) || isAdmin()) && request.resource.data.userId == resource.data.userId;
-        allow delete: if isAdmin();
-
-        match /payouts/{payoutId} {
-          allow get, list: if isOwner(userId) || isAdmin();
-          allow create: if isOwner(userId) && request.resource.data.status == 'pending';
-          allow update, delete: if isAdmin();
-        }
-      }
-    }
-
-    match /categories/{categoryId} {
-      allow get, list: if true;
-      allow create, update, delete: if isAdmin();
-    }
-
-    match /products/{productId} {
-      allow get, list: if true;
-      allow create, update, delete: if isAdmin();
-
-      match /reviews/{reviewId} {
-        allow get, list: if true;
-        allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-        allow update: if isExistingOwner(resource.data.userId) && request.resource.data.userId == resource.data.userId;
-        allow delete: if isExistingOwner(resource.data.userId) || isAdmin();
-      }
-    }
-
-    match /roles_admin/{userId} {
-      allow get: if isSignedIn();
+      allow get: if isOwner(userId) || isAdmin();
       allow list: if isAdmin();
-      allow create, update, delete: if isAdmin(); 
+      allow create: if isOwner(userId);
+      
+      // Allow profile updates for standard fields OR public increment of clicks/earnings
+      allow update: if isOwner(userId) || isAdmin() || 
+                    (request.resource.data.diff(resource.data).affectedKeys().hasAny(['totalClicks', 'totalEarnings', 'totalReferrals']) && isSignedIn());
+      
+      // Affiliate sub-data
+      match /affiliateProfile/{allPaths=**} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId);
+        allow update, delete: if isAdmin();
+      }
+      
+      // Private User Orders
+      match /orders/{orderId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId);
+      }
     }
 
-    match /affiliateClicks/{clickId} {
-      allow create: if true; 
-      allow read, update, delete: if isAdmin();
+    // --- Global Collections ---
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     match /orders/{orderId} {
-      allow get, list: if isAdmin();
-      allow create: if isSignedIn();
+      allow get: if isOwner(resource.data.userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && 
+                    (!('referrerUserId' in request.resource.data) || request.resource.data.referrerUserId != request.auth.uid);
       allow update: if isAdmin();
     }
 
-    match /affiliateCommissions/{commissionId} {
-      allow create: if isSignedIn();
+    match /affiliateClicks/{clickId} {
+      allow create: if true;
       allow read: if isAdmin();
     }
 
+    match /affiliateCommissions/{commId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn();
+    }
+
+    match /roles_admin/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
   }
 }

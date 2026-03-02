@@ -4,11 +4,10 @@
 import { useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useUser, useFirestore } from '@/firebase';
-import { doc, collection, addDoc, updateDoc, increment, serverTimestamp } from 'firebase/firestore';
+import { doc, collection, addDoc, updateDoc, increment, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
 
 /**
- * A silent client-side component that captures the 'ref' parameter from the URL,
- * stores it in localStorage, and records a click log in Firestore for tracking.
+ * Silent component that captures referrals and logs clicks with anti-fraud protection.
  */
 export function ReferralTracker() {
   const searchParams = useSearchParams();
@@ -19,56 +18,43 @@ export function ReferralTracker() {
     const ref = searchParams.get('ref');
     if (!ref || !db) return;
 
-    // 1. Storage: Standardize key to 'affiliate_ref'
+    // Persist referral locally
     localStorage.setItem('affiliate_ref', ref);
-    console.log('Affiliate referral captured:', ref);
 
-    // 2. Anti-Fraud & Logic
-    const handleTracking = async () => {
-      // Rule: Do NOT count click if user is logged in AND uid == affiliateId
-      if (user?.uid === ref) {
-        console.log('Self-click detected. Skipping log.');
-        return;
-      }
+    const recordClick = async () => {
+      // 1. Self-click prevention
+      if (user?.uid === ref) return;
 
-      // Rule: Do NOT count multiple clicks from same browser within 24 hours
-      const lastClickKey = `last_click_${ref}`;
-      const lastClickTime = localStorage.getItem(lastClickKey);
+      // 2. 24-hour cooldown per browser
+      const cooldownKey = `click_cd_${ref}`;
+      const lastClick = localStorage.getItem(cooldownKey);
       const now = Date.now();
-      const twentyFourHours = 24 * 60 * 60 * 1000;
-
-      if (lastClickTime && now - parseInt(lastClickTime) < twentyFourHours) {
-        console.log('Click already recorded within 24h. Skipping Firestore write.');
-        return;
-      }
+      if (lastClick && now - parseInt(lastClick) < 86400000) return;
 
       try {
-        // 3. Log the click record (Silent)
-        const clickRef = collection(db, 'affiliateClicks');
-        addDoc(clickRef, {
+        // 3. Log detailed click for audit
+        await addDoc(collection(db, 'affiliateClicks'), {
           affiliateId: ref,
           userAgent: navigator.userAgent,
           createdAt: serverTimestamp(),
           authenticatedUserId: user?.uid || null
         });
 
-        // 4. Increment totalClicks on the affiliate's user profile (Public Increment Rule)
-        // We use the root user document as that's where the app is currently storing affiliate data
-        const affiliateUserRef = doc(db, 'users', ref);
-        updateDoc(affiliateUserRef, {
-          totalClicks: increment(1)
+        // 4. Update aggregate click counter on affiliate profile
+        // Note: The app currently uses the root user doc for affiliate stats
+        const affiliateRef = doc(db, 'users', ref);
+        updateDoc(affiliateRef, {
+          totalClicks: increment(1),
+          updatedAt: serverTimestamp()
         });
 
-        // Update local cooldown
-        localStorage.setItem(lastClickKey, now.toString());
-        
-      } catch (error) {
-        // Silent error handling to avoid disrupting user experience
-        console.error('Affiliate tracking error:', error);
+        localStorage.setItem(cooldownKey, now.toString());
+      } catch (e) {
+        console.error("Referral log failed silently", e);
       }
     };
 
-    handleTracking();
+    recordClick();
   }, [searchParams, user, db]);
 
   return null;

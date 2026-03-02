@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -28,19 +29,13 @@ export function Header() {
   const router = useRouter();
   const pathname = usePathname();
 
-  // Fetch user profile to check role
-  const userProfileRef = useMemoFirebase(() => {
-    if (!db || !user?.uid) return null;
-    return doc(db, 'users', user.uid);
-  }, [db, user?.uid]);
-  
+  // Role detection
+  const userProfileRef = useMemoFirebase(() => (!db || !user?.uid) ? null : doc(db, 'users', user.uid), [db, user?.uid]);
   const { data: profile } = useDoc(userProfileRef);
-  const role = profile?.role || 'user';
-  const isAdmin = role === 'admin';
-  const isAffiliate = role === 'affiliate';
+  const isAdmin = profile?.role === 'admin';
+  const isAffiliate = profile?.role === 'affiliate' || profile?.affiliateStatus === 'approved';
 
-  // Strict rule: Admins should not be on storefront pages. 
-  // If they are logged in and on a public page, we show a simplified header or redirect.
+  // Enforcement: Redirect admins away from storefront
   useEffect(() => {
     if (isAdmin && !pathname.startsWith('/admin')) {
       router.push('/admin');
@@ -51,153 +46,91 @@ export function Header() {
     const updateCount = () => {
       try {
         const cart = JSON.parse(localStorage.getItem('plantshop_cart') || '[]');
-        const count = cart.reduce((acc: number, item: any) => acc + (item.quantity || 0), 0);
-        setCartCount(count);
-      } catch (e) {
-        setCartCount(0);
-      }
+        setCartCount(cart.reduce((acc: number, item: any) => acc + (item.quantity || 0), 0));
+      } catch { setCartCount(0); }
     };
-
     updateCount();
     window.addEventListener('cart-updated', updateCount);
     window.addEventListener('storage', updateCount);
-    return () => {
-      window.removeEventListener('cart-updated', updateCount);
-      window.removeEventListener('storage', updateCount);
-    };
+    return () => { window.removeEventListener('cart-updated', updateCount); window.removeEventListener('storage', updateCount); };
   }, []);
 
   const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      localStorage.removeItem('plantshop_cart');
-      localStorage.removeItem('plantshop_wishlist');
-      localStorage.removeItem('plantshop_user');
-      window.dispatchEvent(new Event('cart-updated'));
-      router.push('/');
-    } catch (error) {
-      console.error("Logout error", error);
-    }
+    await signOut(auth);
+    localStorage.removeItem('plantshop_cart');
+    localStorage.removeItem('plantshop_wishlist');
+    localStorage.removeItem('plantshop_user');
+    window.dispatchEvent(new Event('cart-updated'));
+    router.push('/');
   };
 
+  // --- ADMIN HEADER ---
   if (isAdmin) {
     return (
-      <header className="sticky top-0 z-50 w-full border-b bg-primary text-white shadow-lg">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+      <header className="sticky top-0 z-50 w-full border-b bg-primary text-white shadow-lg h-16 flex items-center">
+        <div className="container mx-auto px-4 flex items-center justify-between">
+          <Link href="/admin" className="flex items-center gap-2 transition-transform hover:scale-105">
+            <Leaf className="h-8 w-8 fill-current" /><span className="font-headline font-extrabold text-xl tracking-tight">Admin Control Center</span>
+          </Link>
           <div className="flex items-center gap-4">
-            <Link href="/admin" className="flex items-center gap-2">
-              <Leaf className="h-8 w-8 fill-current" />
-              <span className="font-headline font-extrabold text-xl tracking-tight">GreenScape Admin</span>
-            </Link>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm font-bold bg-white/20 px-3 py-1 rounded-full">Administrator Mode</span>
-            <Button variant="ghost" size="icon" onClick={handleLogout} className="text-white hover:bg-white/10">
-              <LogOut className="h-6 w-6" />
-            </Button>
+            <span className="text-[10px] uppercase font-black bg-white/20 px-2 py-1 rounded tracking-widest border border-white/30">System Administrator</span>
+            <Button variant="ghost" size="icon" onClick={handleLogout} className="text-white hover:bg-red-500/20"><LogOut className="h-5 w-5" /></Button>
           </div>
         </div>
       </header>
     );
   }
 
+  // --- STOREFRONT HEADER ---
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-4">
+    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 h-16 flex items-center">
+      <div className="container mx-auto px-4 flex items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="md:hidden">
-                <Menu className="h-6 w-6" />
-              </Button>
-            </SheetTrigger>
+            <SheetTrigger asChild><Button variant="ghost" size="icon" className="md:hidden"><Menu className="h-6 w-6" /></Button></SheetTrigger>
             <SheetContent side="left">
-              <nav className="flex flex-col gap-4 mt-8">
-                <Link href="/plants" className="text-lg font-medium">All Plants</Link>
-                <Link href="/plants?cat=Indoor" className="text-lg font-medium">Indoor</Link>
-                <Link href="/plants?cat=Outdoor" className="text-lg font-medium">Outdoor</Link>
-                <Link href="/affiliate" className="text-lg font-medium">Affiliate Program</Link>
+              <nav className="flex flex-col gap-6 mt-12">
+                <Link href="/plants" className="text-xl font-bold flex items-center gap-2"><Leaf className="h-5 w-5" /> Browse Collection</Link>
+                <Link href="/affiliate" className="text-xl font-bold flex items-center gap-2"><Award className="h-5 w-5" /> Partner Program</Link>
               </nav>
             </SheetContent>
           </Sheet>
-          <Link href="/" className="flex items-center gap-2 text-primary">
-            <Leaf className="h-8 w-8 fill-current" />
+          <Link href="/" className="flex items-center gap-2 text-primary group">
+            <Leaf className="h-8 w-8 fill-current transition-transform group-hover:rotate-12" />
             <span className="font-headline font-extrabold text-xl tracking-tight hidden sm:inline-block">GreenScape</span>
           </Link>
         </div>
 
         <div className="flex-1 max-w-md hidden md:flex items-center relative">
           <Search className="absolute left-3 h-4 w-4 text-muted-foreground" />
-          <Input 
-            placeholder="Search for plants..." 
-            className="pl-10 h-10 bg-muted/50 border-none rounded-full"
-          />
+          <Input placeholder="Search 500+ unique plants..." className="pl-10 h-10 bg-muted/50 border-none rounded-full" />
         </div>
 
         <div className="flex items-center gap-2 sm:gap-4">
-          <Link href="/">
-            <Button variant="ghost" size="icon">
-              <Home className="h-6 w-6" />
-            </Button>
-          </Link>
-          <Link href="/cart">
-            <Button variant="ghost" size="icon" className="relative">
-              <ShoppingCart className="h-6 w-6" />
-              {cartCount > 0 && (
-                <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-[10px] bg-primary text-white">
-                  {cartCount}
-                </Badge>
-              )}
-            </Button>
-          </Link>
+          <Link href="/cart"><Button variant="ghost" size="icon" className="relative"><ShoppingCart className="h-6 w-6" />{cartCount > 0 && <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-[10px] bg-primary">{cartCount}</Badge>}</Button></Link>
           
           {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="rounded-full bg-accent text-primary p-0 overflow-hidden shadow-sm border-2 border-white">
-                  {user?.photoURL ? (
-                    <img src={user.photoURL} alt="Profile" className="h-full w-full object-cover" />
-                  ) : (
-                    <User className="h-5 w-5" />
-                  )}
+                  {user.photoURL ? <img src={user.photoURL} alt="Profile" className="h-full w-full object-cover" /> : <User className="h-5 w-5" />}
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56 rounded-xl mt-2">
-                <DropdownMenuLabel className="font-headline font-bold">
-                  <div>{user.displayName || "My Account"}</div>
-                  {isAffiliate && <div className="text-[10px] text-emerald-600 uppercase tracking-widest mt-0.5">Partner Affiliate</div>}
+              <DropdownMenuContent align="end" className="w-60 rounded-2xl mt-2 p-2">
+                <DropdownMenuLabel className="px-3 py-2">
+                  <div className="font-bold truncate">{user.displayName || "User"}</div>
+                  {isAffiliate && <div className="text-[10px] text-emerald-600 font-black uppercase tracking-widest mt-1">Official Partner</div>}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem asChild className="cursor-pointer rounded-lg">
-                  <Link href="/profile" className="flex items-center gap-2 w-full">
-                    <User className="h-4 w-4" /> Profile
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild className="cursor-pointer rounded-lg">
-                  <Link href="/orders" className="flex items-center gap-2 w-full">
-                    <ShoppingCart className="h-4 w-4" /> Orders
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild className="cursor-pointer rounded-lg">
-                  <Link href="/affiliate" className="flex items-center gap-2 w-full">
-                    <Award className="h-4 w-4" /> Affiliate Program
-                  </Link>
-                </DropdownMenuItem>
+                <DropdownMenuItem asChild className="rounded-xl cursor-pointer"><Link href="/profile"><User className="mr-2 h-4 w-4" /> My Account</Link></DropdownMenuItem>
+                <DropdownMenuItem asChild className="rounded-xl cursor-pointer"><Link href="/orders"><ShoppingCart className="mr-2 h-4 w-4" /> My Orders</Link></DropdownMenuItem>
+                <DropdownMenuItem asChild className="rounded-xl cursor-pointer"><Link href="/affiliate"><Award className="mr-2 h-4 w-4" /> {isAffiliate ? "Partner Dashboard" : "Join Affiliate"}</Link></DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem 
-                  className="cursor-pointer text-destructive focus:text-destructive rounded-lg"
-                  onClick={handleLogout}
-                >
-                  <LogOut className="h-4 w-4" /> Logout
-                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleLogout} className="rounded-xl cursor-pointer text-destructive focus:bg-red-50 focus:text-destructive"><LogOut className="mr-2 h-4 w-4" /> Sign Out</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <Link href="/login">
-              <Button className="rounded-full px-6 font-bold">
-                Login
-              </Button>
-            </Link>
+            <Link href="/login"><Button className="rounded-full px-6 font-bold shadow-lg shadow-primary/20">Login</Button></Link>
           )}
         </div>
       </div>
