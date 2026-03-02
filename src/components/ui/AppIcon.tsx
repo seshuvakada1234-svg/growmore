@@ -1,47 +1,55 @@
-
 'use client';
 
-import * as LucideIcons from "lucide-react";
+import React from 'react';
+import * as HeroIcons from '@heroicons/react/24/outline';
+import * as HeroIconsSolid from '@heroicons/react/24/solid';
+import { QuestionMarkCircleIcon } from '@heroicons/react/24/outline';
 
-const IconMap: Record<string, any> = {
-  CheckCircleIcon: LucideIcons.CheckCircle2,
-  MagnifyingGlassPlusIcon: LucideIcons.ZoomIn,
-  ChevronLeftIcon: LucideIcons.ChevronLeft,
-  ChevronRightIcon: LucideIcons.ChevronRight,
-  XMarkIcon: LucideIcons.X,
-  CheckBadgeIcon: LucideIcons.BadgeCheck,
-  StarIcon: LucideIcons.Star,
-  HandThumbUpIcon: LucideIcons.ThumbsUp,
-  TruckIcon: LucideIcons.Truck,
-  ShoppingCartIcon: LucideIcons.ShoppingCart,
-  BoltIcon: LucideIcons.Zap,
-  HeartIcon: LucideIcons.Heart,
-  FunnelIcon: LucideIcons.Filter,
-  ChevronDownIcon: LucideIcons.ChevronDown,
-  ChevronUpIcon: LucideIcons.ChevronUp,
-  CheckIcon: LucideIcons.Check,
-  ArrowRightIcon: LucideIcons.ArrowRight,
-  ArrowLeftIcon: LucideIcons.ArrowLeft,
-  HomeIcon: LucideIcons.Home,
-  Squares2X2Icon: LucideIcons.LayoutGrid,
-  ListBulletIcon: LucideIcons.List,
-  MagnifyingGlassIcon: LucideIcons.Search,
-};
+type IconVariant = 'outline' | 'solid';
 
-interface AppIconProps {
-  name: string;
-  size?: number;
-  className?: string;
-  variant?: 'outline' | 'solid';
+interface IconProps {
+    name: string;
+    variant?: IconVariant;
+    size?: number;
+    className?: string;
+    onClick?: () => void;
+    disabled?: boolean;
+    [key: string]: any;
 }
 
-export default function AppIcon({ name, size = 24, className, variant = 'outline' }: AppIconProps) {
-  const IconComponent = IconMap[name] || LucideIcons.HelpCircle;
-  return (
-    <IconComponent 
-      size={size} 
-      className={className} 
-      fill={variant === 'solid' ? 'currentColor' : 'none'} 
-    />
-  );
+function Icon({
+    name,
+    variant = 'outline',
+    size = 24,
+    className = '',
+    onClick,
+    disabled = false,
+    ...props
+}: IconProps) {
+    const iconSet = variant === 'solid' ? HeroIconsSolid : HeroIcons;
+    const IconComponent = iconSet[name as keyof typeof iconSet] as React.ComponentType<any>;
+
+    if (!IconComponent) {
+        return (
+            <QuestionMarkCircleIcon
+                width={size}
+                height={size}
+                className={`text-gray-400 ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
+                onClick={disabled ? undefined : onClick}
+                {...props}
+            />
+        );
+    }
+
+    return (
+        <IconComponent
+            width={size}
+            height={size}
+            className={`${disabled ? 'opacity-50 cursor-not-allowed' : onClick ? 'cursor-pointer hover:opacity-80' : ''} ${className}`}
+            onClick={disabled ? undefined : onClick}
+            {...props}
+        />
+    );
 }
+
+export default Icon;
