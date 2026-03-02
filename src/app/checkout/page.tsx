@@ -13,7 +13,7 @@ import Link from "next/link";
 import { toast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { useUser, useFirestore } from "@/firebase";
-import { collection, doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { collection, doc, setDoc, serverTimestamp, getDoc, updateDoc, increment, addDoc } from "firebase/firestore";
 import { useState, useEffect } from "react";
 import { PRODUCTS } from "@/lib/mock-data";
 import { errorEmitter } from "@/firebase/error-emitter";
@@ -58,7 +58,24 @@ export default function CheckoutPage() {
     const referrerUserId = isSelfReferral ? null : storedRef;
 
     try {
-      // 2. Prepare Order Data
+      // 2. Secure Commission Calculation
+      // Fetch fresh commission rates from Firestore for each product
+      let calculatedCommission = 0;
+      if (referrerUserId) {
+        const productPromises = cartItems.map(item => getDoc(doc(db, 'products', item.id)));
+        const productSnaps = await Promise.all(productPromises);
+        
+        cartItems.forEach((item, index) => {
+          const snap = productSnaps[index];
+          if (snap.exists()) {
+            const data = snap.data();
+            const rate = data.affiliateCommission || 10; // Default 10%
+            calculatedCommission += (item.price * item.quantity * (rate / 100));
+          }
+        });
+      }
+
+      // 3. Prepare Order Data
       const orderId = `GS-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
       const userOrderRef = doc(db, 'users', user.uid, 'orders', orderId);
       const globalOrderRef = doc(db, 'orders', orderId);
@@ -73,7 +90,9 @@ export default function CheckoutPage() {
         status: "Pending",
         paymentMethod: "Credit Card",
         referrerUserId: referrerUserId || null,
-        rejectedSelfReferral: isSelfReferral, // Log for audit
+        commissionAmount: calculatedCommission,
+        commissionStatus: calculatedCommission > 0 ? "earned" : "none",
+        rejectedSelfReferral: isSelfReferral,
         items: cartItems.map(item => ({
           productId: item.id,
           productName: item.name,
@@ -85,30 +104,40 @@ export default function CheckoutPage() {
         updatedAt: serverTimestamp()
       };
 
-      // 3. Save to Firestore (Non-blocking write pattern)
-      // Save to user private orders
-      setDoc(userOrderRef, orderData)
-        .catch(async (error) => {
-          const permissionError = new FirestorePermissionError({
-            path: userOrderRef.path,
-            operation: 'create',
-            requestResourceData: orderData
-          });
-          errorEmitter.emit('permission-error', permissionError);
-        });
+      // 4. Save to Firestore (Non-blocking writes)
+      
+      // A. Save Private Order
+      setDoc(userOrderRef, orderData).catch(error => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: userOrderRef.path, operation: 'create', requestResourceData: orderData }));
+      });
 
-      // Save to global admin orders (requires rules update if separate)
-      setDoc(globalOrderRef, orderData)
-        .catch(async (error) => {
-          const permissionError = new FirestorePermissionError({
-            path: globalOrderRef.path,
-            operation: 'create',
-            requestResourceData: orderData
-          });
-          errorEmitter.emit('permission-error', permissionError);
-        });
+      // B. Save Global Admin Order
+      setDoc(globalOrderRef, orderData).catch(error => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: globalOrderRef.path, operation: 'create', requestResourceData: orderData }));
+      });
 
-      // 4. Success handling
+      // C. Update Affiliate Stats & Logs if applicable
+      if (referrerUserId && calculatedCommission > 0) {
+        const affiliateRef = doc(db, 'users', referrerUserId);
+        const commissionLogRef = collection(db, 'affiliateCommissions');
+
+        // Increment earnings and referrals on affiliate profile
+        updateDoc(affiliateRef, {
+          totalEarnings: increment(calculatedCommission),
+          totalReferrals: increment(1),
+          updatedAt: serverTimestamp()
+        }).catch(error => console.error("Affiliate update error:", error));
+
+        // Create commission log
+        addDoc(commissionLogRef, {
+          orderId,
+          affiliateId: referrerUserId,
+          commissionAmount: calculatedCommission,
+          createdAt: serverTimestamp()
+        }).catch(error => console.error("Commission log error:", error));
+      }
+
+      // 5. Success handling
       toast({
         title: "Order Placed!",
         description: isSelfReferral 

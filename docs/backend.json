@@ -48,6 +48,10 @@
           "type": "number",
           "description": "Total commission already paid out."
         },
+        "totalReferrals": {
+          "type": "number",
+          "description": "Total number of successful orders referred by this user."
+        },
         "affiliateStatus": {
           "type": "string",
           "description": "Approval status for the affiliate program."
@@ -810,6 +814,28 @@
             {
               "name": "orderId",
               "description": "The unique order ID."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/affiliateCommissions/{commissionId}",
+        "definition": {
+          "entityName": "Order",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "orderId": { "type": "string" },
+              "affiliateId": { "type": "string" },
+              "commissionAmount": { "type": "number" },
+              "createdAt": { "type": "string", "format": "date-time" }
+            }
+          },
+          "description": "Logs of earned affiliate commissions.",
+          "params": [
+            {
+              "name": "commissionId",
+              "description": "Unique record ID."
             }
           ]
         }
