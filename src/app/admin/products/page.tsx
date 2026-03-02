@@ -1,10 +1,9 @@
-
 "use client";
 
 import { useState } from "react";
 import { Category, CATEGORIES } from "@/lib/mock-data";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -29,27 +28,43 @@ import Image from "next/image";
 import { toast } from "@/hooks/use-toast";
 import { adminAIProductDescription } from "@/ai/flows/admin-ai-product-description";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
-import { collection, addDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
+import { useFirestore, useCollection, useMemoFirebase, useStorage } from "@/firebase";
+import { collection, setDoc, deleteDoc, doc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
 
 export default function AdminProducts() {
   const db = useFirestore();
+  const storage = useStorage();
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [open, setOpen] = useState(false);
+  
   const [newProduct, setNewProduct] = useState({
     name: "",
     category: "Indoor" as Category,
     price: "",
     description: "",
-    affiliateCommission: "10"
+    affiliateCommission: "10",
+    stock: "50"
   });
+
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
 
   // Fetch products from Firestore
   const productsQuery = useMemoFirebase(() => collection(db, 'products'), [db]);
   const { data: products, isLoading } = useCollection(productsQuery);
+
+  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const files = Array.from(e.target.files);
+      setSelectedFiles(files);
+      const urls = files.map(file => URL.createObjectURL(file));
+      setPreviews(urls);
+    }
+  };
 
   const handleAI = async () => {
     if (!newProduct.name) {
@@ -82,28 +97,66 @@ export default function AdminProducts() {
       toast({ title: "Validation Error", description: "Please enter a valid price greater than 0.", variant: "destructive" });
       return;
     }
+    const stockNum = parseInt(newProduct.stock);
+    if (isNaN(stockNum) || stockNum <= 0) {
+      toast({ title: "Validation Error", description: "Please enter a valid stock quantity greater than 0.", variant: "destructive" });
+      return;
+    }
     const commissionNum = parseFloat(newProduct.affiliateCommission);
     if (isNaN(commissionNum) || commissionNum < 0 || commissionNum > 10) {
       toast({ title: "Validation Error", description: "Affiliate commission must be between 0% and 10%.", variant: "destructive" });
       return;
     }
+    if (selectedFiles.length === 0) {
+      toast({ title: "Validation Error", description: "Please upload at least one image.", variant: "destructive" });
+      return;
+    }
 
     setIsSaving(true);
-    const productsRef = collection(db, 'products');
     
+    // Create doc ref first to get the ID
+    const productRef = doc(collection(db, 'products'));
+    const productId = productRef.id;
+
     const productData = {
+      id: productId,
       name: newProduct.name,
       category: newProduct.category,
       description: newProduct.description,
       price: priceNum,
+      stock: stockNum,
       affiliateCommission: commissionNum,
-      imageUrl: `https://picsum.photos/seed/${Math.random()}/600/600`, // Placeholder for now
-      stock: 50, // Default stock
+      images: [], // Initially empty, will update after upload
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     };
 
-    addDoc(productsRef, productData)
+    // 1. Initial write (non-blocking)
+    setDoc(productRef, productData)
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
+          path: `products/${productId}`,
+          operation: 'create',
+          requestResourceData: productData
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      });
+
+    // 2. Upload images in parallel
+    try {
+      const uploadPromises = selectedFiles.map(async (file) => {
+        const fileRef = ref(storage, `products/${productId}/images/${Date.now()}_${file.name}`);
+        const result = await uploadBytes(fileRef, file);
+        return await getDownloadURL(result.ref);
+      });
+
+      const imageUrls = await Promise.all(uploadPromises);
+
+      // 3. Update doc with real URLs (non-blocking)
+      updateDoc(productRef, {
+        images: imageUrls,
+        updatedAt: serverTimestamp()
+      })
       .then(() => {
         toast({ title: "Success!", description: `${newProduct.name} has been added.` });
         setNewProduct({
@@ -111,21 +164,27 @@ export default function AdminProducts() {
           category: "Indoor",
           price: "",
           description: "",
-          affiliateCommission: "10"
+          affiliateCommission: "10",
+          stock: "50"
         });
+        setSelectedFiles([]);
+        setPreviews([]);
         setOpen(false);
       })
       .catch(async (error) => {
         const permissionError = new FirestorePermissionError({
-          path: 'products',
-          operation: 'create',
-          requestResourceData: productData
+          path: `products/${productId}`,
+          operation: 'update',
+          requestResourceData: { images: imageUrls }
         });
         errorEmitter.emit('permission-error', permissionError);
-      })
-      .finally(() => {
-        setIsSaving(false);
       });
+    } catch (error) {
+      console.error("Upload error", error);
+      toast({ title: "Upload Failed", description: "Failed to upload images. Please try again.", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleDeleteProduct = (id: string, name: string) => {
@@ -222,16 +281,29 @@ export default function AdminProducts() {
                   />
                 </div>
 
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label>Price (₹)</Label>
-                    <Input 
-                      type="number" 
-                      value={newProduct.price}
-                      onChange={e => setNewProduct({...newProduct, price: e.target.value})}
-                      placeholder="999" 
-                      className="rounded-xl" 
-                    />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Price (₹)</Label>
+                      <Input 
+                        type="number" 
+                        value={newProduct.price}
+                        onChange={e => setNewProduct({...newProduct, price: e.target.value})}
+                        placeholder="999" 
+                        className="rounded-xl" 
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Stock</Label>
+                      <Input 
+                        type="number" 
+                        min="1"
+                        value={newProduct.stock}
+                        onChange={e => setNewProduct({...newProduct, stock: e.target.value})}
+                        placeholder="50" 
+                        className="rounded-xl" 
+                      />
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <Label>Affiliate Commission (%)</Label>
@@ -245,12 +317,32 @@ export default function AdminProducts() {
                       className="rounded-xl" 
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label>Upload Image</Label>
-                    <div className="border-2 border-dashed rounded-xl h-11 flex items-center justify-center text-muted-foreground gap-2 cursor-pointer hover:bg-accent transition-all">
-                      <ImageIcon className="h-4 w-4" /> <span className="text-xs">Image</span>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Upload Images</Label>
+                  <label className="border-2 border-dashed rounded-xl h-11 flex items-center justify-center text-muted-foreground gap-2 cursor-pointer hover:bg-accent transition-all overflow-hidden relative">
+                    <ImageIcon className="h-4 w-4" /> 
+                    <span className="text-xs">
+                      {selectedFiles.length > 0 ? `${selectedFiles.length} images selected` : "Select Images"}
+                    </span>
+                    <input 
+                      type="file" 
+                      multiple 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={onFileChange}
+                    />
+                  </label>
+                  {previews.length > 0 && (
+                    <div className="flex gap-2 mt-2 overflow-x-auto pb-2 scrollbar-hide">
+                      {previews.map((url, i) => (
+                        <div key={i} className="h-12 w-12 rounded-lg border relative flex-shrink-0 bg-muted">
+                          <Image src={url} alt="preview" fill className="object-cover rounded-lg" />
+                        </div>
+                      ))}
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 <Button 
@@ -272,82 +364,80 @@ export default function AdminProducts() {
         </div>
       ) : (
         <Card className="rounded-[2rem] border-none shadow-sm bg-white overflow-hidden">
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="text-left border-b border-muted bg-muted/30">
-                    <th className="p-6 font-bold text-sm text-muted-foreground uppercase tracking-wider">Product</th>
-                    <th className="p-6 font-bold text-sm text-muted-foreground uppercase tracking-wider">Category</th>
-                    <th className="p-6 font-bold text-sm text-muted-foreground uppercase tracking-wider">Price</th>
-                    <th className="p-6 font-bold text-sm text-muted-foreground uppercase tracking-wider">Affiliate %</th>
-                    <th className="p-6 font-bold text-sm text-muted-foreground uppercase tracking-wider">Stock</th>
-                    <th className="p-6 font-bold text-sm text-muted-foreground uppercase tracking-wider text-right">Actions</th>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="text-left border-b border-muted bg-muted/30">
+                  <th className="p-6 font-bold text-sm text-muted-foreground uppercase tracking-wider">Product</th>
+                  <th className="p-6 font-bold text-sm text-muted-foreground uppercase tracking-wider">Category</th>
+                  <th className="p-6 font-bold text-sm text-muted-foreground uppercase tracking-wider">Price</th>
+                  <th className="p-6 font-bold text-sm text-muted-foreground uppercase tracking-wider">Affiliate %</th>
+                  <th className="p-6 font-bold text-sm text-muted-foreground uppercase tracking-wider">Stock</th>
+                  <th className="p-6 font-bold text-sm text-muted-foreground uppercase tracking-wider text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-muted">
+                {products?.map((p) => (
+                  <tr key={p.id} className="group hover:bg-accent/30 transition-all">
+                    <td className="p-6">
+                      <div className="flex items-center gap-4">
+                        <div className="h-12 w-12 rounded-xl overflow-hidden relative border shadow-sm flex-shrink-0 bg-muted">
+                          {p.images?.[0] ? (
+                            <Image src={p.images[0]} alt={p.name} fill className="object-cover" />
+                          ) : (
+                            <div className="flex items-center justify-center h-full"><ImageIcon className="h-4 w-4 text-muted-foreground" /></div>
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-headline font-bold text-primary">{p.name}</p>
+                          <p className="text-xs text-muted-foreground">ID: GS-{p.id.substring(0, 6)}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="p-6">
+                      <span className="bg-accent text-primary px-3 py-1 rounded-full text-xs font-bold">
+                        {p.category}
+                      </span>
+                    </td>
+                    <td className="p-6 font-bold text-primary">₹{p.price}</td>
+                    <td className="p-6">
+                      <span className="font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg text-xs">
+                        {p.affiliateCommission || 10}%
+                      </span>
+                    </td>
+                    <td className="p-6">
+                      <div className="flex items-center gap-2">
+                        <div className={`h-2 w-2 rounded-full ${(p.stock || 0) > 10 ? 'bg-emerald-500' : 'bg-destructive'}`} />
+                        <span className="font-medium text-sm">{p.stock || 0} in stock</span>
+                      </div>
+                    </td>
+                    <td className="p-6 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg hover:bg-white shadow-sm border border-transparent hover:border-border">
+                          <Edit2 className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                        <Button 
+                          onClick={() => handleDeleteProduct(p.id, p.name)}
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-9 w-9 rounded-lg hover:bg-white shadow-sm border border-transparent hover:border-border hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-muted">
-                  {products?.map((p) => (
-                    <tr key={p.id} className="group hover:bg-accent/30 transition-all">
-                      <td className="p-6">
-                        <div className="flex items-center gap-4">
-                          <div className="h-12 w-12 rounded-xl overflow-hidden relative border shadow-sm flex-shrink-0 bg-muted">
-                            {p.imageUrl ? (
-                              <Image src={p.imageUrl} alt={p.name} fill className="object-cover" />
-                            ) : (
-                              <div className="flex items-center justify-center h-full"><ImageIcon className="h-4 w-4 text-muted-foreground" /></div>
-                            )}
-                          </div>
-                          <div>
-                            <p className="font-headline font-bold text-primary">{p.name}</p>
-                            <p className="text-xs text-muted-foreground">ID: GS-{p.id.substring(0, 6)}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="p-6">
-                        <span className="bg-accent text-primary px-3 py-1 rounded-full text-xs font-bold">
-                          {p.category}
-                        </span>
-                      </td>
-                      <td className="p-6 font-bold text-primary">₹{p.price}</td>
-                      <td className="p-6">
-                        <span className="font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg text-xs">
-                          {p.affiliateCommission || 10}%
-                        </span>
-                      </td>
-                      <td className="p-6">
-                        <div className="flex items-center gap-2">
-                          <div className={`h-2 w-2 rounded-full ${(p.stock || 0) > 10 ? 'bg-emerald-500' : 'bg-destructive'}`} />
-                          <span className="font-medium text-sm">{p.stock || 0} in stock</span>
-                        </div>
-                      </td>
-                      <td className="p-6 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg hover:bg-white shadow-sm border border-transparent hover:border-border">
-                            <Edit2 className="h-4 w-4 text-muted-foreground" />
-                          </Button>
-                          <Button 
-                            onClick={() => handleDeleteProduct(p.id, p.name)}
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-9 w-9 rounded-lg hover:bg-white shadow-sm border border-transparent hover:border-border hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {products?.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="p-20 text-center text-muted-foreground">
-                        No plants found. Click "Add New Plant" to start your catalog.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
+                ))}
+                {products?.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="p-20 text-center text-muted-foreground">
+                      No plants found. Click "Add New Plant" to start your catalog.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </Card>
       )}
     </div>
