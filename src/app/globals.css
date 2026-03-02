@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -24,52 +25,101 @@
     --input: 120 10% 90%;
     --ring: 124 55% 24%;
     --radius: 0.75rem;
-    --chart-1: 124 55% 24%;
-    --chart-2: 123 46% 34%;
-    --chart-3: 84 44% 60%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
-  }
-
-  .dark {
-    --background: 120 20% 5%;
-    --foreground: 84 44% 94%;
-    --card: 120 20% 8%;
-    --card-foreground: 84 44% 94%;
-    --popover: 120 20% 8%;
-    --popover-foreground: 84 44% 94%;
-    --primary: 84 44% 94%;
-    --primary-foreground: 124 55% 24%;
-    --secondary: 123 46% 34%;
-    --secondary-foreground: 84 44% 94%;
-    --muted: 120 15% 15%;
-    --muted-foreground: 120 10% 65%;
-    --accent: 120 15% 15%;
-    --accent-foreground: 84 44% 94%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 84 44% 94%;
-    --border: 120 15% 15%;
-    --input: 120 15% 15%;
-    --ring: 84 44% 94%;
   }
 }
 
-@layer base {
-  * {
-    @apply border-border;
+@layer components {
+  .font-display {
+    @apply font-headline;
   }
-  body {
-    @apply bg-background text-foreground;
+
+  .section-label {
+    @apply text-primary font-bold uppercase tracking-wider text-xs;
   }
-}
 
-.plant-card-hover {
-  @apply transition-all duration-300 hover:-translate-y-1 hover:shadow-xl;
-}
+  .product-card {
+    @apply bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-border/50;
+  }
 
-@keyframes float-y {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-10px); }
+  .card-img {
+    @apply relative overflow-hidden bg-muted;
+  }
+
+  .discount-badge {
+    @apply text-[10px] bg-destructive text-white font-black px-2 py-1 rounded shadow-sm uppercase tracking-wider;
+  }
+
+  .wishlist-btn {
+    @apply absolute top-3 right-3 z-10 p-2 rounded-full bg-white/60 hover:bg-white backdrop-blur-sm shadow-sm transition-all;
+  }
+
+  .wishlist-btn.active {
+    @apply bg-white shadow-md;
+  }
+
+  .quick-add {
+    @apply absolute bottom-0 left-0 right-0 p-3 translate-y-full group-hover:translate-y-0 transition-transform duration-300 z-10;
+  }
+
+  .care-badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold;
+  }
+
+  .care-easy { @apply bg-emerald-100 text-emerald-700; }
+  .care-moderate { @apply bg-yellow-100 text-yellow-700; }
+  .care-hard { @apply bg-red-100 text-red-700; }
+
+  .btn-primary {
+    @apply inline-flex items-center gap-2 bg-primary text-primary-foreground font-bold px-6 py-3 rounded-xl hover:bg-primary/90 transition-all shadow-md active:scale-95;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 bg-white border-2 border-primary text-primary font-bold px-6 py-3 rounded-xl hover:bg-accent transition-all shadow-sm active:scale-95;
+  }
+
+  .search-input {
+    @apply w-full bg-white border border-[#D8EDD5] rounded-xl px-10 py-3 text-sm focus:outline-none focus:border-[#388E3C] transition-colors;
+  }
+
+  .custom-checkbox {
+    @apply w-4 h-4 rounded border-2 border-[#D8EDD5] flex items-center justify-center transition-all bg-white flex-shrink-0;
+  }
+  .custom-checkbox.checked {
+    @apply bg-[#1B5E20] border-[#1B5E20];
+  }
+
+  .page-btn {
+    @apply w-9 h-9 rounded-lg border border-[#D8EDD5] flex items-center justify-center text-sm font-bold text-[#4A6741] hover:bg-[#F1F8E9] transition-all;
+  }
+  .page-btn.active {
+    @apply bg-[#1B5E20] border-[#1B5E20] text-white;
+  }
+
+  .tab-btn {
+    @apply px-6 py-4 text-sm font-bold transition-all border-b-2 border-transparent text-[#7A9B77] hover:text-[#1B5E20];
+  }
+  .tab-btn.active {
+    @apply border-[#1B5E20] text-[#1B5E20] bg-[#F1F8E9]/30;
+  }
+
+  .toast {
+    @apply fixed bottom-24 left-1/2 -translate-x-1/2 z-[400] bg-primary text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 font-bold;
+  }
+
+  .filter-drawer {
+    @apply fixed right-0 top-0 h-full w-full max-w-sm bg-white p-6 shadow-2xl translate-x-full transition-transform duration-300;
+  }
+  .filter-drawer.open {
+    @apply translate-x-0;
+  }
+
+  .qty-btn {
+    @apply w-8 h-8 flex items-center justify-center border border-[#D8EDD5] rounded hover:bg-accent transition-colors text-lg font-bold;
+  }
+
+  .sticky-cart-bar {
+    @apply fixed bottom-0 left-0 right-0 bg-white border-t p-3 flex items-center gap-3 z-50 shadow-[0_-4px_20px_rgba(0,0,0,0.1)];
+  }
 }
 
 @keyframes marquee-scroll {
@@ -77,22 +127,19 @@
   to { transform: translateX(-50%); }
 }
 
-.hide-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-.hide-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+@keyframes float-y {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
 }
 
-/* Custom UI Components */
-.custom-checkbox {
-  @apply w-4 h-4 rounded border-2 border-[#D8EDD5] flex items-center justify-center transition-all bg-white flex-shrink-0;
-}
-.custom-checkbox.checked {
-  @apply bg-[#1B5E20] border-[#1B5E20];
+@keyframes toast-in {
+  from { transform: translate(-50%, 20px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
 }
 
-.font-mono-custom {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+.animate-toast-in {
+  animation: toast-in 0.3s ease-out forwards;
 }
+
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

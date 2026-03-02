@@ -20,6 +20,10 @@ const IconMap: Record<string, any> = {
   ChevronDownIcon: LucideIcons.ChevronDown,
   ChevronUpIcon: LucideIcons.ChevronUp,
   CheckIcon: LucideIcons.Check,
+  ArrowRightIcon: LucideIcons.ArrowRight,
+  Squares2X2Icon: LucideIcons.LayoutGrid,
+  ListBulletIcon: LucideIcons.List,
+  MagnifyingGlassIcon: LucideIcons.Search,
 };
 
 interface AppIconProps {
