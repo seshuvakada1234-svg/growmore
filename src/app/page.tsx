@@ -1,18 +1,15 @@
-import Link from "next/link";
+
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
-import { ProductCard } from "@/components/shop/ProductCard";
-import { PRODUCTS } from "@/lib/mock-data";
-import { ArrowRight, Truck, ShieldCheck, Flower2, Clock } from "lucide-react";
+import { Truck, ShieldCheck, Flower2, Clock } from "lucide-react";
 import AffiliateBanner from "@/app/homepage/components/AffiliateBanner";
 import CategorySection from "@/app/homepage/components/CategorySection";
 import HeroSection from "@/app/homepage/components/HeroSection";
 import MarqueeStrip from "@/app/homepage/components/MarqueeStrip";
 import OfferBanner from "@/app/homepage/components/OfferBanner";
+import ProductGrid from "@/app/homepage/components/ProductGrid";
 
 export default function Home() {
-  const featuredPlants = PRODUCTS.slice(0, 4);
-
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
@@ -30,26 +27,21 @@ export default function Home() {
         {/* Offers Section */}
         <OfferBanner />
 
-        {/* Featured Plants */}
-        <section className="py-16 bg-neutral/30">
-          <div className="container mx-auto px-4">
-            <div className="flex flex-col md:flex-row items-end justify-between mb-10 gap-4">
-              <div className="space-y-2">
-                <h2 className="text-3xl font-headline font-extrabold text-primary">New Arrivals</h2>
-                <p className="text-muted-foreground">The latest additions to our premium greenhouse collection.</p>
-              </div>
-              <Link href="/plants" className="text-primary font-bold flex items-center gap-1 hover:underline">
-                Explore All Products <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-              {featuredPlants.map((product) => (
-                <ProductCard key={product.id} product={product} />
-              ))}
-            </div>
-          </div>
-        </section>
+        {/* Featured Plants / New Arrivals */}
+        <ProductGrid 
+          title="New Arrivals" 
+          subtitle="Greenhouse Fresh" 
+          filterKey="new" 
+          limit={4} 
+        />
+
+        {/* Bestsellers Grid */}
+        <ProductGrid 
+          title="Crowd Favorites" 
+          subtitle="Top Rated" 
+          filterKey="bestseller" 
+          limit={4} 
+        />
 
         {/* Benefits Section */}
         <section className="py-20 bg-primary text-white">

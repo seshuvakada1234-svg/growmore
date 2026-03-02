@@ -15,6 +15,10 @@ export interface Product {
   rating: number;
   reviewsCount: number;
   stock: number;
+  isBestseller?: boolean;
+  isNew?: boolean;
+  isFeatured?: boolean;
+  careLevel?: 'easy' | 'moderate' | 'hard';
 }
 
 export const CATEGORIES: Category[] = ["Indoor", "Outdoor", "Seeds", "Bonsai"];
@@ -31,7 +35,10 @@ export const PRODUCTS: Product[] = [
     imageUrl: PlaceHolderImages.find(img => img.id === "plant-monstera")?.imageUrl || "",
     rating: 4.8,
     reviewsCount: 124,
-    stock: 15
+    stock: 15,
+    isBestseller: true,
+    isFeatured: true,
+    careLevel: 'moderate'
   },
   {
     id: "2",
@@ -44,7 +51,10 @@ export const PRODUCTS: Product[] = [
     imageUrl: PlaceHolderImages.find(img => img.id === "plant-snake")?.imageUrl || "",
     rating: 4.9,
     reviewsCount: 89,
-    stock: 20
+    stock: 20,
+    isNew: true,
+    isFeatured: true,
+    careLevel: 'easy'
   },
   {
     id: "3",
@@ -56,7 +66,9 @@ export const PRODUCTS: Product[] = [
     imageUrl: PlaceHolderImages.find(img => img.id === "plant-fiddle")?.imageUrl || "",
     rating: 4.5,
     reviewsCount: 56,
-    stock: 8
+    stock: 8,
+    isFeatured: true,
+    careLevel: 'hard'
   },
   {
     id: "4",
@@ -69,7 +81,9 @@ export const PRODUCTS: Product[] = [
     imageUrl: PlaceHolderImages.find(img => img.id === "plant-bonsai")?.imageUrl || "",
     rating: 4.7,
     reviewsCount: 34,
-    stock: 5
+    stock: 5,
+    isBestseller: true,
+    careLevel: 'moderate'
   },
   {
     id: "5",
@@ -81,7 +95,9 @@ export const PRODUCTS: Product[] = [
     imageUrl: PlaceHolderImages.find(img => img.id === "plant-lavender")?.imageUrl || "",
     rating: 4.6,
     reviewsCount: 78,
-    stock: 45
+    stock: 45,
+    isNew: true,
+    careLevel: 'easy'
   }
 ];
 
