@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { Search, ShoppingCart, User, Leaf, Menu, Home, LogOut, LayoutDashboard, ShieldCheck, Award } from "lucide-react";
+import { Search, ShoppingCart, User, Leaf, Menu, LogOut, Award, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -29,13 +29,12 @@ export function Header() {
   const router = useRouter();
   const pathname = usePathname();
 
-  // Role detection
   const userProfileRef = useMemoFirebase(() => (!db || !user?.uid) ? null : doc(db, 'users', user.uid), [db, user?.uid]);
   const { data: profile } = useDoc(userProfileRef);
   const isAdmin = profile?.role === 'admin';
-  const isAffiliate = profile?.role === 'affiliate' || profile?.affiliateStatus === 'approved';
+  const isAffiliate = profile?.role === 'affiliate';
 
-  // Enforcement: Redirect admins away from storefront
+  // Barrier: Redirect Admins away from storefront to ensure pure Admin experience
   useEffect(() => {
     if (isAdmin && !pathname.startsWith('/admin')) {
       router.push('/admin');
@@ -67,13 +66,14 @@ export function Header() {
   // --- ADMIN HEADER ---
   if (isAdmin) {
     return (
-      <header className="sticky top-0 z-50 w-full border-b bg-primary text-white shadow-lg h-16 flex items-center">
+      <header className="sticky top-0 z-50 w-full border-b bg-primary text-white h-16 flex items-center shadow-lg">
         <div className="container mx-auto px-4 flex items-center justify-between">
-          <Link href="/admin" className="flex items-center gap-2 transition-transform hover:scale-105">
-            <Leaf className="h-8 w-8 fill-current" /><span className="font-headline font-extrabold text-xl tracking-tight">Admin Control Center</span>
+          <Link href="/admin" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+            <Leaf className="h-8 w-8 fill-current" />
+            <span className="font-headline font-extrabold text-xl tracking-tight">Admin Console</span>
           </Link>
           <div className="flex items-center gap-4">
-            <span className="text-[10px] uppercase font-black bg-white/20 px-2 py-1 rounded tracking-widest border border-white/30">System Administrator</span>
+            <Badge variant="outline" className="text-white border-white/30 bg-white/10 uppercase tracking-widest text-[10px]">Super Admin</Badge>
             <Button variant="ghost" size="icon" onClick={handleLogout} className="text-white hover:bg-red-500/20"><LogOut className="h-5 w-5" /></Button>
           </div>
         </div>
@@ -90,7 +90,7 @@ export function Header() {
             <SheetTrigger asChild><Button variant="ghost" size="icon" className="md:hidden"><Menu className="h-6 w-6" /></Button></SheetTrigger>
             <SheetContent side="left">
               <nav className="flex flex-col gap-6 mt-12">
-                <Link href="/plants" className="text-xl font-bold flex items-center gap-2"><Leaf className="h-5 w-5" /> Browse Collection</Link>
+                <Link href="/plants" className="text-xl font-bold flex items-center gap-2"><Leaf className="h-5 w-5" /> Shop Plants</Link>
                 <Link href="/affiliate" className="text-xl font-bold flex items-center gap-2"><Award className="h-5 w-5" /> Partner Program</Link>
               </nav>
             </SheetContent>
@@ -103,11 +103,16 @@ export function Header() {
 
         <div className="flex-1 max-w-md hidden md:flex items-center relative">
           <Search className="absolute left-3 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search 500+ unique plants..." className="pl-10 h-10 bg-muted/50 border-none rounded-full" />
+          <Input placeholder="Find your perfect plant..." className="pl-10 h-10 bg-muted/50 border-none rounded-full" />
         </div>
 
         <div className="flex items-center gap-2 sm:gap-4">
-          <Link href="/cart"><Button variant="ghost" size="icon" className="relative"><ShoppingCart className="h-6 w-6" />{cartCount > 0 && <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-[10px] bg-primary">{cartCount}</Badge>}</Button></Link>
+          <Link href="/cart">
+            <Button variant="ghost" size="icon" className="relative">
+              <ShoppingCart className="h-6 w-6" />
+              {cartCount > 0 && <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-[10px] bg-primary">{cartCount}</Badge>}
+            </Button>
+          </Link>
           
           {user ? (
             <DropdownMenu>
@@ -122,9 +127,9 @@ export function Header() {
                   {isAffiliate && <div className="text-[10px] text-emerald-600 font-black uppercase tracking-widest mt-1">Official Partner</div>}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem asChild className="rounded-xl cursor-pointer"><Link href="/profile"><User className="mr-2 h-4 w-4" /> My Account</Link></DropdownMenuItem>
+                <DropdownMenuItem asChild className="rounded-xl cursor-pointer"><Link href="/profile"><User className="mr-2 h-4 w-4" /> My Profile</Link></DropdownMenuItem>
                 <DropdownMenuItem asChild className="rounded-xl cursor-pointer"><Link href="/orders"><ShoppingCart className="mr-2 h-4 w-4" /> My Orders</Link></DropdownMenuItem>
-                <DropdownMenuItem asChild className="rounded-xl cursor-pointer"><Link href="/affiliate"><Award className="mr-2 h-4 w-4" /> {isAffiliate ? "Partner Dashboard" : "Join Affiliate"}</Link></DropdownMenuItem>
+                <DropdownMenuItem asChild className="rounded-xl cursor-pointer"><Link href="/affiliate"><Award className="mr-2 h-4 w-4" /> {isAffiliate ? "Partner Dashboard" : "Become a Partner"}</Link></DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="rounded-xl cursor-pointer text-destructive focus:bg-red-50 focus:text-destructive"><LogOut className="mr-2 h-4 w-4" /> Sign Out</DropdownMenuItem>
               </DropdownMenuContent>

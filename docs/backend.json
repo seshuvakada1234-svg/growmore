@@ -2,54 +2,46 @@
 {
   "entities": {
     "UserProfile": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "UserProfile",
       "type": "object",
-      "description": "Represents a registered user's profile information.",
       "properties": {
         "id": { "type": "string" },
-        "email": { "type": "string", "format": "email" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "user", "affiliate"] },
         "firstName": { "type": "string" },
         "lastName": { "type": "string" },
-        "role": { "type": "string", "enum": ["admin", "user", "affiliate"] },
-        "affiliateStatus": { "type": "string", "enum": ["none", "pending", "approved", "rejected", "disabled"] },
-        "referralCode": { "type": "string" },
-        "totalClicks": { "type": "number", "default": 0 },
-        "totalEarnings": { "type": "number", "default": 0 },
-        "paidEarnings": { "type": "number", "default": 0 },
-        "totalReferrals": { "type": "number", "default": 0 },
-        "bankAccountName": { "type": "string" },
-        "bankAccountNumber": { "type": "string" },
-        "bankIfscCode": { "type": "string" },
-        "upiId": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "updatedAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["id", "email", "role"]
-    },
-    "Product": {
-      "title": "Product",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "category": { "type": "string" },
-        "price": { "type": "number" },
-        "stock": { "type": "number" },
-        "affiliateCommission": { "type": "number" },
-        "images": { "type": "array", "items": { "type": "string" } }
+        "createdAt": { "type": "string", "format": "date-time" }
       }
     },
-    "Order": {
-      "title": "Order",
+    "AffiliateApplication": {
+      "title": "AffiliateApplication",
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
         "userId": { "type": "string" },
-        "totalAmount": { "type": "number" },
-        "status": { "type": "string" },
-        "referrerUserId": { "type": "string", "nullable": true },
-        "commissionAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "AffiliateProfile": {
+      "title": "AffiliateProfile",
+      "type": "object",
+      "properties": {
+        "affiliateId": { "type": "string" },
+        "totalEarnings": { "type": "number", "default": 0 },
+        "paidEarnings": { "type": "number", "default": 0 },
+        "totalClicks": { "type": "number", "default": 0 },
+        "totalReferrals": { "type": "number", "default": 0 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "AffiliateCommission": {
+      "title": "AffiliateCommission",
+      "type": "object",
+      "properties": {
+        "affiliateId": { "type": "string" },
+        "orderId": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["unpaid", "paid"] },
         "createdAt": { "type": "string", "format": "date-time" }
       }
     },
@@ -57,23 +49,10 @@
       "title": "AffiliatePayout",
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
         "affiliateId": { "type": "string" },
-        "payoutAmount": { "type": "number" },
-        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
-        "payoutDate": { "type": "string", "format": "date-time" },
-        "bankDetails": { "type": "object" }
-      }
-    },
-    "AffiliateCommission": {
-      "title": "AffiliateCommission",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "affiliateId": { "type": "string" },
-        "orderId": { "type": "string" },
         "amount": { "type": "number" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "requestedAt": { "type": "string", "format": "date-time" }
       }
     }
   },
@@ -81,11 +60,12 @@
     "providers": ["google"]
   },
   "firestore": {
-    "/users/{userId}": { "schema": { "$ref": "#/entities/UserProfile" }, "description": "User profiles and aggregate affiliate stats" },
-    "/products/{productId}": { "schema": { "$ref": "#/entities/Product" }, "description": "Catalog of plants" },
-    "/orders/{orderId}": { "schema": { "$ref": "#/entities/Order" }, "description": "Global order records" },
-    "/affiliatePayouts/{payoutId}": { "schema": { "$ref": "#/entities/AffiliatePayout" }, "description": "Withdrawal requests" },
-    "/affiliateCommissions/{commId}": { "schema": { "$ref": "#/entities/AffiliateCommission" }, "description": "Audit trail for earned commissions" },
-    "/affiliateClicks/{clickId}": { "schema": "object", "description": "Raw click logs for anti-fraud" }
+    "/users/{userId}": { "schema": { "$ref": "#/entities/UserProfile" }, "description": "Global user roles" },
+    "/affiliateApplications/{userId}": { "schema": { "$ref": "#/entities/AffiliateApplication" }, "description": "Pending applications" },
+    "/affiliateProfiles/{userId}": { "schema": { "$ref": "#/entities/AffiliateProfile" }, "description": "Earnings and stats" },
+    "/affiliateCommissions/{id}": { "schema": { "$ref": "#/entities/AffiliateCommission" }, "description": "Individual earning logs" },
+    "/affiliatePayouts/{id}": { "schema": { "$ref": "#/entities/AffiliatePayout" }, "description": "Withdrawal requests" },
+    "/affiliateClicks/{id}": { "schema": "object", "description": "Raw click logs" },
+    "/orders/{orderId}": { "schema": "object", "description": "Orders with referral attribution" }
   }
 }
