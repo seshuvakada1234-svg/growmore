@@ -8,6 +8,7 @@ import AffiliateBanner from "@/app/homepage/components/AffiliateBanner";
 import CategorySection from "@/app/homepage/components/CategorySection";
 import HeroSection from "@/app/homepage/components/HeroSection";
 import MarqueeStrip from "@/app/homepage/components/MarqueeStrip";
+import OfferBanner from "@/app/homepage/components/OfferBanner";
 
 export default function Home() {
   const featuredPlants = PRODUCTS.slice(0, 4);
@@ -25,6 +26,9 @@ export default function Home() {
 
         {/* Categories Section */}
         <CategorySection />
+
+        {/* Offers Section */}
+        <OfferBanner />
 
         {/* Featured Plants */}
         <section className="py-16 bg-neutral/30">

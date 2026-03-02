@@ -1,4 +1,3 @@
-
 {
   "placeholderImages": [
     {
@@ -96,6 +95,24 @@
       "description": "Gift Plants Category",
       "imageUrl": "https://picsum.photos/seed/giftcat/600/800",
       "imageHint": "plant gift"
+    },
+    {
+      "id": "offer-starter-kit",
+      "description": "Gardening starter kit",
+      "imageUrl": "https://picsum.photos/seed/kit/600/400",
+      "imageHint": "gardening tools"
+    },
+    {
+      "id": "offer-monstera",
+      "description": "Monstera plant collection",
+      "imageUrl": "https://picsum.photos/seed/monstera-deal/600/400",
+      "imageHint": "monstera collection"
+    },
+    {
+      "id": "offer-watering-pots",
+      "description": "Self-watering plant pots",
+      "imageUrl": "https://picsum.photos/seed/pots/600/400",
+      "imageHint": "plant pots"
     }
   ]
 }
