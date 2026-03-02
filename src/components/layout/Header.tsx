@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { Search, ShoppingCart, User, Leaf, Menu, Home, LogOut, LayoutDashboard } from "lucide-react";
+import { Search, ShoppingCart, User, Leaf, Menu, Home, LogOut, LayoutDashboard, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useState, useEffect } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { useUser, useAuth } from "@/firebase";
+import { useUser, useAuth, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
 import { signOut } from "firebase/auth";
+import { doc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import {
   DropdownMenu,
@@ -23,7 +24,17 @@ export function Header() {
   const [cartCount, setCartCount] = useState(0);
   const { user } = useUser();
   const auth = useAuth();
+  const db = useFirestore();
   const router = useRouter();
+
+  // Fetch user profile to check role
+  const userProfileRef = useMemoFirebase(() => {
+    if (!db || !user?.uid) return null;
+    return doc(db, 'users', user.uid);
+  }, [db, user?.uid]);
+  
+  const { data: profile } = useDoc(userProfileRef);
+  const isAdmin = profile?.role === 'admin';
 
   useEffect(() => {
     const updateCount = () => {
@@ -73,6 +84,11 @@ export function Header() {
                 <Link href="/plants?cat=Outdoor" className="text-lg font-medium">Outdoor</Link>
                 <Link href="/plants?cat=Bonsai" className="text-lg font-medium">Bonsai</Link>
                 <Link href="/affiliate" className="text-lg font-medium">Affiliate Program</Link>
+                {isAdmin && (
+                  <Link href="/admin" className="text-lg font-bold text-primary flex items-center gap-2">
+                    <ShieldCheck className="h-5 w-5" /> Admin Panel
+                  </Link>
+                )}
               </nav>
             </SheetContent>
           </Sheet>
@@ -110,7 +126,7 @@ export function Header() {
           {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="rounded-full bg-accent text-primary p-0 overflow-hidden">
+                <Button variant="ghost" size="icon" className="rounded-full bg-accent text-primary p-0 overflow-hidden shadow-sm border-2 border-white">
                   {user?.photoURL ? (
                     <img src={user.photoURL} alt="Profile" className="h-full w-full object-cover" />
                   ) : (
@@ -119,7 +135,10 @@ export function Header() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56 rounded-xl mt-2">
-                <DropdownMenuLabel className="font-headline font-bold">My Account</DropdownMenuLabel>
+                <DropdownMenuLabel className="font-headline font-bold">
+                  <div>{user.displayName || "My Account"}</div>
+                  {isAdmin && <div className="text-[10px] text-primary uppercase tracking-widest mt-0.5">Administrator</div>}
+                </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild className="cursor-pointer rounded-lg">
                   <Link href="/profile" className="flex items-center gap-2 w-full">
@@ -131,9 +150,9 @@ export function Header() {
                     <ShoppingCart className="h-4 w-4" /> Orders
                   </Link>
                 </DropdownMenuItem>
-                {user && (
-                  <DropdownMenuItem asChild className="cursor-pointer rounded-lg lg:hidden">
-                    <Link href="/admin" className="flex items-center gap-2 w-full">
+                {isAdmin && (
+                  <DropdownMenuItem asChild className="cursor-pointer rounded-lg">
+                    <Link href="/admin" className="flex items-center gap-2 w-full text-primary font-bold">
                       <LayoutDashboard className="h-4 w-4" /> Admin Panel
                     </Link>
                   </DropdownMenuItem>
@@ -155,9 +174,11 @@ export function Header() {
             </Link>
           )}
 
-          {user && (
+          {isAdmin && (
             <Link href="/admin" className="hidden lg:block">
-              <Button variant="outline" size="sm" className="rounded-full border-primary/20 text-primary">Admin</Button>
+              <Button variant="outline" size="sm" className="rounded-full border-primary text-primary hover:bg-primary hover:text-white font-bold gap-2">
+                <ShieldCheck className="h-4 w-4" /> Admin
+              </Button>
             </Link>
           )}
         </div>

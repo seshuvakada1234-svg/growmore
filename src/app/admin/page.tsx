@@ -1,4 +1,3 @@
-
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,6 +21,7 @@ import {
   LineChart, 
   Line 
 } from "recharts";
+import { cn } from "@/lib/utils";
 
 const data = [
   { name: "Mon", sales: 4000, referrals: 2400 },
@@ -43,6 +43,11 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-8">
+      <div className="flex flex-col gap-1">
+        <h1 className="text-3xl font-headline font-extrabold text-primary">Overview</h1>
+        <p className="text-muted-foreground">Welcome back to the GreenScape command center.</p>
+      </div>
+
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat, i) => (
@@ -159,8 +164,4 @@ export default function AdminDashboard() {
       </Card>
     </div>
   );
-}
-
-function cn(...classes: string[]) {
-  return classes.filter(Boolean).join(" ");
 }

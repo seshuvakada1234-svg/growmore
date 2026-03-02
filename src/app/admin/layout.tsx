@@ -12,28 +12,42 @@ import {
   Menu,
   Award,
   Bell,
-  Loader2
+  Loader2,
+  ShieldAlert
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { useUser } from "@/firebase";
+import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
+import { doc } from "firebase/firestore";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const { user, isUserLoading } = useUser();
+  const db = useFirestore();
+
+  // Fetch the role to ensure only admins can enter
+  const userProfileRef = useMemoFirebase(() => {
+    if (!db || !user?.uid) return null;
+    return doc(db, 'users', user.uid);
+  }, [db, user?.uid]);
+  
+  const { data: profile, isLoading: isProfileLoading } = useDoc(userProfileRef);
 
   useEffect(() => {
     if (!isUserLoading && !user) {
       router.push('/login');
+    } else if (!isUserLoading && user && !isProfileLoading && profile && profile.role !== 'admin') {
+      // Redirect non-admins away
+      router.push('/');
     }
-  }, [user, isUserLoading, router]);
+  }, [user, isUserLoading, profile, isProfileLoading, router]);
 
-  if (isUserLoading) {
+  if (isUserLoading || isProfileLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-neutral">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -41,7 +55,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     );
   }
 
-  if (!user) return null;
+  // Final catch for unauthorized access during redirect
+  if (!user || profile?.role !== 'admin') {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-neutral p-4 text-center">
+        <ShieldAlert className="h-16 w-16 text-destructive mb-4" />
+        <h1 className="text-2xl font-headline font-extrabold text-primary">Access Denied</h1>
+        <p className="text-muted-foreground mt-2">You do not have administrative privileges to view this page.</p>
+        <Button onClick={() => router.push('/')} className="mt-6 rounded-full px-8">Return Home</Button>
+      </div>
+    );
+  }
 
   const navItems = [
     { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
@@ -125,8 +149,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </Button>
             <div className="flex items-center gap-3 pl-4 border-l">
               <div className="text-right hidden sm:block">
-                <p className="text-sm font-bold leading-none">{user.displayName || "Admin User"}</p>
-                <p className="text-xs text-muted-foreground">Manager</p>
+                <p className="text-sm font-bold leading-none">{profile?.firstName} {profile?.lastName || "Admin"}</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-widest font-bold opacity-70">Administrator</p>
               </div>
               <div className="h-10 w-10 rounded-full bg-accent flex items-center justify-center text-primary border-2 border-white shadow-sm overflow-hidden">
                 {user.photoURL ? (
