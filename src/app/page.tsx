@@ -1,4 +1,3 @@
-
 import Link from "next/link";
 import Image from "next/image";
 import { Header } from "@/components/layout/Header";
@@ -8,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { PRODUCTS, CATEGORIES } from "@/lib/mock-data";
 import { PlaceHolderImages } from "@/lib/placeholder-images";
 import { ArrowRight, Truck, ShieldCheck, Flower2, Clock } from "lucide-react";
+import AffiliateBanner from "@/app/homepage/components/AffiliateBanner";
 
 export default function Home() {
   const featuredPlants = PRODUCTS.slice(0, 4);
@@ -150,35 +150,9 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Promo Section */}
-        <section className="py-20">
-          <div className="container mx-auto px-4">
-            <div className="bg-accent rounded-[2.5rem] p-8 md:p-16 flex flex-col md:flex-row items-center gap-12 overflow-hidden relative">
-              <div className="flex-1 space-y-6 relative z-10">
-                <h2 className="text-4xl md:text-5xl font-headline font-extrabold text-primary leading-tight">
-                  Grow Your Own <br />Organic Paradise
-                </h2>
-                <p className="text-lg text-secondary/80 max-w-md">
-                  Join our affiliate program and earn commissions by sharing the love for greenery. Get up to 10% on every referral.
-                </p>
-                <Link href="/affiliate">
-                  <Button size="lg" className="rounded-full px-10">
-                    Become an Affiliate
-                  </Button>
-                </Link>
-              </div>
-              <div className="flex-1 relative h-[300px] md:h-[400px] w-full">
-                <Image
-                  src="https://picsum.photos/seed/promo/800/600"
-                  alt="Organic garden"
-                  fill
-                  className="object-cover rounded-3xl"
-                  data-ai-hint="lush plants"
-                />
-              </div>
-            </div>
-          </div>
-        </section>
+        {/* Affiliate Section */}
+        <AffiliateBanner />
+
       </main>
 
       <Footer />
