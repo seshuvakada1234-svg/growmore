@@ -1,0 +1,195 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 60 20% 98%;
+    --foreground: 120 15% 15%;
+    --card: 0 0% 100%;
+    --card-foreground: 120 15% 15%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 120 15% 15%;
+    --primary: 124 55% 24%;
+    --primary-foreground: 84 44% 94%;
+    --secondary: 123 46% 34%;
+    --secondary-foreground: 84 44% 94%;
+    --muted: 84 20% 92%;
+    --muted-foreground: 120 10% 40%;
+    --accent: 84 44% 94%;
+    --accent-foreground: 124 55% 24%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 120 10% 90%;
+    --input: 120 10% 90%;
+    --ring: 124 55% 24%;
+    --radius: 0.75rem;
+  }
+}
+
+@layer components {
+  .font-display {
+    @apply font-headline;
+  }
+
+  .section-label {
+    @apply text-primary font-bold uppercase tracking-wider text-xs;
+  }
+
+  .product-card {
+    @apply bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-border/50;
+  }
+
+  .card-img {
+    @apply relative overflow-hidden bg-muted;
+  }
+
+  .discount-badge {
+    @apply text-[10px] bg-destructive text-white font-black px-2 py-1 rounded shadow-sm uppercase tracking-wider;
+  }
+
+  .wishlist-btn {
+    @apply absolute top-3 right-3 z-10 p-2 rounded-full bg-white/60 hover:bg-white backdrop-blur-sm shadow-sm transition-all;
+  }
+
+  .wishlist-btn.active {
+    @apply bg-white shadow-md;
+  }
+
+  .quick-add {
+    @apply absolute bottom-0 left-0 right-0 p-3 translate-y-full group-hover:translate-y-0 transition-transform duration-300 z-10;
+  }
+
+  .care-badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold;
+  }
+
+  .care-easy { @apply bg-emerald-100 text-emerald-700; }
+  .care-moderate { @apply bg-yellow-100 text-yellow-700; }
+  .care-hard { @apply bg-red-100 text-red-700; }
+
+  .btn-primary {
+    @apply inline-flex items-center gap-2 bg-primary text-primary-foreground font-bold px-6 py-3 rounded-xl hover:bg-primary/90 transition-all shadow-md active:scale-95;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 bg-white border-2 border-primary text-primary font-bold px-6 py-3 rounded-xl hover:bg-accent transition-all shadow-sm active:scale-95;
+  }
+
+  .search-input {
+    @apply w-full bg-white border border-[#D8EDD5] rounded-xl px-10 py-3 text-sm focus:outline-none focus:border-[#388E3C] transition-colors;
+  }
+
+  .custom-checkbox {
+    @apply w-4 h-4 rounded border-2 border-[#D8EDD5] flex items-center justify-center transition-all bg-white flex-shrink-0;
+  }
+  .custom-checkbox.checked {
+    @apply bg-[#1B5E20] border-[#1B5E20];
+  }
+
+  .page-btn {
+    @apply w-9 h-9 rounded-lg border border-[#D8EDD5] flex items-center justify-center text-sm font-bold text-[#4A6741] hover:bg-[#F1F8E9] transition-all;
+  }
+  .page-btn.active {
+    @apply bg-[#1B5E20] border-[#1B5E20] text-white;
+  }
+
+  .tab-btn {
+    @apply px-6 py-4 text-sm font-bold transition-all border-b-2 border-transparent text-[#7A9B77] hover:text-[#1B5E20];
+  }
+  .tab-btn.active {
+    @apply border-[#1B5E20] text-[#1B5E20] bg-[#F1F8E9]/30;
+  }
+
+  .toast {
+    @apply fixed bottom-24 left-1/2 -translate-x-1/2 z-[400] bg-primary text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 font-bold;
+  }
+
+  .filter-drawer {
+    @apply fixed right-0 top-0 h-full w-full max-w-sm bg-white p-6 shadow-2xl translate-x-full transition-transform duration-300;
+  }
+  .filter-drawer.open {
+    @apply translate-x-0;
+  }
+
+  .qty-btn {
+    @apply w-8 h-8 flex items-center justify-center border border-[#D8EDD5] rounded hover:bg-accent transition-colors text-lg font-bold;
+  }
+
+  .sticky-cart-bar {
+    @apply fixed bottom-0 left-0 right-0 bg-white border-t p-3 flex items-center gap-3 z-50 shadow-[0_-4px_20px_rgba(0,0,0,0.1)];
+  }
+
+  .offer-strip {
+    @apply bg-[#1B5E20] text-white text-center py-2 text-xs font-semibold tracking-wide fixed top-0 left-0 right-0 z-[110];
+  }
+
+  .nav-sticky {
+    @apply sticky z-[100] bg-white/90 backdrop-blur-md border-b border-[#D8EDD5] transition-all duration-300;
+  }
+
+  .modal-overlay {
+    @apply fixed inset-0 z-[300] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4;
+  }
+
+  .modal-card {
+    @apply bg-white w-full max-w-md rounded-2xl shadow-2xl p-6 relative animate-scale-in;
+  }
+
+  .gallery-thumb {
+    @apply relative h-20 w-20 rounded-lg overflow-hidden cursor-pointer border-2 transition-all border-transparent;
+  }
+  .gallery-thumb.active {
+    @apply border-[#1B5E20];
+  }
+
+  .review-card {
+    @apply bg-white border border-[#D8EDD5] p-5 rounded-2xl shadow-sm hover:shadow-md transition-shadow;
+  }
+
+  .offer-tag {
+    @apply bg-white/20 backdrop-blur-md border border-white/30 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider;
+  }
+}
+
+@keyframes marquee-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@keyframes float-y {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes toast-in {
+  from { transform: translate(-50%, 20px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+@keyframes scale-in {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes slide-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes badge-pop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+.animate-toast-in {
+  animation: toast-in 0.3s ease-out forwards;
+}
+
+.animate-scale-in { animation: scale-in 0.2s ease-out forwards; }
+.animate-slide-right { animation: slide-right 0.3s ease-out forwards; }
+.animate-badge-pop { animation: badge-pop 0.3s ease-out; }
+
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
