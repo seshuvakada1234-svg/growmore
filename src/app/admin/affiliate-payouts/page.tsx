@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Search, Banknote, Loader2, Clock, Wallet, AlertCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
+import { useFirestore, useCollection, useMemoFirebase, useUser, useDoc } from "@/firebase";
 import { doc, updateDoc, serverTimestamp, increment, collectionGroup, query, orderBy } from "firebase/firestore";
 import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
@@ -16,14 +16,25 @@ import { FirestorePermissionError } from "@/firebase/errors";
 
 export default function AdminAffiliatePayouts() {
   const db = useFirestore();
+  const { user } = useUser();
   const [searchTerm, setSearchTerm] = useState("");
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
 
+  // Fetch the role to ensure only admins can run the collectionGroup query
+  const userProfileRef = useMemoFirebase(() => {
+    if (!db || !user?.uid) return null;
+    return doc(db, 'users', user.uid);
+  }, [db, user?.uid]);
+  
+  const { data: profile } = useDoc(userProfileRef);
+  const isAdmin = profile?.role === 'admin';
+
   // Fetch all payout requests across all users using collectionGroup
-  const payoutsQuery = useMemoFirebase(() => 
-    query(collectionGroup(db, 'payouts'), orderBy('requestedAt', 'desc')), 
-    [db]
-  );
+  // Only execute if the user is confirmed as an admin to prevent rule-denied errors
+  const payoutsQuery = useMemoFirebase(() => {
+    if (!db || !isAdmin) return null;
+    return query(collectionGroup(db, 'payouts'), orderBy('requestedAt', 'desc'));
+  }, [db, isAdmin]);
   
   const { data: payouts, isLoading } = useCollection(payoutsQuery);
 
@@ -31,8 +42,7 @@ export default function AdminAffiliatePayouts() {
     setIsProcessing(payout.id);
     
     // In siloed structure, we need the parent path
-    // CollectionGroup data includes ID, but we need to derive the path or have it stored
-    // For simplicity, we'll assume payout doc contains affiliateId to rebuild path
+    // We assume payout doc contains affiliateId to rebuild path
     const payoutRef = doc(db, 'users', payout.affiliateId, 'affiliate', 'profile', 'payouts', payout.id);
     const profileRef = doc(db, 'users', payout.affiliateId, 'affiliate', 'profile');
 
@@ -69,6 +79,14 @@ export default function AdminAffiliatePayouts() {
     totalPaid: payouts?.filter(p => p.status === 'approved').reduce((acc, p) => acc + (p.amount || 0), 0) || 0,
     pendingAmount: payouts?.filter(p => p.status === 'pending').reduce((acc, p) => acc + (p.amount || 0), 0) || 0
   };
+
+  if (!isAdmin && profile) {
+    return (
+      <div className="flex items-center justify-center py-20 text-muted-foreground">
+        Checking administrative privileges...
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -128,6 +146,13 @@ export default function AdminAffiliatePayouts() {
                   </TableCell>
                 </TableRow>
               ))}
+              {filteredPayouts?.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="p-20 text-center text-muted-foreground italic">
+                    No payout requests found.
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </Card>
