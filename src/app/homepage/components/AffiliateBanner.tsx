@@ -1,29 +1,36 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight } from 'lucide-react';
+import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
+import { doc } from "firebase/firestore";
 
 const PERKS = [
   { icon: '💰', title: 'Up to 10% Commission', sub: 'Per successful order' },
   { icon: '📊', title: 'Real-time Dashboard', sub: 'Track earnings live' },
-  { icon: '🏦', title: 'Direct Bank Payout', sub: 'Every 15 days' },
+  { icon: '🏦', title: 'Direct Bank Payout', sub: 'Every 30 days' },
   { icon: '🔗', title: 'Custom Referral Link', sub: 'Share anywhere' },
 ];
 
 export default function AffiliateBanner() {
-  const [user, setUser] = useState<{ isAffiliate?: boolean; role?: string } | null>(null);
   const router = useRouter();
+  const { user, isUserLoading } = useUser();
+  const db = useFirestore();
 
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem('plantshop_user');
-      if (stored) setUser(JSON.parse(stored));
-    } catch {}
-  }, []);
+  const profileRef = useMemoFirebase(() => {
+    if (!db || !user?.uid) return null;
+    return doc(db, 'affiliateProfiles', user.uid);
+  }, [db, user?.uid]);
 
-  // Hide if already affiliate or admin
-  if (user?.isAffiliate || user?.role === 'admin') return null;
+  const { data: affiliateData, isLoading: isDocLoading } = useDoc(profileRef);
+
+  if (isUserLoading || isDocLoading) return null;
+
+  // Determine status based on the existence of the profile and the approved flag
+  // Mapping "approved == true" to common status patterns
+  const isApproved = !!affiliateData && (affiliateData.approved === true || affiliateData.status === 'approved');
+  const isPending = !!affiliateData && (affiliateData.approved === false || affiliateData.status === 'pending');
 
   return (
     <section className="py-10 md:py-14">
@@ -36,21 +43,48 @@ export default function AffiliateBanner() {
                 <div className="inline-flex items-center gap-2 bg-white/15 rounded-full px-4 py-1.5 mb-6">
                   <span className="text-[#A5D6A7] text-sm font-bold uppercase tracking-wider">💸 Earn While You Share</span>
                 </div>
-                <h2 className="font-headline text-3xl md:text-5xl font-extrabold mb-4 leading-tight">
-                  Join Our Affiliate<br />
-                  <span className="text-[#A5D6A7]">Program & Earn</span>
-                </h2>
-                <p className="text-white/75 text-base md:text-lg leading-relaxed mb-8 max-w-md mx-auto md:mx-0">
-                  Love plants? Share your referral link, earn up to 10% commission on every order. 
-                  Payouts directly to your bank account every 15 days.
-                </p>
-                <button
-                  onClick={() => router.push('/affiliate')}
-                  className="inline-flex items-center gap-2 bg-white text-primary font-bold px-8 py-4 rounded-2xl hover:bg-[#F1F8E9] transition-all hover:shadow-lg hover:-translate-y-0.5 text-lg group">
-                  Join Affiliate Program
-                  <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
-                </button>
-                <p className="text-white/50 text-xs mt-4 font-medium">Free to join · No minimum sales · Instant link generation</p>
+
+                {isApproved ? (
+                  <>
+                    <h2 className="font-headline text-3xl md:text-5xl font-extrabold mb-4 leading-tight">
+                      Welcome Back,<br />
+                      <span className="text-[#A5D6A7]">Partner</span>
+                    </h2>
+                    <p className="text-white/75 text-base md:text-lg leading-relaxed mb-8 max-w-md mx-auto md:mx-0">
+                      Your partner account is active! Visit your dashboard to track earnings, manage links, and monitor your growth.
+                    </p>
+                    <button
+                      onClick={() => router.push('/affiliate')}
+                      className="inline-flex items-center gap-2 bg-white text-primary font-bold px-8 py-4 rounded-2xl hover:bg-[#F1F8E9] transition-all hover:shadow-lg hover:-translate-y-0.5 text-lg group">
+                      Go to Partner Dashboard
+                      <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <h2 className="font-headline text-3xl md:text-5xl font-extrabold mb-4 leading-tight">
+                      Join Our Affiliate<br />
+                      <span className="text-[#A5D6A7]">Program & Earn</span>
+                    </h2>
+                    <p className="text-white/75 text-base md:text-lg leading-relaxed mb-8 max-w-md mx-auto md:mx-0">
+                      Love plants? Share your referral link, earn up to 10% commission on every order. 
+                      Payouts directly to your bank account every 30 days.
+                    </p>
+                    <button
+                      onClick={() => router.push('/affiliate')}
+                      className="inline-flex items-center gap-2 bg-white text-primary font-bold px-8 py-4 rounded-2xl hover:bg-[#F1F8E9] transition-all hover:shadow-lg hover:-translate-y-0.5 text-lg group">
+                      Join Affiliate Program
+                      <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                    </button>
+                    {isPending ? (
+                      <p className="text-white/60 text-xs mt-4 font-medium italic">
+                        Your affiliate application is under review. Approval usually takes 24–48 hours.
+                      </p>
+                    ) : (
+                      <p className="text-white/50 text-xs mt-4 font-medium">Free to join · No minimum sales · Instant link generation</p>
+                    )}
+                  </>
+                )}
               </div>
 
               {/* Right: Perks Grid */}
