@@ -7,8 +7,6 @@ service cloud.firestore {
     function isSignedIn() { return request.auth != null; }
     function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
     
-    // Admin check: checks DBAC collection OR role field in user document
-    // Using .get() with a default to prevent rule crashes if field is missing
     function isAdmin() { 
       return isSignedIn() && (
         exists(/databases/$(database)/documents/roles_admin/$(request.auth.uid)) || 
@@ -24,31 +22,31 @@ service cloud.firestore {
       allow list: if isAdmin();
       allow create: if isOwner(userId);
       allow update: if isAdmin() || isOwner(userId);
-
-      // --- Nested Affiliate Data (Siloed Pattern) ---
-      match /affiliate/profile {
-        allow read: if isOwner(userId) || isAdmin();
-        allow write: if isAdmin();
-        // Allow click increment via tracker
-        allow update: if isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['totalClicks', 'updatedAt']);
-
-        match /commissions/{id} {
-          allow read: if isOwner(userId) || isAdmin();
-          allow write: if isAdmin();
-        }
-
-        match /payouts/{id} {
-          allow read: if isOwner(userId) || isAdmin();
-          allow create: if isOwner(userId);
-          allow update: if isAdmin();
-        }
-      }
     }
 
     // --- Roles DBAC ---
     match /roles_admin/{userId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
+    }
+
+    // --- Affiliate Profiles & Payouts (Specified Structure) ---
+    match /affiliateProfiles/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isAdmin();
+      allow update: if isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['totalClicks', 'updatedAt']);
+
+      match /payouts/{payoutId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && request.resource.data.status == 'pending';
+        allow update: if isAdmin();
+        allow delete: if false;
+      }
+
+      match /commissions/{commId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow write: if isAdmin();
+      }
     }
 
     // --- Affiliate Flow (Applications) ---
@@ -78,7 +76,6 @@ service cloud.firestore {
     }
 
     // --- Collection Group Queries (Admin only) ---
-    // These allow collectionGroup('payouts') and collectionGroup('commissions')
     match /{path=**}/payouts/{id} {
       allow read: if isAdmin();
     }

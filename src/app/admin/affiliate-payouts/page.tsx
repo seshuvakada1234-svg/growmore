@@ -4,74 +4,88 @@
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Banknote, Loader2, Clock, Wallet, AlertCircle } from "lucide-react";
+import { Search, Banknote, Loader2, Clock, Wallet, CheckCircle2, XCircle, Filter } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useFirestore, useCollection, useMemoFirebase, useUser, useDoc } from "@/firebase";
 import { doc, updateDoc, serverTimestamp, increment, collectionGroup, query, orderBy } from "firebase/firestore";
 import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
-import { errorEmitter } from "@/firebase/error-emitter";
-import { FirestorePermissionError } from "@/firebase/errors";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+
+type PayoutStatus = "all" | "pending" | "approved" | "rejected";
 
 export default function AdminAffiliatePayouts() {
   const db = useFirestore();
-  const { user } = useUser();
+  const { user: adminUser } = useUser();
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<PayoutStatus>("all");
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
 
-  // Fetch the role to ensure only admins can run the collectionGroup query
+  // Confirm admin status
   const userProfileRef = useMemoFirebase(() => {
-    if (!db || !user?.uid) return null;
-    return doc(db, 'users', user.uid);
-  }, [db, user?.uid]);
+    if (!db || !adminUser?.uid) return null;
+    return doc(db, 'users', adminUser.uid);
+  }, [db, adminUser?.uid]);
   
   const { data: profile } = useDoc(userProfileRef);
   const isAdmin = profile?.role === 'admin';
 
   // Fetch all payout requests across all users using collectionGroup
-  // Only execute if the user is confirmed as an admin to prevent rule-denied errors
   const payoutsQuery = useMemoFirebase(() => {
     if (!db || !isAdmin) return null;
-    return query(collectionGroup(db, 'payouts'), orderBy('requestedAt', 'desc'));
+    return query(collectionGroup(db, 'payouts'), orderBy('createdAt', 'desc'));
   }, [db, isAdmin]);
   
   const { data: payouts, isLoading } = useCollection(payoutsQuery);
 
-  const handleAction = async (payout: any, status: 'approved' | 'rejected') => {
+  const handleAction = async (payout: any, action: 'approved' | 'rejected') => {
+    if (payout.status !== 'pending') return;
+    
     setIsProcessing(payout.id);
     
-    // In siloed structure, we need the parent path
-    // We assume payout doc contains affiliateId to rebuild path
-    const payoutRef = doc(db, 'users', payout.affiliateId, 'affiliate', 'profile', 'payouts', payout.id);
-    const profileRef = doc(db, 'users', payout.affiliateId, 'affiliate', 'profile');
+    // Correct path: affiliateProfiles/{userId}/payouts/{id}
+    const payoutRef = doc(db, 'affiliateProfiles', payout.userId, 'payouts', payout.id);
+    const profileRef = doc(db, 'affiliateProfiles', payout.userId);
 
     try {
       await updateDoc(payoutRef, {
-        status,
+        status: action,
         processedAt: serverTimestamp(),
+        processedBy: adminUser?.uid || 'system',
         updatedAt: serverTimestamp()
       });
 
-      if (status === 'approved') {
+      if (action === 'approved') {
         await updateDoc(profileRef, {
           paidEarnings: increment(payout.amount),
           updatedAt: serverTimestamp()
         });
       }
 
-      toast({ title: `Request ${status}`, description: `Successfully processed payout of ₹${payout.amount}.` });
+      toast({ 
+        title: action === 'approved' ? "Payout Approved" : "Payout Rejected", 
+        description: `Successfully processed request for ₹${payout.amount}.` 
+      });
     } catch (error: any) {
-      errorEmitter.emit('permission-error', new FirestorePermissionError({ path: payoutRef.path, operation: 'update', requestResourceData: { status } }));
+      console.error(error);
+      toast({ 
+        title: "Error", 
+        description: "Failed to process payout. Check security rules.", 
+        variant: "destructive" 
+      });
     } finally {
       setIsProcessing(null);
     }
   };
 
-  const filteredPayouts = payouts?.filter(p => 
-    p.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.affiliateId.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredPayouts = payouts?.filter(p => {
+    const matchesSearch = p.userId.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                         p.id.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
 
   const stats = {
     total: payouts?.length || 0,
@@ -82,8 +96,9 @@ export default function AdminAffiliatePayouts() {
 
   if (!isAdmin && profile) {
     return (
-      <div className="flex items-center justify-center py-20 text-muted-foreground">
-        Checking administrative privileges...
+      <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-4">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <p>Verifying administrative access...</p>
       </div>
     );
   }
@@ -91,10 +106,32 @@ export default function AdminAffiliatePayouts() {
   return (
     <div className="space-y-8">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <h1 className="text-3xl font-headline font-extrabold text-primary">Payout Approvals</h1>
-        <div className="relative w-full sm:w-80">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search..." className="pl-10 rounded-xl" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+        <div>
+          <h1 className="text-3xl font-headline font-extrabold text-primary">Payout Management</h1>
+          <p className="text-muted-foreground text-sm">Review and process affiliate withdrawal requests.</p>
+        </div>
+        <div className="flex gap-3 w-full sm:w-auto">
+          <div className="relative flex-grow sm:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input 
+              placeholder="Search by ID..." 
+              className="pl-10 rounded-xl bg-white border-none shadow-sm" 
+              value={searchTerm} 
+              onChange={(e) => setSearchTerm(e.target.value)} 
+            />
+          </div>
+          <Select value={statusFilter} onValueChange={(val: any) => setStatusFilter(val)}>
+            <SelectTrigger className="w-[140px] rounded-xl bg-white border-none shadow-sm font-bold">
+              <Filter className="h-4 w-4 mr-2" />
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="approved">Approved</SelectItem>
+              <SelectItem value="rejected">Rejected</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -102,12 +139,12 @@ export default function AdminAffiliatePayouts() {
         {[
           { label: "Total Requests", value: stats.total, icon: Banknote, color: "bg-blue-50 text-blue-600" },
           { label: "Pending", value: stats.pending, icon: Clock, color: "bg-yellow-50 text-yellow-600" },
-          { label: "Total Paid", value: `₹${stats.totalPaid}`, icon: Wallet, color: "bg-emerald-50 text-emerald-600" },
-          { label: "Awaiting", value: `₹${stats.pendingAmount}`, icon: AlertCircle, color: "bg-purple-50 text-purple-600" },
+          { label: "Total Paid", value: `₹${stats.totalPaid.toLocaleString()}`, icon: Wallet, color: "bg-emerald-50 text-emerald-600" },
+          { label: "Awaiting", value: `₹${stats.pendingAmount.toLocaleString()}`, icon: CheckCircle2, color: "bg-purple-50 text-purple-600" },
         ].map((stat, i) => (
           <Card key={i} className="rounded-3xl border-none shadow-sm p-6 bg-white">
             <div className={`h-12 w-12 rounded-2xl flex items-center justify-center mb-4 ${stat.color}`}><stat.icon className="h-6 w-6" /></div>
-            <p className="text-sm font-medium text-muted-foreground">{stat.label}</p>
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{stat.label}</p>
             <h3 className="text-3xl font-extrabold text-primary mt-1">{stat.value}</h3>
           </Card>
         ))}
@@ -121,26 +158,56 @@ export default function AdminAffiliatePayouts() {
             <TableHeader className="bg-muted/30">
               <TableRow>
                 <TableHead className="p-6">Affiliate ID</TableHead>
-                <TableHead className="p-6">Amount</TableHead>
-                <TableHead className="p-6">Date</TableHead>
-                <TableHead className="p-6">Status</TableHead>
+                <TableHead className="p-6 text-center">Amount</TableHead>
+                <TableHead className="p-6 text-center">Requested Date</TableHead>
+                <TableHead className="p-6 text-center">Status</TableHead>
                 <TableHead className="p-6 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredPayouts?.map((p) => (
                 <TableRow key={p.id} className="group hover:bg-accent/30 border-b border-muted">
-                  <TableCell className="p-6 font-mono text-xs">{p.affiliateId?.substring(0, 12)}...</TableCell>
-                  <TableCell className="p-6 font-extrabold text-primary">₹{p.amount}</TableCell>
-                  <TableCell className="p-6 text-xs text-muted-foreground">{p.requestedAt?.seconds ? format(new Date(p.requestedAt.seconds * 1000), "MMM d, yyyy") : 'Recent'}</TableCell>
                   <TableCell className="p-6">
-                    <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${p.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : p.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>{p.status}</span>
+                    <p className="font-mono text-xs font-bold text-primary">{p.userId}</p>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-tighter">ID: {p.id.substring(0, 12)}</p>
+                  </TableCell>
+                  <TableCell className="p-6 text-center font-extrabold text-lg text-primary">₹{p.amount}</TableCell>
+                  <TableCell className="p-6 text-center text-xs text-muted-foreground">
+                    {p.createdAt?.seconds ? format(new Date(p.createdAt.seconds * 1000), "MMM d, yyyy") : 'Recent'}
+                  </TableCell>
+                  <TableCell className="p-6 text-center">
+                    <Badge className={`rounded-full px-3 py-1 font-bold uppercase text-[10px] ${
+                      p.status === 'approved' ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100' : 
+                      p.status === 'pending' ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-100' : 
+                      'bg-red-100 text-red-700 hover:bg-red-100'
+                    }`}>
+                      {p.status}
+                    </Badge>
                   </TableCell>
                   <TableCell className="p-6 text-right">
-                    {p.status === 'pending' && (
+                    {p.status === 'pending' ? (
                       <div className="flex items-center justify-end gap-2">
-                        <Button size="sm" variant="outline" className="text-emerald-600" onClick={() => handleAction(p, 'approved')}>Approve</Button>
-                        <Button size="sm" variant="outline" className="text-destructive" onClick={() => handleAction(p, 'rejected')}>Reject</Button>
+                        <Button 
+                          size="sm" 
+                          className="bg-emerald-600 hover:bg-emerald-700 h-9 rounded-xl font-bold" 
+                          onClick={() => handleAction(p, 'approved')}
+                          disabled={isProcessing === p.id}
+                        >
+                          {isProcessing === p.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Approve"}
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="ghost" 
+                          className="text-destructive hover:bg-red-50 h-9 rounded-xl font-bold" 
+                          onClick={() => handleAction(p, 'rejected')}
+                          disabled={isProcessing === p.id}
+                        >
+                          Reject
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="text-muted-foreground italic text-xs">
+                        Processed on {p.processedAt?.seconds ? format(new Date(p.processedAt.seconds * 1000), "MMM d, yyyy") : 'N/A'}
                       </div>
                     )}
                   </TableCell>
@@ -149,7 +216,10 @@ export default function AdminAffiliatePayouts() {
               {filteredPayouts?.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="p-20 text-center text-muted-foreground italic">
-                    No payout requests found.
+                    <div className="flex flex-col items-center gap-2">
+                      <XCircle className="h-8 w-8 opacity-20" />
+                      <p>No payout requests found matching your filters.</p>
+                    </div>
                   </TableCell>
                 </TableRow>
               )}

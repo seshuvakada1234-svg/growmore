@@ -27,14 +27,14 @@ export default function AffiliateDashboard() {
   const appRef = useMemoFirebase(() => !user?.uid ? null : doc(db, 'affiliateApplications', user.uid), [db, user?.uid]);
   const { data: application } = useDoc(appRef);
 
-  // 3. Fetch Siloed Stats
-  const statsRef = useMemoFirebase(() => !user?.uid ? null : doc(db, 'users', user.uid, 'affiliate', 'profile'), [db, user?.uid]);
+  // 3. Fetch Stats from affiliateProfiles root collection
+  const statsRef = useMemoFirebase(() => !user?.uid ? null : doc(db, 'affiliateProfiles', user.uid), [db, user?.uid]);
   const { data: stats } = useDoc(statsRef);
 
-  // 4. Fetch Siloed Commissions
+  // 4. Fetch Commissions from subcollection
   const commQuery = useMemoFirebase(() => {
     if (!user?.uid) return null;
-    return query(collection(db, 'users', user.uid, 'affiliate', 'profile', 'commissions'), orderBy('createdAt', 'desc'));
+    return query(collection(db, 'affiliateProfiles', user.uid, 'commissions'), orderBy('createdAt', 'desc'));
   }, [db, user?.uid]);
   const { data: commissions } = useCollection(commQuery);
 
@@ -108,8 +108,8 @@ export default function AffiliateDashboard() {
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
             {[
-              { label: "Gross Earnings", value: `₹${stats?.totalEarnings || 0}`, icon: Wallet, color: "bg-blue-50 text-blue-600" },
-              { label: "Available", value: `₹${balance}`, icon: Zap, color: "bg-emerald-50 text-emerald-600" },
+              { label: "Gross Earnings", value: `₹${(stats?.totalEarnings || 0).toLocaleString()}`, icon: Wallet, color: "bg-blue-50 text-blue-600" },
+              { label: "Available", value: `₹${balance.toLocaleString()}`, icon: Zap, color: "bg-emerald-50 text-emerald-600" },
               { label: "Referrals", value: stats?.totalReferrals || 0, icon: Users, color: "bg-purple-50 text-purple-600" },
               { label: "Total Clicks", value: stats?.totalClicks || 0, icon: TrendingUp, color: "bg-orange-50 text-orange-600" }
             ].map((s, i) => (
@@ -148,7 +148,7 @@ export default function AffiliateDashboard() {
                       {commissions?.map(c => (
                         <tr key={c.id} className="hover:bg-accent/30 transition-colors">
                           <td className="p-6 font-mono text-xs font-bold text-primary">#{c.orderId?.substring(0, 10)}</td>
-                          <td className="p-6 font-extrabold">₹{c.amount}</td>
+                          <td className="p-6 font-extrabold">₹{c.amount.toLocaleString()}</td>
                           <td className="p-6 text-sm text-muted-foreground">{c.createdAt?.seconds ? format(new Date(c.createdAt.seconds * 1000), 'MMM d, yyyy') : 'Recent'}</td>
                           <td className="p-6">
                             <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${c.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>{c.status}</span>
@@ -168,7 +168,7 @@ export default function AffiliateDashboard() {
                 <div className="space-y-6">
                   <div>
                     <p className="text-xs text-white/60 uppercase font-bold tracking-widest mb-1">Available</p>
-                    <h4 className="text-4xl font-extrabold">₹{balance}</h4>
+                    <h4 className="text-4xl font-extrabold">₹{balance.toLocaleString()}</h4>
                   </div>
                   <div className="pt-6 border-t border-white/10 space-y-4">
                     <p className="text-xs text-white/70 italic">Minimum withdrawal is ₹500.</p>

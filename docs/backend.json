@@ -49,10 +49,12 @@
       "title": "AffiliatePayout",
       "type": "object",
       "properties": {
-        "affiliateId": { "type": "string" },
+        "userId": { "type": "string" },
         "amount": { "type": "number" },
         "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
-        "requestedAt": { "type": "string", "format": "date-time" }
+        "createdAt": { "type": "string", "format": "date-time" },
+        "processedAt": { "type": "string", "format": "date-time" },
+        "processedBy": { "type": "string" }
       }
     }
   },
@@ -62,10 +64,10 @@
   "firestore": {
     "/users/{userId}": { "schema": { "$ref": "#/entities/UserProfile" }, "description": "Global user roles" },
     "/affiliateApplications/{userId}": { "schema": { "$ref": "#/entities/AffiliateApplication" }, "description": "Pending applications" },
-    "/users/{userId}/affiliate/profile": { "schema": { "$ref": "#/entities/AffiliateProfile" }, "description": "Earnings and stats" },
-    "/users/{userId}/affiliate/profile/commissions/{id}": { "schema": { "$ref": "#/entities/AffiliateCommission" }, "description": "Individual earning logs" },
-    "/users/{userId}/affiliate/profile/payouts/{id}": { "schema": { "$ref": "#/entities/AffiliatePayout" }, "description": "Withdrawal requests" },
-    "/affiliateClicks/{id}": { "schema": "object", "description": "Raw click logs (top-level for anonymous tracking)" },
+    "/affiliateProfiles/{userId}": { "schema": { "$ref": "#/entities/AffiliateProfile" }, "description": "Earnings and stats" },
+    "/affiliateProfiles/{userId}/commissions/{id}": { "schema": { "$ref": "#/entities/AffiliateCommission" }, "description": "Individual earning logs" },
+    "/affiliateProfiles/{userId}/payouts/{id}": { "schema": { "$ref": "#/entities/AffiliatePayout" }, "description": "Withdrawal requests" },
+    "/affiliateClicks/{id}": { "schema": "object", "description": "Raw click logs" },
     "/orders/{orderId}": { "schema": "object", "description": "Orders with referral attribution" }
   }
 }

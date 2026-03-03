@@ -20,7 +20,7 @@ export default function AdminAffiliates() {
   const appsQuery = useMemoFirebase(() => query(collection(db, 'affiliateApplications'), orderBy('createdAt', 'desc')), [db]);
   const { data: applications, isLoading: appsLoading } = useCollection(appsQuery);
 
-  // Fetch Approved Affiliates directly from users collection (more reliable than collectionGroup for docs)
+  // Fetch Approved Affiliates directly from users collection
   const affiliatesQuery = useMemoFirebase(() => 
     query(collection(db, 'users'), where('role', '==', 'affiliate')), 
     [db]
@@ -33,8 +33,8 @@ export default function AdminAffiliates() {
       // 1. Update User Role
       await updateDoc(doc(db, 'users', userId), { role: 'affiliate', updatedAt: serverTimestamp() });
       
-      // 2. Create Profile in nested path
-      await setDoc(doc(db, 'users', userId, 'affiliate', 'profile'), {
+      // 2. Create Profile in affiliateProfiles root collection
+      await setDoc(doc(db, 'affiliateProfiles', userId), {
         affiliateId: userId,
         totalEarnings: 0,
         paidEarnings: 0,
@@ -49,6 +49,7 @@ export default function AdminAffiliates() {
 
       toast({ title: "Approved!", description: "Partner has been added to the program." });
     } catch (e) {
+      console.error(e);
       toast({ title: "Error", description: "Failed to approve partner.", variant: "destructive" });
     } finally {
       setIsProcessing(null);

@@ -26,14 +26,14 @@ export default function AffiliatePayoutsPage() {
   const userProfileRef = useMemoFirebase(() => (!db || !user?.uid) ? null : doc(db, 'users', user.uid), [db, user?.uid]);
   const { data: profile, isLoading: isProfileLoading } = useDoc(userProfileRef);
 
-  // Fetch Siloed Stats
-  const statsRef = useMemoFirebase(() => (!db || !user?.uid) ? null : doc(db, 'users', user.uid, 'affiliate', 'profile'), [db, user?.uid]);
+  // Fetch Stats from affiliateProfiles collection
+  const statsRef = useMemoFirebase(() => (!db || !user?.uid) ? null : doc(db, 'affiliateProfiles', user.uid), [db, user?.uid]);
   const { data: stats } = useDoc(statsRef);
 
-  // Fetch Siloed Payouts
+  // Fetch Payouts from affiliateProfiles subcollection
   const payoutsQuery = useMemoFirebase(() => {
     if (!db || !user?.uid) return null;
-    return query(collection(db, 'users', user.uid, 'affiliate', 'profile', 'payouts'), orderBy('requestedAt', 'desc'));
+    return query(collection(db, 'affiliateProfiles', user.uid, 'payouts'), orderBy('createdAt', 'desc'));
   }, [db, user?.uid]);
   const { data: payouts, isLoading: isPayoutsLoading } = useCollection(payoutsQuery);
 
@@ -82,14 +82,15 @@ export default function AffiliatePayoutsPage() {
 
     setIsSubmitting(true);
     const payoutData = {
-      affiliateId: user!.uid,
+      userId: user!.uid,
       amount: requestAmount,
-      requestedAt: serverTimestamp(),
-      status: "pending"
+      createdAt: serverTimestamp(),
+      status: "pending",
+      updatedAt: serverTimestamp()
     };
 
     try {
-      await addDoc(collection(db, 'users', user!.uid, 'affiliate', 'profile', 'payouts'), payoutData);
+      await addDoc(collection(db, 'affiliateProfiles', user!.uid, 'payouts'), payoutData);
       toast({ title: "Request Submitted", description: "Your payout request is now pending approval." });
       setAmount("");
     } catch (error) {
@@ -113,10 +114,10 @@ export default function AffiliatePayoutsPage() {
               <Card className="rounded-[2rem] border-none shadow-sm bg-primary text-white overflow-hidden">
                 <CardContent className="p-8 space-y-6">
                   <div className="flex items-center gap-3 opacity-80"><Wallet className="h-5 w-5" /><span className="text-sm font-bold uppercase tracking-wider">Available</span></div>
-                  <h2 className="text-5xl font-extrabold font-headline">₹{availableBalance}</h2>
+                  <h2 className="text-5xl font-extrabold font-headline">₹{availableBalance.toLocaleString()}</h2>
                   <div className="pt-4 space-y-2 text-sm border-t border-white/10">
-                    <div className="flex justify-between opacity-70"><span>Total Earned</span><span className="font-bold">₹{totalEarnings}</span></div>
-                    <div className="flex justify-between opacity-70"><span>Paid</span><span className="font-bold">₹{paidEarnings}</span></div>
+                    <div className="flex justify-between opacity-70"><span>Total Earned</span><span className="font-bold">₹{totalEarnings.toLocaleString()}</span></div>
+                    <div className="flex justify-between opacity-70"><span>Paid Out</span><span className="font-bold">₹{paidEarnings.toLocaleString()}</span></div>
                   </div>
                 </CardContent>
               </Card>
@@ -148,9 +149,11 @@ export default function AffiliatePayoutsPage() {
                       <Card key={payout.id} className="rounded-2xl border-none shadow-sm bg-white p-5 flex items-center justify-between">
                         <div>
                           <p className="font-bold text-primary">₹{payout.amount}</p>
-                          <p className="text-xs text-muted-foreground uppercase font-bold">{payout.requestedAt?.seconds ? format(new Date(payout.requestedAt.seconds * 1000), "MMM d, yyyy") : 'Recent'}</p>
+                          <p className="text-xs text-muted-foreground uppercase font-bold">{payout.createdAt?.seconds ? format(new Date(payout.createdAt.seconds * 1000), "MMM d, yyyy") : 'Recent'}</p>
                         </div>
-                        <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${payout.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : payout.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{payout.status}</span>
+                        <Badge className={`rounded-full text-[10px] font-bold uppercase ${payout.status === 'approved' ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100' : payout.status === 'rejected' ? 'bg-red-100 text-red-700 hover:bg-red-100' : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-100'}`}>
+                          {payout.status}
+                        </Badge>
                       </Card>
                     ))}
                   </div>
