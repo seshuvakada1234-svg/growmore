@@ -3,7 +3,7 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight } from 'lucide-react';
-import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
+import { useUser, useFirestore, useDoc } from "@/firebase";
 import { doc } from "firebase/firestore";
 
 const PERKS = [
@@ -18,20 +18,17 @@ export default function AffiliateBanner() {
   const { user, isUserLoading } = useUser();
   const db = useFirestore();
 
-  const profileRef = useMemoFirebase(() => {
-    if (!db || !user?.uid) return null;
-    return doc(db, 'affiliateProfiles', user.uid);
-  }, [db, user?.uid]);
+  // Direct reference to the affiliate profile
+  const profileRef =
+    user && db ? doc(db, 'affiliateProfiles', user.uid) : null;
 
   const { data: affiliateData, isLoading: isDocLoading } = useDoc(profileRef);
 
-  // Prevent flicker
+  // Prevent flicker during load
   if (isUserLoading || (user && isDocLoading)) return null;
 
+  // Safe approval logic
   const isApproved = affiliateData?.approved === true;
-  const isPending = affiliateData?.approved === false;
-  const isNotApplied = user && !affiliateData;
-  const isGuest = !user;
 
   return (
     <section className="py-10 md:py-14">
@@ -40,20 +37,22 @@ export default function AffiliateBanner() {
           <div className="relative z-10 p-8 md:p-12 w-full">
             <div className="flex flex-col md:flex-row items-center gap-8 md:gap-12">
 
-              {/* LEFT SIDE */}
+              {/* LEFT SIDE CONTENT */}
               <div className="flex-1 text-white text-center md:text-left">
 
                 <div className="inline-flex items-center gap-2 bg-white/15 rounded-full px-4 py-1.5 mb-6">
                   <span className="text-[#A5D6A7] text-sm font-bold uppercase tracking-wider">
-                    {isApproved ? "✅ Official Monterra Partner" : "💸 Earn While You Share"}
+                    {isApproved
+                      ? "✅ Official Monterra Partner"
+                      : "💸 Earn While You Share"}
                   </span>
                 </div>
 
                 <h2 className="font-headline text-3xl md:text-5xl font-extrabold mb-4 leading-tight">
                   {isApproved ? (
                     <>
-                      Welcome Partner<br />
-                      <span className="text-[#A5D6A7]">Program</span>
+                      Welcome to Monterra<br />
+                      <span className="text-[#A5D6A7]">Partner Program</span>
                     </>
                   ) : (
                     <>
@@ -64,8 +63,8 @@ export default function AffiliateBanner() {
                 </h2>
 
                 <p className="text-white/75 text-base md:text-lg leading-relaxed mb-8 max-w-md mx-auto md:mx-0">
-                  {isApproved 
-                    ? "Thank you for being part of the Monterra family. Access your links, track your performance, and manage your earnings below."
+                  {isApproved
+                    ? "Thank you for being part of the Monterra family. Access your links, track your performance, and manage your earnings in your dashboard."
                     : "Love plants? Share your referral link and earn up to 10% commission on every order. Payouts directly to your bank account every 30 days."
                   }
                 </p>
@@ -73,29 +72,23 @@ export default function AffiliateBanner() {
                 <div className="flex flex-col items-center md:items-start gap-4">
 
                   <button
-                    onClick={() => router.push('/affiliate')}
+                    onClick={() => router.push(isApproved ? '/affiliate/dashboard' : '/affiliate/apply')}
                     className="inline-flex items-center gap-2 bg-white text-primary font-bold px-8 py-4 rounded-2xl hover:bg-[#F1F8E9] transition-all hover:shadow-lg hover:-translate-y-0.5 text-lg group"
                   >
                     {isApproved ? "Partner Dashboard" : "Join Affiliate Program"}
                     <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
                   </button>
 
-                  {isPending && (
+                  {!isApproved && affiliateData && (
                     <p className="text-white/60 text-xs font-medium italic">
                       Your application is under review. Approval usually takes 24–48 hours.
-                    </p>
-                  )}
-
-                  {(isGuest || isNotApplied) && (
-                    <p className="text-white/50 text-xs font-medium">
-                      Free to join · No minimum sales · Instant link generation
                     </p>
                   )}
 
                 </div>
               </div>
 
-              {/* RIGHT SIDE PERKS */}
+              {/* RIGHT SIDE PERKS GRID */}
               <div className="grid grid-cols-2 gap-4 flex-shrink-0 w-full md:w-auto">
                 {PERKS.map((perk, i) => (
                   <div
@@ -118,7 +111,7 @@ export default function AffiliateBanner() {
             </div>
           </div>
 
-          {/* Decorative Background */}
+          {/* Decorative Background Elements */}
           <div className="absolute top-0 right-0 w-80 h-80 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/4 pointer-events-none blur-3xl opacity-50"></div>
           <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-white/5 rounded-full translate-y-1/2 pointer-events-none blur-3xl opacity-50"></div>
 
