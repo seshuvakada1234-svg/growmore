@@ -1,10 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight } from 'lucide-react';
-import { useUser, useFirestore, useDoc } from "@/firebase";
-import { doc } from "firebase/firestore";
+import { useUser, useFirestore } from "@/firebase";
+import { doc, getDoc } from "firebase/firestore";
 
 const PERKS = [
   { icon: '💰', title: 'Up to 10% Commission', sub: 'Per successful order' },
@@ -18,17 +18,40 @@ export default function AffiliateBanner() {
   const { user, isUserLoading } = useUser();
   const db = useFirestore();
 
-  // Direct reference to the affiliate profile
-  const profileRef =
-    user && db ? doc(db, 'affiliateProfiles', user.uid) : null;
+  const [affiliateProfile, setAffiliateProfile] = useState<any>(null);
+  const [isProfileLoading, setIsProfileLoading] = useState(true);
 
-  const { data: affiliateData, isLoading: isDocLoading } = useDoc(profileRef);
+  useEffect(() => {
+    async function fetchProfile() {
+      if (!user?.uid || !db) {
+        setIsProfileLoading(false);
+        return;
+      }
 
-  // Prevent flicker during load
-  if (isUserLoading || (user && isDocLoading)) return null;
+      try {
+        const profileRef = doc(db, 'affiliateProfiles', user.uid);
+        const snap = await getDoc(profileRef);
+        if (snap.exists()) {
+          setAffiliateProfile(snap.data());
+        } else {
+          setAffiliateProfile(null);
+        }
+      } catch (err) {
+        console.error("Error fetching affiliate profile:", err);
+      } finally {
+        setIsProfileLoading(false);
+      }
+    }
 
-  // Safe approval logic
-  const isApproved = affiliateData?.approved === true;
+    if (!isUserLoading) {
+      fetchProfile();
+    }
+  }, [user, isUserLoading, db]);
+
+  // Wait until profile loads before rendering decision to prevent flicker/incorrect text
+  if (isUserLoading || isProfileLoading) return null;
+
+  const isApproved = affiliateProfile?.approved === true;
 
   return (
     <section className="py-10 md:py-14">
@@ -49,17 +72,10 @@ export default function AffiliateBanner() {
                 </div>
 
                 <h2 className="font-headline text-3xl md:text-5xl font-extrabold mb-4 leading-tight">
-                  {isApproved ? (
-                    <>
-                      Welcome to Monterra<br />
-                      <span className="text-[#A5D6A7]">Partner Program</span>
-                    </>
-                  ) : (
-                    <>
-                      Join Monterra Affiliate<br />
-                      <span className="text-[#A5D6A7]">Program & Earn</span>
-                    </>
-                  )}
+                  {isApproved 
+                    ? "Welcome to Monterra Partner Program"
+                    : "Join Monterra Affiliate Program & Earn"
+                  }
                 </h2>
 
                 <p className="text-white/75 text-base md:text-lg leading-relaxed mb-8 max-w-md mx-auto md:mx-0">
@@ -79,7 +95,7 @@ export default function AffiliateBanner() {
                     <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
                   </button>
 
-                  {!isApproved && affiliateData && (
+                  {!isApproved && affiliateProfile && (
                     <p className="text-white/60 text-xs font-medium italic">
                       Your application is under review. Approval usually takes 24–48 hours.
                     </p>

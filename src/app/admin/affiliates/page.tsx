@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -33,13 +32,14 @@ export default function AdminAffiliates() {
       // 1. Update User Role
       await updateDoc(doc(db, 'users', userId), { role: 'affiliate', updatedAt: serverTimestamp() });
       
-      // 2. Create Profile in affiliateProfiles root collection
+      // 2. Create Profile in affiliateProfiles root collection with approved flag
       await setDoc(doc(db, 'affiliateProfiles', userId), {
         affiliateId: userId,
         totalEarnings: 0,
         paidEarnings: 0,
         totalClicks: 0,
         totalReferrals: 0,
+        approved: true, // Set explicit flag for frontend logic
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
