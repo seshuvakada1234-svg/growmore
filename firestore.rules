@@ -6,8 +6,7 @@ service cloud.firestore {
     // --- Helpers ---
     function isSignedIn() { return request.auth != null; }
     
-    // Hardcoded failsafe for master admin email to prevent bootstrap lockouts
-    // Improved to be more resilient against non-existent documents
+    // Improved isAdmin check with master admin failsafe
     function isAdmin() { 
       return isSignedIn() && (
         request.auth.token.email == 'seshuvakada1234@gmail.com' ||
@@ -76,6 +75,7 @@ service cloud.firestore {
     }
 
     // --- Collection Group Queries (CRITICAL for Admin) ---
+    // These allow admins to query all payouts/commissions regardless of parent path.
     match /{path=**}/payouts/{id} {
       allow read: if isAdmin();
     }

@@ -7,7 +7,7 @@ import { doc, getDoc, setDoc, serverTimestamp, updateDoc } from 'firebase/firest
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
 const ADMIN_EMAIL = 'seshuvakada1234@gmail.com';
@@ -19,8 +19,12 @@ export function GoogleLoginButton() {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleGoogleSignIn = async () => {
-    setIsLoading(true);
+    // CRITICAL: We minimize work before calling signInWithPopup to avoid browser popup blockers.
+    // Browsers block popups if there is any asynchronous delay between the click and the window.open call.
     const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    
+    setIsLoading(true);
     
     try {
       const result = await signInWithPopup(auth, provider);
@@ -35,7 +39,6 @@ export function GoogleLoginButton() {
         const role = user.email === ADMIN_EMAIL ? 'admin' : 'user';
         const names = user.displayName?.split(' ') || [];
         
-        // 1. Set main user document
         await setDoc(userRef, {
           id: user.uid,
           email: user.email,
@@ -47,7 +50,6 @@ export function GoogleLoginButton() {
           updatedAt: serverTimestamp(),
         });
 
-        // 2. If this is the master admin, ensure they exist in the roles_admin DBAC collection
         if (role === 'admin') {
           const roleAdminRef = doc(db, 'roles_admin', user.uid);
           await setDoc(roleAdminRef, {
@@ -57,9 +59,8 @@ export function GoogleLoginButton() {
           });
         }
       } else {
-        // PATCH: If user document exists, ensure master admin permissions are in sync
+        // Ensure master admin permissions are in sync
         if (user.email === ADMIN_EMAIL) {
-          // 1. Ensure user document role is 'admin'
           if (userSnap.data()?.role !== 'admin') {
             await updateDoc(userRef, { 
               role: 'admin',
@@ -67,7 +68,6 @@ export function GoogleLoginButton() {
             });
           }
 
-          // 2. Ensure record exists in roles_admin DBAC collection
           const roleAdminRef = doc(db, 'roles_admin', user.uid);
           const roleSnap = await getDoc(roleAdminRef);
           if (!roleSnap.exists()) {
@@ -88,34 +88,58 @@ export function GoogleLoginButton() {
       router.push('/');
     } catch (error: any) {
       console.error("Auth error:", error);
-      toast({
-        title: "Sign in failed",
-        description: error.message || "An error occurred during sign in.",
-        variant: "destructive",
-      });
+      
+      // Handle specific error codes
+      if (error.code === 'auth/popup-blocked') {
+        toast({
+          title: "Popup Blocked",
+          description: "Please allow popups for this site in your browser settings and try again.",
+          variant: "destructive",
+        });
+      } else if (error.code === 'auth/cancelled-popup-request') {
+        toast({
+          title: "Sign in cancelled",
+          description: "The sign-in window was closed.",
+        });
+      } else {
+        toast({
+          title: "Sign in failed",
+          description: error.message || "An error occurred during sign in.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <Button 
-      onClick={handleGoogleSignIn} 
-      disabled={isLoading}
-      variant="outline"
-      className="w-full flex items-center justify-center gap-3 h-12 rounded-xl font-bold border-2"
-    >
-      {isLoading ? (
-        <Loader2 className="h-5 w-5 animate-spin" />
-      ) : (
-        <svg width="20" height="20" viewBox="0 0 24 24" className="mr-2">
-          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-        </svg>
+    <div className="space-y-4 w-full">
+      <Button 
+        onClick={handleGoogleSignIn} 
+        disabled={isLoading}
+        variant="outline"
+        className="w-full flex items-center justify-center gap-3 h-12 rounded-xl font-bold border-2"
+      >
+        {isLoading ? (
+          <Loader2 className="h-5 w-5 animate-spin" />
+        ) : (
+          <svg width="20" height="20" viewBox="0 0 24 24" className="mr-2">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+          </svg>
+        )}
+        Continue with Google
+      </Button>
+      
+      {!isLoading && (
+        <div className="flex items-start gap-2 p-3 bg-blue-50/50 text-blue-700 rounded-xl text-[11px] font-medium border border-blue-100">
+          <AlertCircle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+          <p>Browser popup blockers can prevent the sign-in window from opening. If nothing happens, please check your address bar for a blocked popup icon.</p>
+        </div>
       )}
-      Continue with Google
-    </Button>
+    </div>
   );
 }
