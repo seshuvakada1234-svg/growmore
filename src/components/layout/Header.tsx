@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from "next/link";
@@ -12,6 +11,7 @@ import { useUser, useAuth, useFirestore, useDoc, useMemoFirebase } from "@/fireb
 import { signOut } from "firebase/auth";
 import { doc } from "firebase/firestore";
 import { useRouter, usePathname } from "next/navigation";
+import { useAffiliate } from "@/context/affiliate-context";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,16 +29,13 @@ export function Header() {
   const router = useRouter();
   const pathname = usePathname();
 
-  // Fetch basic user profile for admin role check
+  // Unified Affiliate Status
+  const { isApproved: isAffiliate } = useAffiliate();
+
+  // Admin Check
   const userProfileRef = useMemoFirebase(() => (!db || !user?.uid) ? null : doc(db, 'users', user.uid), [db, user?.uid]);
   const { data: profile } = useDoc(userProfileRef);
-  
-  // Single source of truth for affiliate status: affiliateProfiles collection
-  const affiliateRef = useMemoFirebase(() => (!db || !user?.uid) ? null : doc(db, 'affiliateProfiles', user.uid), [db, user?.uid]);
-  const { data: affProfile } = useDoc(affiliateRef);
-
   const isAdmin = profile?.role === 'admin';
-  const isAffiliate = affProfile?.approved === true;
 
   // Barrier: Redirect Admins away from storefront to ensure pure Admin experience
   useEffect(() => {
@@ -57,7 +54,10 @@ export function Header() {
     updateCount();
     window.addEventListener('cart-updated', updateCount);
     window.addEventListener('storage', updateCount);
-    return () => { window.removeEventListener('cart-updated', updateCount); window.removeEventListener('storage', updateCount); };
+    return () => { 
+      window.removeEventListener('cart-updated', updateCount); 
+      window.removeEventListener('storage', updateCount); 
+    };
   }, []);
 
   const handleLogout = async () => {

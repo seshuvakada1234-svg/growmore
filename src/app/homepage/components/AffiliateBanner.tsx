@@ -1,11 +1,9 @@
-
 'use client';
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight } from 'lucide-react';
-import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
-import { doc } from "firebase/firestore";
+import { useAffiliate } from '@/context/affiliate-context';
 
 const PERKS = [
   { icon: '💰', title: 'Up to 10% Commission', sub: 'Per successful order' },
@@ -16,23 +14,12 @@ const PERKS = [
 
 export default function AffiliateBanner() {
   const router = useRouter();
-  const { user, isUserLoading } = useUser();
-  const db = useFirestore();
+  const { isApproved, loading, affiliateProfile } = useAffiliate();
 
-  // Single source of truth: fetch the affiliate profile document in real-time
-  const affiliateProfileRef = useMemoFirebase(() => {
-    if (!db || !user?.uid) return null;
-    return doc(db, 'affiliateProfiles', user.uid);
-  }, [db, user?.uid]);
-
-  const { data: affiliateProfile, isLoading: isProfileLoading } = useDoc(affiliateProfileRef);
-
-  // Prevent flicker by returning null while auth or profile data is loading
-  if (isUserLoading || (user && isProfileLoading)) {
+  // Prevent flicker by returning null while loading
+  if (loading) {
     return null;
   }
-
-  const isApproved = affiliateProfile?.approved === true;
 
   return (
     <section className="py-10 md:py-14">
@@ -85,7 +72,7 @@ export default function AffiliateBanner() {
 
                   {!isApproved && affiliateProfile && (
                     <p className="text-white/60 text-xs font-medium italic">
-                      Your application is under review. Approval usually takes 24–48 hours.
+                      Your affiliate application is under review. Approval usually takes 24–48 hours.
                     </p>
                   )}
 

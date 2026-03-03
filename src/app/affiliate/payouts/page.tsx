@@ -1,4 +1,3 @@
-
 "use client";
 
 import { Header } from "@/components/layout/Header";
@@ -10,9 +9,11 @@ import { Label } from "@/components/ui/label";
 import { Wallet, ArrowLeft, Clock, AlertCircle, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "@/hooks/use-toast";
-import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase";
-import { doc, collection, addDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
+import { useUser, useFirestore, useMemoFirebase, useCollection } from "@/firebase";
+import { collection, addDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
 import { useRouter } from "next/navigation";
+import { useAffiliate } from "@/context/affiliate-context";
+import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { format } from "date-fns";
 
@@ -23,12 +24,8 @@ export default function AffiliatePayoutsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [amount, setAmount] = useState("");
 
-  const userProfileRef = useMemoFirebase(() => (!db || !user?.uid) ? null : doc(db, 'users', user.uid), [db, user?.uid]);
-  const { data: profile, isLoading: isProfileLoading } = useDoc(userProfileRef);
-
-  // Fetch Stats from affiliateProfiles collection
-  const statsRef = useMemoFirebase(() => (!db || !user?.uid) ? null : doc(db, 'affiliateProfiles', user.uid), [db, user?.uid]);
-  const { data: stats } = useDoc(statsRef);
+  // Unified Source of Truth
+  const { isApproved: isApprovedAffiliate, affiliateProfile: stats, loading: isAffiliateLoading } = useAffiliate();
 
   // Fetch Payouts from affiliateProfiles subcollection
   const payoutsQuery = useMemoFirebase(() => {
@@ -41,11 +38,10 @@ export default function AffiliatePayoutsPage() {
     if (!isUserLoading && !user) router.push('/login?redirect=/affiliate/payouts');
   }, [user, isUserLoading, router]);
 
-  if (isUserLoading || isProfileLoading) {
+  if (isUserLoading || isAffiliateLoading) {
     return <div className="min-h-screen flex flex-col"><Header /><main className="flex-grow flex items-center justify-center"><Loader2 className="animate-spin text-primary" /></main><Footer /></div>;
   }
 
-  const isApprovedAffiliate = profile?.role === 'affiliate';
   if (!isApprovedAffiliate) {
     return (
       <div className="min-h-screen flex flex-col">

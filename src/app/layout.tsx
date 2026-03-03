@@ -3,6 +3,7 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster"
 import { FirebaseClientProvider } from '@/firebase/client-provider';
 import { ReferralTracker } from '@/components/ReferralTracker';
+import { AffiliateProvider } from '@/context/affiliate-context';
 import { Suspense } from 'react';
 
 export const viewport: Viewport = {
@@ -34,11 +35,13 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased bg-background text-foreground">
         <FirebaseClientProvider>
-          <Suspense fallback={null}>
-            <ReferralTracker />
-          </Suspense>
-          {children}
-          <Toaster />
+          <AffiliateProvider>
+            <Suspense fallback={null}>
+              <ReferralTracker />
+            </Suspense>
+            {children}
+            <Toaster />
+          </AffiliateProvider>
         </FirebaseClientProvider>
       </body>
     </html>

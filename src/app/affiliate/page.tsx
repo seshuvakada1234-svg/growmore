@@ -5,11 +5,12 @@ import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Users, TrendingUp, Wallet, Copy, Link as LinkIcon, CheckCircle2, Clock, Zap, Loader2 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { toast } from "@/hooks/use-toast";
 import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase";
-import { doc, setDoc, serverTimestamp, query, collection, where, orderBy } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp, query, collection, orderBy } from "firebase/firestore";
 import { useRouter } from "next/navigation";
+import { useAffiliate } from "@/context/affiliate-context";
 import Link from "next/link";
 import { format } from "date-fns";
 
@@ -18,19 +19,14 @@ export default function AffiliateDashboard() {
   const db = useFirestore();
   const router = useRouter();
 
-  // 1. Fetch User Data
-  const userRef = useMemoFirebase(() => !user?.uid ? null : doc(db, 'users', user.uid), [db, user?.uid]);
-  const { data: profile } = useDoc(userRef);
+  // Unified source of truth
+  const { isApproved, affiliateProfile, loading: isAffiliateLoading } = useAffiliate();
 
-  // 2. Fetch Application
+  // Fetch Application (Legacy/Separate for prospective users)
   const appRef = useMemoFirebase(() => !user?.uid ? null : doc(db, 'affiliateApplications', user.uid), [db, user?.uid]);
   const { data: application } = useDoc(appRef);
 
-  // 3. Fetch Stats from affiliateProfiles root collection
-  const statsRef = useMemoFirebase(() => !user?.uid ? null : doc(db, 'affiliateProfiles', user.uid), [db, user?.uid]);
-  const { data: stats } = useDoc(statsRef);
-
-  // 4. Fetch Commissions from subcollection
+  // Fetch Commissions from subcollection
   const commQuery = useMemoFirebase(() => {
     if (!user?.uid) return null;
     return query(collection(db, 'affiliateProfiles', user.uid, 'commissions'), orderBy('createdAt', 'desc'));
@@ -54,10 +50,10 @@ export default function AffiliateDashboard() {
     toast({ title: "Link Copied!" });
   };
 
-  if (isUserLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>;
+  if (isUserLoading || isAffiliateLoading) {
+    return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>;
+  }
 
-  const role = profile?.role || 'user';
-  const isApproved = role === 'affiliate';
   const isPending = !!application && application.status === 'pending';
 
   if (!isApproved) {
@@ -88,6 +84,7 @@ export default function AffiliateDashboard() {
     );
   }
 
+  const stats = affiliateProfile;
   const balance = (stats?.totalEarnings || 0) - (stats?.paidEarnings || 0);
 
   return (
