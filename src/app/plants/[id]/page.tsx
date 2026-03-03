@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useParams } from "next/navigation";
@@ -8,7 +7,7 @@ import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PRODUCTS } from "@/lib/mock-data";
-import { Star, Truck, ShieldCheck, Heart, ShoppingCart, Minus, Plus, Sun, Droplets } from "lucide-react";
+import { Star, Truck, ShieldCheck, Heart, ShoppingCart, Minus, Plus, Sun, Droplets, Leaf } from "lucide-react";
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
