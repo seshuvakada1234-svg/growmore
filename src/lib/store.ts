@@ -528,7 +528,7 @@ export const MOCK_USERS: User[] = [
     name: 'Seshu Vakada',
     email: 'seshuvakada1234@gmail.com',
     role: 'admin',
-    avatar: 'https://img.rocket.new/generatedImages/rocket_gen_img_16a0e3435-1768888509385.png',
+    avatar: 'https://picsum.photos/seed/admin/200/200',
     joinedAt: '2024-01-01',
     isAffiliate: false
   },
