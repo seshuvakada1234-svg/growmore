@@ -5,9 +5,9 @@ import Footer from '@/components/Footer';
 import PlantListingGrid from './components/PlantListingGrid';
 
 export const metadata: Metadata = {
-  title: 'Buy Plants Online – 500+ Varieties | PlantShop India',
-  description: 'Browse our complete collection of indoor plants, succulents, tropical plants & more. Filter by care level, price, size. Free delivery above ₹499.',
-  keywords: 'buy indoor plants online, plant shop India, succulents online, air purifying plants',
+  title: 'Buy Plants Online – 500+ Varieties | Monterra',
+  description: 'Browse our complete collection of indoor plants, succulents, tropical plants & more at Monterra. Filter by care level, price, size. Free delivery above ₹499.',
+  keywords: 'buy indoor plants online, plant shop India, succulents online, air purifying plants, Monterra',
 };
 
 export default function PlantListingPage() {

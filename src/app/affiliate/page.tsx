@@ -1,4 +1,3 @@
-
 "use client";
 
 import { Header } from "@/components/layout/Header";
@@ -71,13 +70,13 @@ export default function AffiliateDashboard() {
               <Card className="p-12 space-y-6 rounded-[3rem] border-none shadow-xl">
                 <div className="h-20 w-20 bg-yellow-50 text-yellow-600 rounded-full flex items-center justify-center mx-auto"><Clock className="h-10 w-10 animate-pulse" /></div>
                 <h1 className="text-4xl font-headline font-extrabold text-primary">Application Under Review</h1>
-                <p className="text-muted-foreground text-lg">Thanks for your interest! Our team is verifying your profile.</p>
+                <p className="text-muted-foreground text-lg">Thanks for your interest in the Monterra Partner Program! Our team is verifying your profile.</p>
               </Card>
             ) : (
               <div className="space-y-12">
                 <div className="space-y-4">
-                  <h1 className="text-5xl md:text-7xl font-headline font-extrabold text-primary">Grow With Us.</h1>
-                  <p className="text-xl text-muted-foreground max-w-2xl mx-auto">Join the GreenScape Partner Program and earn up to 10% commission.</p>
+                  <h1 className="text-5xl md:text-7xl font-headline font-extrabold text-primary">Grow With Monterra.</h1>
+                  <p className="text-xl text-muted-foreground max-w-2xl mx-auto">Join the Monterra Partner Program and earn up to 10% commission on every successful referral.</p>
                   <Button onClick={handleApply} size="lg" className="h-14 px-10 rounded-full text-lg font-bold mt-6 shadow-xl shadow-primary/20">Apply to Join</Button>
                 </div>
               </div>
@@ -98,11 +97,11 @@ export default function AffiliateDashboard() {
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row items-end justify-between mb-10 gap-4">
             <div>
-              <h1 className="text-3xl font-headline font-extrabold text-primary">Partner Dashboard</h1>
+              <h1 className="text-3xl font-headline font-extrabold text-primary">Monterra Affiliate Dashboard</h1>
               <p className="text-muted-foreground">Manage your links and track your earnings.</p>
             </div>
             <div className="bg-emerald-100 text-emerald-800 px-4 py-2 rounded-full font-bold text-xs border border-emerald-200 flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4" /> Official GreenScape Partner
+              <CheckCircle2 className="h-4 w-4" /> Official Monterra Partner
             </div>
           </div>
 

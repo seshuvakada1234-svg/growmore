@@ -55,13 +55,13 @@ export default function LoginPage() {
                 <Leaf className="h-10 w-10 fill-current" />
               </div>
             </div>
-            <CardTitle className="text-3xl font-headline font-extrabold text-primary">Welcome Back</CardTitle>
+            <CardTitle className="text-3xl font-headline font-extrabold text-primary">Welcome to Monterra</CardTitle>
             <CardDescription className="text-lg">Sign in to manage your garden</CardDescription>
           </CardHeader>
           <CardContent className="px-10 pb-12 space-y-6">
             <GoogleLoginButton />
             <p className="text-xs text-center text-muted-foreground leading-relaxed">
-              By continuing, you agree to GreenScape's <br />
+              By continuing, you agree to Monterra's <br />
               <span className="underline cursor-pointer">Terms of Service</span> and <span className="underline cursor-pointer">Privacy Policy</span>.
             </p>
           </CardContent>

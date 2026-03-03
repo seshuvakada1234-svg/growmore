@@ -13,7 +13,7 @@ export default function Footer() {
           <div className="md:col-span-1">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-8 h-8 bg-[#66BB6A] rounded-lg flex items-center justify-center text-white font-bold text-sm">🌿</div>
-              <span className="font-bold text-lg tracking-tight">PlantShop</span>
+              <span className="font-bold text-lg tracking-tight">Monterra</span>
             </div>
             <p className="text-white/60 text-sm leading-relaxed mb-4">
               India's most loved online plant store. Bringing nature closer to your home since 2022.
@@ -71,7 +71,7 @@ export default function Footer() {
               </div>
               <div className="flex items-center gap-2 text-sm text-white/60">
                 <Icon name="EnvelopeIcon" size={14} className="text-[#66BB6A] flex-shrink-0" />
-                <span>support@plantshop.in</span>
+                <span>support@monterra.in</span>
               </div>
             </div>
             <div className="mt-4 flex items-center gap-2">
@@ -83,7 +83,7 @@ export default function Footer() {
 
         {/* Bottom Row */}
         <div className="flex flex-col md:flex-row items-center justify-between gap-4 pt-6">
-          <p className="text-white/40 text-xs">© 2026 PlantShop India. All rights reserved.</p>
+          <p className="text-white/40 text-xs">© 2026 Monterra. All rights reserved.</p>
           <div className="flex items-center gap-4 text-xs text-white/40">
             <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>
             <span>·</span>

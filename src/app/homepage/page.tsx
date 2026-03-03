@@ -11,9 +11,9 @@ import AffiliateBanner from './components/AffiliateBanner';
 import MarqueeStrip from './components/MarqueeStrip';
 
 export const metadata: Metadata = {
-  title: 'PlantShop – India\'s Best Online Plant Store | Buy Plants Online',
-  description: 'Shop 500+ indoor plants, succulents, and outdoor plants online. Free delivery above ₹499. 100% live plant guarantee. Bestsellers, new arrivals & exclusive deals.',
-  keywords: 'buy plants online, indoor plants, succulents, air purifying plants, plant delivery India',
+  title: 'Monterra – India\'s Best Online Plant Store | Grow Naturally',
+  description: 'Shop 500+ indoor plants, succulents, and outdoor plants online with Monterra. Free delivery above ₹499. 100% live plant guarantee. Bestsellers, new arrivals & affiliate rewards.',
+  keywords: 'buy plants online, indoor plants, succulents, air purifying plants, plant delivery India, Monterra',
 };
 
 export default function HomepagePage() {

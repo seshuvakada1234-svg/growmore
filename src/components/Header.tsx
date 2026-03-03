@@ -106,7 +106,7 @@ function AuthModal({ onClose }: { onClose: () => void }) {
       const isAdmin = email === 'seshuvakada1234@gmail.com';
       const mockUser = isAdmin
         ? { id: 'admin-1', name: 'Seshu Vakada', email, role: 'admin', isAffiliate: false }
-        : { id: `user-${Date.now()}`, name: name || 'Plant Lover', email: email || `user${phone}@plantshop.in`, role: 'user', isAffiliate: false };
+        : { id: `user-${Date.now()}`, name: name || 'Plant Lover', email: email || `user${phone}@monterra.in`, role: 'user', isAffiliate: false };
       localStorage.setItem('plantshop_user', JSON.stringify(mockUser));
       window.location.reload();
     }, 800);
@@ -118,10 +118,10 @@ function AuthModal({ onClose }: { onClose: () => void }) {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-xl font-bold text-[#1A2E1A]">Welcome to PlantShop</h2>
+            <h2 className="text-xl font-bold text-[#1A2E1A]">Welcome to Monterra</h2>
             <p className="text-sm text-[#7A9B77] mt-0.5">Sign in to shop, track orders & earn</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-500">
+          <button onClose={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-500">
             <Icon name="XMarkIcon" size={20} />
           </button>
         </div>
@@ -315,7 +315,7 @@ export default function Header() {
         const stored = JSON.parse(localStorage.getItem('plantshop_cart') || '[]');
         const count = stored.reduce((s: number, i: any) => s + (i.quantity || 0), 0);
         setCartCount(count);
-      } catch {}
+      } catch { }
     };
     updateCart();
     window.addEventListener('cart-updated', updateCart);
@@ -342,7 +342,7 @@ export default function Header() {
     <>
       {/* Offer Strip */}
       <div className="offer-strip text-white text-center py-2 text-xs font-semibold tracking-wide">
-        🌿 Free Delivery on orders above ₹499 &nbsp;|&nbsp; 🎁 Use code PLANT10 for 10% off &nbsp;|&nbsp; 🌱 New arrivals every week
+        🌿 Free Delivery on orders above ₹499 &nbsp;|&nbsp; 🎁 Use code MONTERRA10 for 10% off &nbsp;|&nbsp; 🌱 New arrivals every week
       </div>
 
       {/* Main Nav */}
@@ -351,7 +351,7 @@ export default function Header() {
           <div className="flex items-center gap-4 h-16">
             {/* Logo */}
             <Link href="/homepage" className="flex-shrink-0">
-              <AppLogo size={36} text="PlantShop" onClick={() => router.push('/homepage')} />
+              <AppLogo size={36} text="Monterra" onClick={() => router.push('/homepage')} />
             </Link>
 
             {/* Search Bar – Desktop */}
@@ -390,7 +390,7 @@ export default function Header() {
                   </Link>
                 ))}
                 {user?.role === 'admin' && (
-                  <Link href="/homepage" className="px-3 py-2 rounded-lg text-sm font-semibold text-[#E53935] hover:bg-red-50">
+                  <Link href="/admin" className="px-3 py-2 rounded-lg text-sm font-semibold text-[#E53935] hover:bg-red-50">
                     Admin
                   </Link>
                 )}
@@ -433,11 +433,11 @@ export default function Header() {
                         {user.isAffiliate && <span className="text-[10px] bg-[#E8F5E9] text-[#1B5E20] px-2 py-0.5 rounded-full font-bold mt-1 inline-block">AFFILIATE</span>}
                       </div>
                       {[
-                        { label: 'My Orders', icon: 'ShoppingBagIcon', href: '/homepage' },
-                        { label: 'My Profile', icon: 'UserIcon', href: '/homepage' },
-                        ...(user.isAffiliate ? [{ label: 'Affiliate Dashboard', icon: 'ChartBarIcon', href: '/homepage' }] : []),
-                        ...(!user.isAffiliate && user.role !== 'admin' ? [{ label: 'Join Affiliate', icon: 'GiftIcon', href: '/homepage' }] : []),
-                        ...(user.role === 'admin' ? [{ label: 'Admin Panel', icon: 'Cog6ToothIcon', href: '/homepage' }] : []),
+                        { label: 'My Orders', icon: 'ShoppingBagIcon', href: '/orders' },
+                        { label: 'My Profile', icon: 'UserIcon', href: '/profile' },
+                        ...(user.isAffiliate ? [{ label: 'Partner Dashboard', icon: 'ChartBarIcon', href: '/affiliate' }] : []),
+                        ...(!user.isAffiliate && user.role !== 'admin' ? [{ label: 'Join Affiliate', icon: 'GiftIcon', href: '/affiliate' }] : []),
+                        ...(user.role === 'admin' ? [{ label: 'Admin Panel', icon: 'Cog6ToothIcon', href: '/admin' }] : []),
                       ].map(item => (
                         <Link key={`user-menu-${item.label}`} href={item.href}
                           className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#F1F8E9] text-sm text-[#1A2E1A] transition-colors"

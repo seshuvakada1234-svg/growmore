@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from "next/link";
@@ -70,7 +69,7 @@ export function Header() {
         <div className="container mx-auto px-4 flex items-center justify-between">
           <Link href="/admin" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
             <Leaf className="h-8 w-8 fill-current" />
-            <span className="font-headline font-extrabold text-xl tracking-tight">Admin Console</span>
+            <span className="font-headline font-extrabold text-xl tracking-tight">Monterra Admin</span>
           </Link>
           <div className="flex items-center gap-4">
             <Badge variant="outline" className="text-white border-white/30 bg-white/10 uppercase tracking-widest text-[10px]">Super Admin</Badge>
@@ -91,13 +90,13 @@ export function Header() {
             <SheetContent side="left">
               <nav className="flex flex-col gap-6 mt-12">
                 <Link href="/plants" className="text-xl font-bold flex items-center gap-2"><Leaf className="h-5 w-5" /> Shop Plants</Link>
-                <Link href="/affiliate" className="text-xl font-bold flex items-center gap-2"><Award className="h-5 w-5" /> Partner Program</Link>
+                <Link href="/affiliate" className="text-xl font-bold flex items-center gap-2"><Award className="h-5 w-5" /> Monterra Partners</Link>
               </nav>
             </SheetContent>
           </Sheet>
           <Link href="/" className="flex items-center gap-2 text-primary group">
             <Leaf className="h-8 w-8 fill-current transition-transform group-hover:rotate-12" />
-            <span className="font-headline font-extrabold text-xl tracking-tight hidden sm:inline-block">GreenScape</span>
+            <span className="font-headline font-extrabold text-xl tracking-tight hidden sm:inline-block">Monterra</span>
           </Link>
         </div>
 

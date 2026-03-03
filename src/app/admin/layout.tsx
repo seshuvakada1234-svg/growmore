@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from "next/link";
@@ -99,7 +98,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className="flex flex-col h-full p-4">
       <div className="flex items-center gap-2 text-primary mb-10 px-2">
         <Leaf className="h-8 w-8 fill-current" />
-        <span className="font-headline font-extrabold text-2xl tracking-tight">GreenScape</span>
+        <span className="font-headline font-extrabold text-2xl tracking-tight">Monterra</span>
       </div>
       
       <nav className="flex-grow space-y-1">
@@ -158,7 +157,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </SheetContent>
             </Sheet>
             <h2 className="text-xl font-headline font-extrabold text-primary">
-              {navItems.find(item => item.href === pathname)?.name || "Admin Panel"}
+              {navItems.find(item => item.href === pathname)?.name || "Monterra Admin Dashboard"}
             </h2>
           </div>
           

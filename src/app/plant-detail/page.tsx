@@ -5,8 +5,8 @@ import Footer from '@/components/Footer';
 import PlantDetailClient from './components/PlantDetailClient';
 
 export const metadata: Metadata = {
-  title: 'Plant Details | PlantShop India',
-  description: 'View detailed plant information, care guides, shipping info and customer reviews. Buy premium plants online with free delivery above ₹499.',
+  title: 'Plant Details | Monterra India',
+  description: 'View detailed plant information, care guides, shipping info and customer reviews on Monterra. Buy premium plants online with free delivery above ₹499.',
 };
 
 export default function PlantDetailPage() {

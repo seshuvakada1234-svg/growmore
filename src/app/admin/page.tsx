@@ -1,4 +1,3 @@
-
 "use client";
 
 import { Card } from "@/components/ui/card";
@@ -83,7 +82,7 @@ export default function AdminDashboard() {
     <div className="space-y-8">
       <div className="flex flex-col gap-1">
         <h1 className="text-3xl font-headline font-extrabold text-primary">Overview</h1>
-        <p className="text-muted-foreground">Real-time health check of GreenScape Nursery.</p>
+        <p className="text-muted-foreground">Real-time health check of Monterra.</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">

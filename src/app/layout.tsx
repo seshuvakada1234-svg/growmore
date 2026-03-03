@@ -11,8 +11,8 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: 'GreenScape Nursery | Premium Plants Online',
-  description: 'A boilerplate project with Next.js and Tailwind CSS',
+  title: 'Monterra | Premium Plants & Affiliate Marketplace',
+  description: 'Monterra is a premium plant marketplace with affiliate earnings. Grow naturally, earn naturally.',
   icons: {
     icon: [
       { url: '/assets/images/app_logo.png', type: 'image/x-icon' }

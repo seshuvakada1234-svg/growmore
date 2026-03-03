@@ -69,14 +69,14 @@ export default function Home() {
                   <Flower2 className="h-8 w-8" />
                 </div>
                 <h4 className="font-headline font-bold text-lg">Free Care Guides</h4>
-                <p className="text-white/70 text-sm">Expert advice included with every single plant.</p>
+                <p className="text-white/70 text-sm">Expert advice from Monterra included with every single plant.</p>
               </div>
               <div className="flex flex-col items-center text-center gap-4">
                 <div className="h-16 w-16 rounded-2xl bg-white/10 flex items-center justify-center">
                   <Clock className="h-8 w-8" />
                 </div>
                 <h4 className="font-headline font-bold text-lg">24/7 Support</h4>
-                <p className="text-white/70 text-sm">Got a question? Our plant experts are here to help.</p>
+                <p className="text-white/70 text-sm">Got a question? Monterra plant experts are here to help.</p>
               </div>
             </div>
           </div>

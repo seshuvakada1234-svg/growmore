@@ -1,4 +1,3 @@
-
 import Link from "next/link";
 import { Leaf, Instagram, Twitter, Facebook } from "lucide-react";
 
@@ -10,7 +9,7 @@ export function Footer() {
           <div className="col-span-1 md:col-span-1 flex flex-col gap-4">
             <div className="flex items-center gap-2 text-primary">
               <Leaf className="h-6 w-6 fill-current" />
-              <span className="font-headline font-bold text-xl tracking-tight">GreenScape</span>
+              <span className="font-headline font-bold text-xl tracking-tight">Monterra</span>
             </div>
             <p className="text-muted-foreground text-sm max-w-xs">
               Bringing nature closer to your home with hand-picked premium plants and expert care guides.
@@ -50,7 +49,7 @@ export function Footer() {
 
           <div className="flex flex-col gap-4">
             <h4 className="font-headline font-bold text-sm uppercase tracking-wider">Newsletter</h4>
-            <p className="text-sm text-muted-foreground">Get tips, plant care guides and exclusive offers.</p>
+            <p className="text-sm text-muted-foreground">Get tips, plant care guides and exclusive offers from Monterra.</p>
             <div className="flex gap-2">
               <input 
                 type="email" 
@@ -64,7 +63,7 @@ export function Footer() {
           </div>
         </div>
         <div className="border-t mt-12 pt-8 text-center text-xs text-muted-foreground">
-          © {new Date().getFullYear()} GreenScape Nursery. All rights reserved.
+          © {new Date().getFullYear()} Monterra. All rights reserved.
         </div>
       </div>
     </footer>
