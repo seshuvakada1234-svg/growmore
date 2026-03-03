@@ -8,40 +8,41 @@ import {
   TrendingUp, 
   DollarSign, 
   Award, 
-  ArrowUpRight, 
-  ArrowDownRight,
   Loader2
 } from "lucide-react";
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer, 
-  LineChart, 
-  Line 
-} from "recharts";
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
-import { collection, query, orderBy, limit } from "firebase/firestore";
+import { useFirestore, useCollection, useMemoFirebase, useUser, useDoc } from "@/firebase";
+import { collection, query, orderBy, limit, doc } from "firebase/firestore";
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
 
 export default function AdminDashboard() {
   const db = useFirestore();
+  const { user } = useUser();
 
-  // Fetch recent orders
-  const ordersQuery = useMemoFirebase(() => query(collection(db, 'orders'), orderBy('createdAt', 'desc'), limit(5)), [db]);
+  // Fetch role to gate queries
+  const userProfileRef = useMemoFirebase(() => !user?.uid ? null : doc(db, 'users', user.uid), [db, user?.uid]);
+  const { data: profile } = useDoc(userProfileRef);
+  const isAdmin = profile?.role === 'admin';
+
+  // Fetch recent orders - gated
+  const ordersQuery = useMemoFirebase(() => {
+    if (!db || !isAdmin) return null;
+    return query(collection(db, 'orders'), orderBy('createdAt', 'desc'), limit(5));
+  }, [db, isAdmin]);
   const { data: recentOrders, isLoading: ordersLoading } = useCollection(ordersQuery);
 
-  // Fetch all orders for aggregate stats
-  const allOrdersQuery = useMemoFirebase(() => collection(db, 'orders'), [db]);
+  // Fetch all orders for aggregate stats - gated
+  const allOrdersQuery = useMemoFirebase(() => {
+    if (!db || !isAdmin) return null;
+    return collection(db, 'orders');
+  }, [db, isAdmin]);
   const { data: allOrders } = useCollection(allOrdersQuery);
 
-  // Fetch affiliates
-  const affiliatesQuery = useMemoFirebase(() => collection(db, 'users'), [db]);
-  const { data: allUsers } = useCollection(affiliatesQuery);
+  // Fetch affiliates - gated
+  const usersQuery = useMemoFirebase(() => {
+    if (!db || !isAdmin) return null;
+    return collection(db, 'users');
+  }, [db, isAdmin]);
+  const { data: allUsers } = useCollection(usersQuery);
 
   const stats = [
     { 
@@ -70,7 +71,11 @@ export default function AdminDashboard() {
     },
   ];
 
-  if (ordersLoading) {
+  if (!isAdmin && profile) {
+    return <div className="flex items-center justify-center py-20 text-muted-foreground italic">Restricted access...</div>;
+  }
+
+  if (ordersLoading || !profile) {
     return <div className="flex items-center justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   }
 
@@ -132,6 +137,9 @@ export default function AdminDashboard() {
                     </td>
                   </tr>
                 ))}
+                {(!recentOrders || recentOrders.length === 0) && (
+                  <tr><td colSpan={4} className="py-8 text-center text-muted-foreground italic">No recent orders.</td></tr>
+                )}
               </tbody>
             </table>
           </div>

@@ -2,7 +2,7 @@
 "use client";
 
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { 
   Table, 
   TableBody, 
@@ -27,7 +27,7 @@ import {
   ChevronRight
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
+import { useFirestore, useCollection, useMemoFirebase, useUser, useDoc } from "@/firebase";
 import { collection, doc, updateDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
 import { format } from "date-fns";
 import { StatusChip } from "@/components/shared/StatusChip";
@@ -38,13 +38,19 @@ import { FirestorePermissionError } from "@/firebase/errors";
 
 export default function AdminOrders() {
   const db = useFirestore();
+  const { user } = useUser();
   const [searchTerm, setSearchQuery] = useState("");
 
-  // Fetch all orders from the root collection
-  const ordersQuery = useMemoFirebase(() => 
-    query(collection(db, 'orders'), orderBy('createdAt', 'desc')), 
-    [db]
-  );
+  // Fetch role to gate queries
+  const userProfileRef = useMemoFirebase(() => !user?.uid ? null : doc(db, 'users', user.uid), [db, user?.uid]);
+  const { data: profile } = useDoc(userProfileRef);
+  const isAdmin = profile?.role === 'admin';
+
+  // Fetch all orders from the root collection - gated
+  const ordersQuery = useMemoFirebase(() => {
+    if (!db || !isAdmin) return null;
+    return query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
+  }, [db, isAdmin]);
   
   const { data: orders, isLoading } = useCollection(ordersQuery);
 
@@ -77,6 +83,10 @@ export default function AdminOrders() {
     order.customerName?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  if (!isAdmin && profile) {
+    return <div className="flex items-center justify-center py-20 text-muted-foreground italic">Restricted access...</div>;
+  }
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -100,7 +110,7 @@ export default function AdminOrders() {
         </div>
       </div>
 
-      {isLoading ? (
+      {isLoading || !profile ? (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>

@@ -32,34 +32,49 @@ import {
   Loader2,
   Search
 } from "lucide-react";
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
-import { collection, collectionGroup, query, where, orderBy } from "firebase/firestore";
+import { useFirestore, useCollection, useMemoFirebase, useUser, useDoc } from "@/firebase";
+import { collection, collectionGroup, query, where, doc } from "firebase/firestore";
 import { format, subDays, startOfDay, isSameDay } from "date-fns";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const COLORS = ['#1B5E20', '#66BB6A', '#A5D6A7', '#8BC34A', '#C8E6C9'];
 
 export default function AdminEarnings() {
   const db = useFirestore();
+  const { user } = useUser();
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Fetch all orders
-  const ordersQuery = useMemoFirebase(() => collection(db, 'orders'), [db]);
+  // Fetch role to gate queries
+  const userProfileRef = useMemoFirebase(() => !user?.uid ? null : doc(db, 'users', user.uid), [db, user?.uid]);
+  const { data: profile } = useDoc(userProfileRef);
+  const isAdmin = profile?.role === 'admin';
+
+  // Fetch all orders - gated
+  const ordersQuery = useMemoFirebase(() => {
+    if (!db || !isAdmin) return null;
+    return collection(db, 'orders');
+  }, [db, isAdmin]);
   const { data: orders, isLoading: ordersLoading } = useCollection(ordersQuery);
 
-  // Fetch all affiliates
-  const affiliatesQuery = useMemoFirebase(() => 
-    query(collection(db, 'users'), where('role', '==', 'affiliate')), 
-    [db]
-  );
+  // Fetch all affiliates - gated
+  const affiliatesQuery = useMemoFirebase(() => {
+    if (!db || !isAdmin) return null;
+    return query(collection(db, 'users'), where('role', '==', 'affiliate'));
+  }, [db, isAdmin]);
   const { data: affiliates, isLoading: affiliatesLoading } = useCollection(affiliatesQuery);
 
-  // Fetch all payouts
-  const payoutsQuery = useMemoFirebase(() => collectionGroup(db, 'payouts'), [db]);
+  // Fetch all payouts - gated
+  const payoutsQuery = useMemoFirebase(() => {
+    if (!db || !isAdmin) return null;
+    return collectionGroup(db, 'payouts');
+  }, [db, isAdmin]);
   const { data: payouts, isLoading: payoutsLoading } = useCollection(payoutsQuery);
 
-  if (ordersLoading || affiliatesLoading || payoutsLoading) {
+  if (!isAdmin && profile) {
+    return <div className="flex items-center justify-center py-20 text-muted-foreground italic">Restricted access...</div>;
+  }
+
+  if (ordersLoading || affiliatesLoading || payoutsLoading || !profile) {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -70,7 +85,6 @@ export default function AdminEarnings() {
   // --- DATA AGGREGATION ---
   const totalRevenue = orders?.reduce((acc, o) => acc + (o.totalAmount || 0), 0) || 0;
   const totalCommissionEarned = orders?.filter(o => !!o.affiliateId).reduce((acc, o) => acc + (o.commissionAmount || 0), 0) || 0;
-  const totalPaidOut = payouts?.filter(p => p.status === 'approved').reduce((acc, p) => acc + (p.amount || 0), 0) || 0;
   const pendingPayoutsTotal = payouts?.filter(p => p.status === 'pending').reduce((acc, p) => acc + (p.amount || 0), 0) || 0;
 
   // Revenue Chart Data (Last 30 Days)
