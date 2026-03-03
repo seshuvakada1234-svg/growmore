@@ -1,10 +1,11 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight } from 'lucide-react';
 import { useUser, useFirestore } from "@/firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, onSnapshot } from "firebase/firestore";
 
 const PERKS = [
   { icon: '💰', title: 'Up to 10% Commission', sub: 'Per successful order' },
@@ -19,37 +20,42 @@ export default function AffiliateBanner() {
   const db = useFirestore();
 
   const [affiliateProfile, setAffiliateProfile] = useState<any>(null);
-  const [isProfileLoading, setIsProfileLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchProfile() {
-      if (!user?.uid || !db) {
-        setIsProfileLoading(false);
-        return;
-      }
+    // If auth is still loading, we stay in initial loading state
+    if (isUserLoading) return;
 
-      try {
-        const profileRef = doc(db, 'affiliateProfiles', user.uid);
-        const snap = await getDoc(profileRef);
-        if (snap.exists()) {
-          setAffiliateProfile(snap.data());
+    // If no user is logged in, we aren't approved
+    if (!user?.uid || !db) {
+      setAffiliateProfile(null);
+      setLoading(false);
+      return;
+    }
+
+    const profileRef = doc(db, 'affiliateProfiles', user.uid);
+    
+    // Use onSnapshot for real-time reactivity to approval status
+    const unsubscribe = onSnapshot(profileRef, 
+      (snapshot) => {
+        if (snapshot.exists()) {
+          setAffiliateProfile(snapshot.data());
         } else {
           setAffiliateProfile(null);
         }
-      } catch (err) {
-        console.error("Error fetching affiliate profile:", err);
-      } finally {
-        setIsProfileLoading(false);
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Error listening to affiliate profile:", error);
+        setLoading(false);
       }
-    }
+    );
 
-    if (!isUserLoading) {
-      fetchProfile();
-    }
+    return () => unsubscribe();
   }, [user, isUserLoading, db]);
 
-  // Wait until profile loads before rendering decision to prevent flicker/incorrect text
-  if (isUserLoading || isProfileLoading) return null;
+  // Prevent flicker by returning null while status is being determined
+  if (isUserLoading || loading) return null;
 
   const isApproved = affiliateProfile?.approved === true;
 
