@@ -34,9 +34,11 @@ export function ShareButton({ product, className, variant = "secondary" }: Share
 
   const getProductUrl = () => {
     if (typeof window === 'undefined') return '';
-    const slug = product.slug || product.id;
-    // Requested URL format: origin + /product/ + slug
-    return `${window.location.origin}/product/${slug}`;
+    
+    // The actual route structure is /plants/[id].
+    // We construct the URL manually using the origin and product ID to ensure
+    // we generate a clean, canonical link without any current session query parameters (like ?ref).
+    return `${window.location.origin}/plants/${product.id}`;
   };
 
   const copyToClipboard = (text: string, successMsg: string) => {
@@ -52,14 +54,14 @@ export function ShareButton({ product, className, variant = "secondary" }: Share
   const handleNativeShare = async () => {
     if (typeof navigator !== 'undefined' && navigator.share) {
       const url = getProductUrl();
+      const title = product.name;
       try {
         await navigator.share({
-          title: product.name,
+          title: title,
           url: url,
         });
       } catch (err) {
         // If native share was cancelled or failed, we just log it.
-        // The dropdown is still there as a fallback for some browsers.
         if ((err as Error).name !== 'AbortError') {
           console.error('Share failed', err);
         }
