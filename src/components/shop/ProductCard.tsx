@@ -13,6 +13,7 @@ import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
 import { doc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
+import { ShareButton } from "@/components/shared/ShareButton";
 
 interface ProductCardProps {
   product: Product;
@@ -109,18 +110,25 @@ export function ProductCard({ product }: ProductCardProps) {
             </Badge>
           </div>
           
-          <button 
-            onClick={handleToggleWishlist}
-            className="absolute top-3 right-3 z-10 p-2 rounded-full bg-white/80 backdrop-blur-sm shadow-sm transition-all hover:bg-white"
-          >
-            <Heart 
-              className={cn(
-                "h-5 w-5 transition-all duration-300",
-                isWishlisted ? "fill-red-500 text-red-500" : "text-primary",
-                isAnimating && "scale-[1.2]"
-              )} 
+          <div className="absolute top-3 right-3 z-10 flex flex-col gap-2">
+            <button 
+              onClick={handleToggleWishlist}
+              className="p-2 rounded-full bg-white/80 backdrop-blur-sm shadow-sm transition-all hover:bg-white"
+            >
+              <Heart 
+                className={cn(
+                  "h-5 w-5 transition-all duration-300",
+                  isWishlisted ? "fill-red-500 text-red-500" : "text-primary",
+                  isAnimating && "scale-[1.2]"
+                )} 
+              />
+            </button>
+            <ShareButton 
+              product={product} 
+              className="p-2 h-auto w-auto rounded-full bg-white/80 backdrop-blur-sm shadow-sm transition-all hover:bg-white text-primary" 
+              variant="ghost"
             />
-          </button>
+          </div>
 
           {product.oldPrice && (
             <div className="absolute bottom-3 right-3">

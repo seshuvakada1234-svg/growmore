@@ -10,6 +10,7 @@ import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
 import { doc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { ShareButton } from '@/components/shared/ShareButton';
 
 // ── Utils ──
 const formatPrice = (price: number) => `₹${price.toLocaleString('en-IN')}`;
@@ -116,19 +117,26 @@ function PlantCard({ plant }: { plant: Product }) {
           )}
         </div>
 
-        <button 
-          className="absolute top-3 right-3 z-10 p-2 rounded-full transition-all bg-white/60 hover:bg-white backdrop-blur-sm"
-          onClick={toggleWishlist}
-          aria-label="Add to wishlist"
-        >
-          <Heart 
-            className={cn(
-              "h-4 w-4 transition-all duration-300",
-              isWishlisted ? "fill-red-500 text-red-500" : "text-muted-foreground",
-              isAnimating && "scale-[1.2]"
-            )} 
+        <div className="absolute top-3 right-3 z-10 flex flex-col gap-2">
+          <button 
+            className="p-2 rounded-full transition-all bg-white/60 hover:bg-white backdrop-blur-sm shadow-sm"
+            onClick={toggleWishlist}
+            aria-label="Add to wishlist"
+          >
+            <Heart 
+              className={cn(
+                "h-4 w-4 transition-all duration-300",
+                isWishlisted ? "fill-red-500 text-red-500" : "text-muted-foreground",
+                isAnimating && "scale-[1.2]"
+              )} 
+            />
+          </button>
+          <ShareButton 
+            product={plant} 
+            className="p-2 h-auto w-auto rounded-full bg-white/60 hover:bg-white backdrop-blur-sm text-muted-foreground shadow-sm" 
+            variant="ghost"
           />
-        </button>
+        </div>
 
         <div className="absolute bottom-0 left-0 right-0 p-3 translate-y-full group-hover:translate-y-0 transition-transform duration-300 z-10">
           <button 

@@ -8,7 +8,7 @@ import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PRODUCTS } from "@/lib/mock-data";
-import { Star, Truck, ShieldCheck, Heart, Share2, ShoppingCart, Minus, Plus, Sun, Droplets } from "lucide-react";
+import { Star, Truck, ShieldCheck, Heart, ShoppingCart, Minus, Plus, Sun, Droplets } from "lucide-react";
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
@@ -16,6 +16,7 @@ import Link from "next/link";
 import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
 import { doc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { cn } from "@/lib/utils";
+import { ShareButton } from "@/components/shared/ShareButton";
 
 export default function PlantDetailPage() {
   const { id } = useParams();
@@ -119,9 +120,10 @@ export default function PlantDetailPage() {
                     )} 
                   />
                 </Button>
-                <Button variant="secondary" size="icon" className="rounded-full bg-white/80 backdrop-blur-sm shadow-sm hover:bg-white">
-                  <Share2 className="h-5 w-5 text-primary" />
-                </Button>
+                <ShareButton 
+                  product={product} 
+                  className="rounded-full bg-white/80 backdrop-blur-sm shadow-sm hover:bg-white" 
+                />
               </div>
             </div>
             <div className="grid grid-cols-4 gap-4">

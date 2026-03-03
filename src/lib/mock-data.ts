@@ -6,6 +6,7 @@ export type Category = "Indoor" | "Outdoor" | "Seeds" | "Bonsai";
 export interface Product {
   id: string;
   name: string;
+  slug: string;
   category: Category;
   price: number;
   oldPrice?: number;
@@ -37,6 +38,7 @@ export const PRODUCTS: Product[] = [
   {
     id: "1",
     name: "Monstera Deliciosa",
+    slug: "monstera-deliciosa",
     category: "Indoor",
     price: 1299,
     oldPrice: 1599,
@@ -65,6 +67,7 @@ export const PRODUCTS: Product[] = [
   {
     id: "2",
     name: "Snake Plant Zeylanica",
+    slug: "snake-plant-zeylanica",
     category: "Indoor",
     price: 499,
     oldPrice: 699,
@@ -92,6 +95,7 @@ export const PRODUCTS: Product[] = [
   {
     id: "3",
     name: "Fiddle Leaf Fig",
+    slug: "fiddle-leaf-fig",
     category: "Indoor",
     price: 2499,
     description: "The Fiddle Leaf Fig is the ultimate statement piece for any modern home. Its broad, violin-shaped leaves create a dramatic aesthetic that complements minimalist decor perfectly.",
