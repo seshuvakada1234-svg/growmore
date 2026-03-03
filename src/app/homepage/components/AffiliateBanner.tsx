@@ -1,11 +1,11 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight } from 'lucide-react';
-import { useUser, useFirestore } from "@/firebase";
-import { doc, onSnapshot } from "firebase/firestore";
+import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
+import { doc } from "firebase/firestore";
 
 const PERKS = [
   { icon: '💰', title: 'Up to 10% Commission', sub: 'Per successful order' },
@@ -19,43 +19,18 @@ export default function AffiliateBanner() {
   const { user, isUserLoading } = useUser();
   const db = useFirestore();
 
-  const [affiliateProfile, setAffiliateProfile] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  // Single source of truth: fetch the affiliate profile document in real-time
+  const affiliateProfileRef = useMemoFirebase(() => {
+    if (!db || !user?.uid) return null;
+    return doc(db, 'affiliateProfiles', user.uid);
+  }, [db, user?.uid]);
 
-  useEffect(() => {
-    // If auth is still loading, we stay in initial loading state
-    if (isUserLoading) return;
+  const { data: affiliateProfile, isLoading: isProfileLoading } = useDoc(affiliateProfileRef);
 
-    // If no user is logged in, we aren't approved
-    if (!user?.uid || !db) {
-      setAffiliateProfile(null);
-      setLoading(false);
-      return;
-    }
-
-    const profileRef = doc(db, 'affiliateProfiles', user.uid);
-    
-    // Use onSnapshot for real-time reactivity to approval status
-    const unsubscribe = onSnapshot(profileRef, 
-      (snapshot) => {
-        if (snapshot.exists()) {
-          setAffiliateProfile(snapshot.data());
-        } else {
-          setAffiliateProfile(null);
-        }
-        setLoading(false);
-      },
-      (error) => {
-        console.error("Error listening to affiliate profile:", error);
-        setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [user, isUserLoading, db]);
-
-  // Prevent flicker by returning null while status is being determined
-  if (isUserLoading || loading) return null;
+  // Prevent flicker by returning null while auth or profile data is loading
+  if (isUserLoading || (user && isProfileLoading)) {
+    return null;
+  }
 
   const isApproved = affiliateProfile?.approved === true;
 
@@ -78,10 +53,17 @@ export default function AffiliateBanner() {
                 </div>
 
                 <h2 className="font-headline text-3xl md:text-5xl font-extrabold mb-4 leading-tight">
-                  {isApproved 
-                    ? "Welcome to Monterra Partner Program"
-                    : "Join Monterra Affiliate Program & Earn"
-                  }
+                  {isApproved ? (
+                    <>
+                      Welcome to Monterra<br />
+                      <span className="text-[#A5D6A7]">Partner Program</span>
+                    </>
+                  ) : (
+                    <>
+                      Join Monterra Affiliate<br />
+                      <span className="text-[#A5D6A7]">Program & Earn</span>
+                    </>
+                  )}
                 </h2>
 
                 <p className="text-white/75 text-base md:text-lg leading-relaxed mb-8 max-w-md mx-auto md:mx-0">
@@ -94,7 +76,7 @@ export default function AffiliateBanner() {
                 <div className="flex flex-col items-center md:items-start gap-4">
 
                   <button
-                    onClick={() => router.push(isApproved ? '/affiliate/dashboard' : '/affiliate/apply')}
+                    onClick={() => router.push('/affiliate')}
                     className="inline-flex items-center gap-2 bg-white text-primary font-bold px-8 py-4 rounded-2xl hover:bg-[#F1F8E9] transition-all hover:shadow-lg hover:-translate-y-0.5 text-lg group"
                   >
                     {isApproved ? "Partner Dashboard" : "Join Affiliate Program"}

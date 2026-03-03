@@ -29,10 +29,16 @@ export function Header() {
   const router = useRouter();
   const pathname = usePathname();
 
+  // Fetch basic user profile for admin role check
   const userProfileRef = useMemoFirebase(() => (!db || !user?.uid) ? null : doc(db, 'users', user.uid), [db, user?.uid]);
   const { data: profile } = useDoc(userProfileRef);
+  
+  // Single source of truth for affiliate status: affiliateProfiles collection
+  const affiliateRef = useMemoFirebase(() => (!db || !user?.uid) ? null : doc(db, 'affiliateProfiles', user.uid), [db, user?.uid]);
+  const { data: affProfile } = useDoc(affiliateRef);
+
   const isAdmin = profile?.role === 'admin';
-  const isAffiliate = profile?.role === 'affiliate';
+  const isAffiliate = affProfile?.approved === true;
 
   // Barrier: Redirect Admins away from storefront to ensure pure Admin experience
   useEffect(() => {
