@@ -8,29 +8,67 @@ import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PRODUCTS } from "@/lib/mock-data";
-import { Star, Truck, ShieldCheck, Heart, Share2, ShoppingCart, Minus, Plus, Leaf, Sun, Droplets } from "lucide-react";
+import { Star, Truck, ShieldCheck, Heart, Share2, ShoppingCart, Minus, Plus, Sun, Droplets } from "lucide-react";
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import Link from "next/link";
+import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
+import { doc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { cn } from "@/lib/utils";
 
 export default function PlantDetailPage() {
   const { id } = useParams();
   const product = PRODUCTS.find(p => p.id === id) || PRODUCTS[0];
   const [qty, setQty] = useState(1);
+  const { user } = useUser();
+  const db = useFirestore();
+  const [isAnimating, setIsAnimating] = useState(false);
+
+  const wishlistRef = useMemoFirebase(() => 
+    user?.uid ? doc(db, 'users', user.uid, 'wishlist', product.id) : null
+  , [db, user?.uid, product.id]);
+
+  const { data: wishlistItem } = useDoc(wishlistRef);
+  const isWishlisted = !!wishlistItem;
+
+  const handleToggleWishlist = async () => {
+    if (!user) {
+      toast({
+        title: "Login Required",
+        description: "Please login to use wishlist",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const docRef = doc(db, 'users', user.uid, 'wishlist', product.id);
+
+    if (isWishlisted) {
+      deleteDoc(docRef).then(() => {
+        toast({ title: "Removed from Wishlist" });
+      });
+    } else {
+      setIsAnimating(true);
+      setDoc(docRef, {
+        productId: product.id,
+        createdAt: serverTimestamp()
+      }).then(() => {
+        toast({ title: "Added to Wishlist ❤️" });
+        setTimeout(() => setIsAnimating(false), 400);
+      });
+    }
+  };
 
   const handleAddToCart = () => {
     try {
       const cart = JSON.parse(localStorage.getItem('plantshop_cart') || '[]');
-      
-      // Standardize check for existing items using any variation of ID key
       const existingItem = cart.find((item: any) => 
         (item.id || item.productId || item.plantId) === product.id
       );
       
       if (existingItem) {
         existingItem.quantity = (existingItem.quantity || 0) + qty;
-        // Standardize the key to 'id'
         existingItem.id = product.id;
         delete existingItem.productId;
         delete existingItem.plantId;
@@ -67,10 +105,21 @@ export default function PlantDetailPage() {
                 priority
               />
               <div className="absolute top-6 right-6 flex flex-col gap-2">
-                <Button variant="secondary" size="icon" className="rounded-full bg-white/80 backdrop-blur-sm shadow-sm">
-                  <Heart className="h-5 w-5 text-red-500" />
+                <Button 
+                  variant="secondary" 
+                  size="icon" 
+                  onClick={handleToggleWishlist}
+                  className="rounded-full bg-white/80 backdrop-blur-sm shadow-sm hover:bg-white"
+                >
+                  <Heart 
+                    className={cn(
+                      "h-5 w-5 transition-all duration-300",
+                      isWishlisted ? "fill-red-500 text-red-500" : "text-primary",
+                      isAnimating && "scale-[1.2]"
+                    )} 
+                  />
                 </Button>
-                <Button variant="secondary" size="icon" className="rounded-full bg-white/80 backdrop-blur-sm shadow-sm">
+                <Button variant="secondary" size="icon" className="rounded-full bg-white/80 backdrop-blur-sm shadow-sm hover:bg-white">
                   <Share2 className="h-5 w-5 text-primary" />
                 </Button>
               </div>

@@ -1,12 +1,13 @@
+
 "use client";
 
 import Link from "next/link";
-import { Search, ShoppingCart, User, Leaf, Menu, LogOut, Award, LayoutDashboard, Home } from "lucide-react";
+import { Search, ShoppingCart, User, Leaf, Menu, LogOut, Award, Home, Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useState, useEffect } from "react";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useUser, useAuth, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
 import { signOut } from "firebase/auth";
 import { doc } from "firebase/firestore";
@@ -111,10 +112,17 @@ export function Header() {
               <Home className="h-6 w-6" />
             </Button>
           </Link>
+          
           <Link href="/cart">
             <Button variant="ghost" size="icon" className="relative">
               <ShoppingCart className="h-6 w-6" />
               {cartCount > 0 && <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-[10px] bg-primary">{cartCount}</Badge>}
+            </Button>
+          </Link>
+
+          <Link href="/wishlist">
+            <Button variant="ghost" size="icon">
+              <Heart className="h-6 w-6" />
             </Button>
           </Link>
           

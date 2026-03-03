@@ -30,6 +30,14 @@
         "createdAt": { "type": "string", "format": "date-time" }
       }
     },
+    "WishlistItem": {
+      "title": "WishlistItem",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
     "AffiliateApplication": {
       "title": "AffiliateApplication",
       "type": "object",
@@ -81,6 +89,7 @@
   "firestore": {
     "/users/{userId}": { "schema": { "$ref": "#/entities/UserProfile" }, "description": "Global user roles" },
     "/users/{userId}/addresses/{addressId}": { "schema": { "$ref": "#/entities/UserAddress" }, "description": "Saved user delivery addresses" },
+    "/users/{userId}/wishlist/{productId}": { "schema": { "$ref": "#/entities/WishlistItem" }, "description": "User saved products" },
     "/affiliateApplications/{userId}": { "schema": { "$ref": "#/entities/AffiliateApplication" }, "description": "Pending applications" },
     "/affiliateProfiles/{userId}": { "schema": { "$ref": "#/entities/AffiliateProfile" }, "description": "Earnings and stats" },
     "/affiliateProfiles/{userId}/commissions/{id}": { "schema": { "$ref": "#/entities/AffiliateCommission" }, "description": "Individual earning logs" },

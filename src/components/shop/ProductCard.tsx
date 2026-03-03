@@ -3,33 +3,76 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Star, ShoppingCart } from "lucide-react";
+import { Star, ShoppingCart, Heart } from "lucide-react";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Product } from "@/lib/mock-data";
 import { toast } from "@/hooks/use-toast";
+import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
+import { doc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { cn } from "@/lib/utils";
+import { useState } from "react";
 
 interface ProductCardProps {
   product: Product;
 }
 
 export function ProductCard({ product }: ProductCardProps) {
+  const { user } = useUser();
+  const db = useFirestore();
+  const [isAnimating, setIsAnimating] = useState(false);
+
+  const wishlistRef = useMemoFirebase(() => 
+    user?.uid ? doc(db, 'users', user.uid, 'wishlist', product.id) : null
+  , [db, user?.uid, product.id]);
+
+  const { data: wishlistItem } = useDoc(wishlistRef);
+  const isWishlisted = !!wishlistItem;
+
+  const handleToggleWishlist = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!user) {
+      toast({
+        title: "Login Required",
+        description: "Please login to use wishlist",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const docRef = doc(db, 'users', user.uid, 'wishlist', product.id);
+
+    if (isWishlisted) {
+      deleteDoc(docRef).then(() => {
+        toast({ title: "Removed from Wishlist" });
+      });
+    } else {
+      setIsAnimating(true);
+      setDoc(docRef, {
+        productId: product.id,
+        createdAt: serverTimestamp()
+      }).then(() => {
+        toast({ title: "Added to Wishlist ❤️" });
+        setTimeout(() => setIsAnimating(false), 400);
+      });
+    }
+  };
+
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     
     try {
       const cart = JSON.parse(localStorage.getItem('plantshop_cart') || '[]');
-      
-      // Standardize check for existing items using any variation of ID key
       const existingItem = cart.find((item: any) => 
         (item.id || item.productId || item.plantId) === product.id
       );
       
       if (existingItem) {
         existingItem.quantity = (existingItem.quantity || 0) + 1;
-        // Standardize the key to 'id' for future logic
         existingItem.id = product.id;
         delete existingItem.productId;
         delete existingItem.plantId;
@@ -51,7 +94,7 @@ export function ProductCard({ product }: ProductCardProps) {
 
   return (
     <Link href={`/plants/${product.id}`}>
-      <Card className="group overflow-hidden plant-card-hover bg-card border-none shadow-sm rounded-2xl h-full flex flex-col">
+      <Card className="group overflow-hidden plant-card-hover bg-card border-none shadow-sm rounded-2xl h-full flex flex-col relative">
         <div className="relative aspect-square overflow-hidden">
           <Image
             src={product.imageUrl}
@@ -65,8 +108,22 @@ export function ProductCard({ product }: ProductCardProps) {
               {product.category}
             </Badge>
           </div>
+          
+          <button 
+            onClick={handleToggleWishlist}
+            className="absolute top-3 right-3 z-10 p-2 rounded-full bg-white/80 backdrop-blur-sm shadow-sm transition-all hover:bg-white"
+          >
+            <Heart 
+              className={cn(
+                "h-5 w-5 transition-all duration-300",
+                isWishlisted ? "fill-red-500 text-red-500" : "text-primary",
+                isAnimating && "scale-[1.2]"
+              )} 
+            />
+          </button>
+
           {product.oldPrice && (
-            <div className="absolute top-3 right-3">
+            <div className="absolute bottom-3 right-3">
               <Badge variant="destructive" className="font-bold">
                 {Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)}% OFF
               </Badge>

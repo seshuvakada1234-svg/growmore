@@ -1,47 +1,74 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import AppImage from '@/components/ui/AppImage';
 import { Heart, Star, ArrowRight } from 'lucide-react';
 import { PRODUCTS, Product } from '@/lib/mock-data';
+import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
+import { doc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { toast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 // ── Utils ──
 const formatPrice = (price: number) => `₹${price.toLocaleString('en-IN')}`;
 
 // ── Plant Card ──
 function PlantCard({ plant }: { plant: Product }) {
-  const [wishlisted, setWishlisted] = useState(false);
   const [addedToCart, setAddedToCart] = useState(false);
   const router = useRouter();
+  const { user } = useUser();
+  const db = useFirestore();
+  const [isAnimating, setIsAnimating] = useState(false);
 
-  useEffect(() => {
-    const wl = JSON.parse(localStorage.getItem('plantshop_wishlist') || '[]');
-    setWishlisted(wl.includes(plant.id));
-  }, [plant.id]);
+  const wishlistRef = useMemoFirebase(() => 
+    user?.uid ? doc(db, 'users', user.uid, 'wishlist', plant.id) : null
+  , [db, user?.uid, plant.id]);
 
-  const toggleWishlist = (e: React.MouseEvent) => {
+  const { data: wishlistItem } = useDoc(wishlistRef);
+  const isWishlisted = !!wishlistItem;
+
+  const toggleWishlist = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    const wl: string[] = JSON.parse(localStorage.getItem('plantshop_wishlist') || '[]');
-    const updated = wishlisted ? wl.filter(id => id !== plant.id) : [...wl, plant.id];
-    localStorage.setItem('plantshop_wishlist', JSON.stringify(updated));
-    setWishlisted(!wishlisted);
+    e.preventDefault();
+
+    if (!user) {
+      toast({
+        title: "Login Required",
+        description: "Please login to use wishlist",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const docRef = doc(db, 'users', user.uid, 'wishlist', plant.id);
+
+    if (isWishlisted) {
+      deleteDoc(docRef).then(() => {
+        toast({ title: "Removed from Wishlist" });
+      });
+    } else {
+      setIsAnimating(true);
+      setDoc(docRef, {
+        productId: plant.id,
+        createdAt: serverTimestamp()
+      }).then(() => {
+        toast({ title: "Added to Wishlist ❤️" });
+        setTimeout(() => setIsAnimating(false), 400);
+      });
+    }
   };
 
   const addToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
       const cart: { id: string; quantity: number }[] = JSON.parse(localStorage.getItem('plantshop_cart') || '[]');
-      
-      // Standardize check for existing items using any variation of ID key
       const existing = cart.find(i => (i.id || (i as any).productId || (i as any).plantId) === plant.id);
       
       if (existing) {
         existing.quantity = (existing.quantity || 0) + 1;
-        // Standardize the key to 'id'
         existing.id = plant.id;
-        // Clean up legacy keys if present
         delete (existing as any).productId;
         delete (existing as any).plantId;
       } else {
@@ -68,7 +95,6 @@ function PlantCard({ plant }: { plant: Product }) {
       className="group bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer border border-border/50" 
       onClick={() => router.push(`/plants/${plant.id}`)}
     >
-      {/* Image Container */}
       <div className="relative aspect-square overflow-hidden bg-muted">
         <AppImage
           src={plant.imageUrl || null}
@@ -78,7 +104,6 @@ function PlantCard({ plant }: { plant: Product }) {
           data-ai-hint="plant"
         />
         
-        {/* Badges */}
         <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-10">
           {plant.isBestseller && (
             <span className="text-[10px] bg-[#FF6F00] text-white font-black px-2 py-1 rounded shadow-sm uppercase tracking-wider">BESTSELLER</span>
@@ -91,18 +116,20 @@ function PlantCard({ plant }: { plant: Product }) {
           )}
         </div>
 
-        {/* Wishlist Button */}
         <button 
-          className={`absolute top-3 right-3 z-10 p-2 rounded-full transition-all ${wishlisted ? 'bg-white shadow-md' : 'bg-white/60 hover:bg-white backdrop-blur-sm'}`}
+          className="absolute top-3 right-3 z-10 p-2 rounded-full transition-all bg-white/60 hover:bg-white backdrop-blur-sm"
           onClick={toggleWishlist}
           aria-label="Add to wishlist"
         >
           <Heart 
-            className={`h-4 w-4 transition-colors ${wishlisted ? 'fill-red-500 text-red-500' : 'text-muted-foreground'}`} 
+            className={cn(
+              "h-4 w-4 transition-all duration-300",
+              isWishlisted ? "fill-red-500 text-red-500" : "text-muted-foreground",
+              isAnimating && "scale-[1.2]"
+            )} 
           />
         </button>
 
-        {/* Quick Add Overlay */}
         <div className="absolute bottom-0 left-0 right-0 p-3 translate-y-full group-hover:translate-y-0 transition-transform duration-300 z-10">
           <button 
             onClick={addToCart}
@@ -113,7 +140,6 @@ function PlantCard({ plant }: { plant: Product }) {
         </div>
       </div>
 
-      {/* Info Container */}
       <div className="p-4">
         <div className="flex items-start justify-between gap-2 mb-1">
           <h3 className="font-headline font-bold text-[#1A2E1A] text-sm leading-tight line-clamp-2 group-hover:text-primary transition-colors">
@@ -122,7 +148,6 @@ function PlantCard({ plant }: { plant: Product }) {
         </div>
         <p className="text-xs text-muted-foreground mb-3">{plant.category}</p>
 
-        {/* Rating & Price */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-1">
             <div className="flex items-center gap-0.5 bg-primary text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
@@ -139,7 +164,6 @@ function PlantCard({ plant }: { plant: Product }) {
           </div>
         </div>
 
-        {/* Care Level & Delivery */}
         <div className="flex items-center justify-between mt-auto pt-3 border-t border-dashed border-border">
           <div className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${careLevelColor}`}>
             {careLevelLabel}
@@ -180,7 +204,6 @@ export default function ProductGrid({ title, subtitle, filterKey, limit = 8, sho
   return (
     <section className="py-12 md:py-16 bg-neutral/30">
       <div className="max-w-7xl mx-auto px-4 md:px-6">
-        {/* Header */}
         <div className="flex flex-col md:flex-row items-start md:items-end justify-between mb-8 gap-4">
           <div>
             {subtitle && <div className="text-primary font-bold uppercase tracking-wider text-xs mb-1">{subtitle}</div>}
@@ -196,7 +219,6 @@ export default function ProductGrid({ title, subtitle, filterKey, limit = 8, sho
           )}
         </div>
 
-        {/* Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
           {plants.map(plant => (
             <PlantCard key={`grid-plant-${plant.id}`} plant={plant} />

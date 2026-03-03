@@ -28,6 +28,11 @@ service cloud.firestore {
       match /addresses/{addressId} {
         allow read, write: if isOwner(userId);
       }
+
+      // Wishlist
+      match /wishlist/{productId} {
+        allow read, write: if isOwner(userId);
+      }
     }
 
     // --- Roles DBAC ---
