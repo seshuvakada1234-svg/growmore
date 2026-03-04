@@ -9,6 +9,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { 
   ShoppingBag, 
   ChevronLeft, 
@@ -31,6 +38,15 @@ import { PRODUCTS } from "@/lib/mock-data";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
 import Image from "next/image";
+
+const INDIAN_STATES_AND_UTS = [
+  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", "Haryana",
+  "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur",
+  "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana",
+  "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal",
+  "Andaman and Nicobar Islands", "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu", "Delhi",
+  "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry"
+].sort();
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -83,6 +99,11 @@ export default function CheckoutPage() {
 
     if (cartItems.length === 0) {
       toast({ title: "Cart is empty", variant: "destructive" });
+      return;
+    }
+
+    if (!formData.state) {
+      toast({ title: "Please select a state", variant: "destructive" });
       return;
     }
 
@@ -271,14 +292,22 @@ export default function CheckoutPage() {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="state">State</Label>
-                        <Input 
-                          id="state" 
-                          required 
-                          placeholder="Karnataka" 
-                          className="rounded-xl h-12 bg-accent/30 border-none focus-visible:ring-primary"
-                          value={formData.state}
-                          onChange={e => setFormData({...formData, state: e.target.value})}
-                        />
+                        <Select 
+                          value={formData.state} 
+                          onValueChange={(value) => setFormData({...formData, state: value})}
+                          required
+                        >
+                          <SelectTrigger className="rounded-xl h-12 bg-accent/30 border-none focus:ring-primary">
+                            <SelectValue placeholder="Select State" />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-xl max-h-[300px]">
+                            {INDIAN_STATES_AND_UTS.map((state) => (
+                              <SelectItem key={state} value={state} className="rounded-lg">
+                                {state}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="pincode">Pincode</Label>
