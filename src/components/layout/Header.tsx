@@ -23,6 +23,7 @@ import {
 
 export function Header() {
   const [cartCount, setCartCount] = useState(0);
+  const [mounted, setMounted] = useState(false);
   const { user } = useUser();
   const auth = useAuth();
   const db = useFirestore();
@@ -45,6 +46,7 @@ export function Header() {
   }, [isAdmin, pathname, router]);
 
   useEffect(() => {
+    setMounted(true);
     const updateCount = () => {
       try {
         const cart = JSON.parse(localStorage.getItem('plantshop_cart') || '[]');
@@ -70,7 +72,8 @@ export function Header() {
   };
 
   // --- ADMIN HEADER ---
-  if (isAdmin) {
+  // We defer the admin header until after hydration to ensure the initial HTML matches the server.
+  if (mounted && isAdmin) {
     return (
       <header className="sticky top-0 z-50 w-full border-b bg-primary text-white h-16 flex items-center shadow-lg">
         <div className="container mx-auto px-4 flex items-center justify-between">
@@ -132,7 +135,7 @@ export function Header() {
             </Button>
           </Link>
           
-          {user ? (
+          {mounted && user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="rounded-full bg-accent text-primary p-0 overflow-hidden shadow-sm border-2 border-white">
