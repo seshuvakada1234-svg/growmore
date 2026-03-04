@@ -41,7 +41,7 @@ export default function RootLayout({
             <Suspense fallback={null}>
               <ReferralTracker />
             </Suspense>
-            <main className="pb-20 md:pb-0 min-h-screen flex flex-col overflow-x-hidden">
+            <main className="pb-20 md:pb-0 min-h-screen flex flex-col">
               {children}
             </main>
 

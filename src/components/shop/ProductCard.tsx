@@ -1,4 +1,3 @@
-
 "use client";
 
 import Image from "next/image";
@@ -24,7 +23,7 @@ export function ProductCard({ product }: ProductCardProps) {
   const db = useFirestore();
   const [isAnimating, setIsAnimating] = useState(false);
 
-  const wishlistRef = useMemoFirebase(() => 
+  const wishlistRef = useMemoFirebase(() =>
     user?.uid ? doc(db, 'users', user.uid, 'wishlist', product.id) : null
   , [db, user?.uid, product.id]);
 
@@ -65,13 +64,13 @@ export function ProductCard({ product }: ProductCardProps) {
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     try {
       const cart = JSON.parse(localStorage.getItem('plantshop_cart') || '[]');
-      const existingItem = cart.find((item: any) => 
+      const existingItem = cart.find((item: any) =>
         (item.id || item.productId || item.plantId) === product.id
       );
-      
+
       if (existingItem) {
         existingItem.quantity = (existingItem.quantity || 0) + 1;
         existingItem.id = product.id;
@@ -80,85 +79,111 @@ export function ProductCard({ product }: ProductCardProps) {
       } else {
         cart.push({ id: product.id, quantity: 1 });
       }
-      
+
       localStorage.setItem('plantshop_cart', JSON.stringify(cart));
       window.dispatchEvent(new Event('cart-updated'));
 
       toast({
         title: "Added to cart!",
-        description: `${product.name} has been added to your shopping cart.`,
+        description: `${product.name} has been added to your cart.`,
       });
     } catch (error) {
       console.error("Failed to add to cart", error);
     }
   };
 
+  const discountPercent = product.oldPrice
+    ? Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)
+    : null;
+
   return (
     <Link href={`/plants/${product.id}`}>
-      <Card className="group overflow-hidden plant-card-hover bg-card border-none shadow-sm rounded-2xl h-full flex flex-col relative">
-        <div className="relative aspect-square overflow-hidden">
+      <Card className="group overflow-hidden bg-card border border-gray-100 shadow-sm hover:shadow-md transition-shadow rounded-xl sm:rounded-2xl h-full flex flex-col relative">
+
+        {/* Image */}
+        <div className="relative overflow-hidden" style={{ aspectRatio: '1 / 1' }}>
           <Image
             src={product.imageUrl}
             alt={product.name}
             fill
-            className="object-cover transition-transform duration-500 group-hover:scale-105 w-full h-auto"
+            className="object-cover transition-transform duration-500 group-hover:scale-105"
             data-ai-hint="plant image"
           />
-          <div className="absolute top-2 left-2 sm:top-3 sm:left-3">
-            <Badge variant="secondary" className="bg-white/90 backdrop-blur-sm text-primary font-bold text-[10px] sm:text-xs">
+
+          {/* Category Badge — top left */}
+          <div className="absolute top-1.5 left-1.5 sm:top-3 sm:left-3">
+            <Badge variant="secondary" className="bg-white/90 backdrop-blur-sm text-primary font-bold text-[9px] sm:text-xs px-1.5 py-0.5">
               {product.category}
             </Badge>
           </div>
-          
-          <div className="absolute top-2 right-2 sm:top-3 sm:right-3 z-10 flex flex-col gap-1.5 sm:gap-2">
-            <button 
-              onClick={handleToggleWishlist}
-              className="p-1.5 sm:p-2 rounded-full bg-white/80 backdrop-blur-sm shadow-sm transition-all hover:bg-white"
-            >
-              <Heart 
-                className={cn(
-                  "h-4 w-4 sm:h-5 sm:w-5 transition-all duration-300",
-                  isWishlisted ? "fill-red-500 text-red-500" : "text-primary",
-                  isAnimating && "scale-[1.2]"
-                )} 
-              />
-            </button>
-            <ShareButton 
-              product={product} 
-              className="p-1.5 sm:p-2 h-auto w-auto rounded-full bg-white/80 backdrop-blur-sm shadow-sm transition-all hover:bg-white text-primary" 
-              variant="ghost"
-            />
-          </div>
 
-          {product.oldPrice && (
-            <div className="absolute bottom-2 right-2 sm:bottom-3 sm:right-3">
-              <Badge variant="destructive" className="font-bold text-[9px] sm:text-xs">
-                {Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)}% OFF
+          {/* Discount Badge — top right area, below action buttons */}
+          {discountPercent && (
+            <div className="absolute top-1.5 right-1.5 sm:top-3 sm:right-3">
+              <Badge variant="destructive" className="font-bold text-[9px] sm:text-xs px-1.5 py-0.5">
+                {discountPercent}% OFF
               </Badge>
             </div>
           )}
+
+          {/* Action Buttons — shown on hover (desktop) / always visible (mobile) */}
+          <div className="absolute bottom-1.5 right-1.5 sm:bottom-auto sm:top-10 sm:right-3 z-10 flex flex-row sm:flex-col gap-1 sm:gap-1.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={handleToggleWishlist}
+              className="p-1.5 sm:p-2 rounded-full bg-white/90 shadow-sm transition-all hover:bg-white hover:scale-110"
+              aria-label="Add to wishlist"
+            >
+              <Heart
+                className={cn(
+                  "h-3.5 w-3.5 sm:h-4 sm:w-4 transition-all duration-300",
+                  isWishlisted ? "fill-red-500 text-red-500" : "text-primary",
+                  isAnimating && "scale-125"
+                )}
+              />
+            </button>
+            <ShareButton
+              product={product}
+              className="p-1.5 sm:p-2 h-auto w-auto rounded-full bg-white/90 shadow-sm transition-all hover:bg-white text-primary"
+              variant="ghost"
+            />
+          </div>
         </div>
-        <CardContent className="p-3 sm:p-4 flex-grow flex flex-col gap-1 sm:gap-2">
+
+        {/* Content */}
+        <CardContent className="p-2.5 sm:p-4 flex-grow flex flex-col gap-1 sm:gap-1.5">
+          {/* Rating */}
           <div className="flex items-center gap-1 text-yellow-500">
-            <Star className="h-3 w-3 sm:h-4 sm:w-4 fill-current" />
+            <Star className="h-3 w-3 sm:h-3.5 sm:w-3.5 fill-current" />
             <span className="text-[10px] sm:text-xs font-semibold text-muted-foreground">{product.rating}</span>
           </div>
-          <h3 className="font-headline font-bold text-sm sm:text-lg leading-tight group-hover:text-primary transition-colors line-clamp-2">
+
+          {/* Name */}
+          <h3 className="font-headline font-bold text-xs sm:text-sm md:text-base leading-tight group-hover:text-primary transition-colors line-clamp-2">
             {product.name}
           </h3>
-          <div className="flex items-baseline gap-1 sm:gap-2 mt-auto">
-            <span className="text-primary font-extrabold text-lg sm:text-xl">₹{product.price}</span>
+
+          {/* Price */}
+          <div className="flex items-baseline gap-1 sm:gap-2 mt-auto pt-1">
+            <span className="text-primary font-extrabold text-sm sm:text-base md:text-lg">₹{product.price}</span>
             {product.oldPrice && (
-              <span className="text-muted-foreground line-through text-[10px] sm:text-sm">₹{product.oldPrice}</span>
+              <span className="text-muted-foreground line-through text-[10px] sm:text-xs">₹{product.oldPrice}</span>
             )}
           </div>
+
+          {/* Delivery & Difficulty badges */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[9px] sm:text-[10px] text-green-700 font-semibold">🟢 Easy</span>
+            <span className="text-[9px] sm:text-[10px] text-blue-600 font-semibold">🚚 Free</span>
+          </div>
         </CardContent>
-        <CardFooter className="p-3 sm:p-4 pt-0">
-          <Button 
-            className="w-full rounded-xl flex gap-1.5 sm:gap-2 h-9 sm:h-10 text-xs sm:text-sm" 
+
+        {/* Add to Cart */}
+        <CardFooter className="p-2.5 sm:p-4 pt-0">
+          <Button
+            className="w-full rounded-lg sm:rounded-xl flex items-center justify-center gap-1 sm:gap-2 h-8 sm:h-10 text-[11px] sm:text-sm font-bold"
             onClick={handleAddToCart}
           >
-            <ShoppingCart className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            <ShoppingCart className="h-3 w-3 sm:h-4 sm:w-4" />
             Add to Cart
           </Button>
         </CardFooter>
