@@ -5,8 +5,8 @@ export function Footer() {
   return (
     <footer className="bg-muted mt-auto">
       <div className="container mx-auto px-4 py-12 md:py-16">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-          <div className="col-span-1 md:col-span-1 flex flex-col gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+          <div className="col-span-2 md:col-span-1 flex flex-col gap-4">
             <div className="flex items-center gap-2 text-primary">
               <Leaf className="h-6 w-6 fill-current" />
               <span className="font-headline font-bold text-xl tracking-tight">Monterra</span>
@@ -27,7 +27,7 @@ export function Footer() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-4">
+          <div className="col-span-1 md:col-span-1 flex flex-col gap-4">
             <h4 className="font-headline font-bold text-sm uppercase tracking-wider">Shop</h4>
             <nav className="flex flex-col gap-2 text-sm text-muted-foreground">
               <Link href="/plants?cat=Indoor" className="hover:text-primary transition-colors">Indoor Plants</Link>
@@ -37,7 +37,7 @@ export function Footer() {
             </nav>
           </div>
 
-          <div className="flex flex-col gap-4">
+          <div className="col-span-1 md:col-span-1 flex flex-col gap-4">
             <h4 className="font-headline font-bold text-sm uppercase tracking-wider">Company</h4>
             <nav className="flex flex-col gap-2 text-sm text-muted-foreground">
               <Link href="/about" className="hover:text-primary transition-colors">About Us</Link>
@@ -47,7 +47,7 @@ export function Footer() {
             </nav>
           </div>
 
-          <div className="flex flex-col gap-4">
+          <div className="col-span-2 md:col-span-1 flex flex-col gap-4">
             <h4 className="font-headline font-bold text-sm uppercase tracking-wider">Newsletter</h4>
             <p className="text-sm text-muted-foreground">Get tips, plant care guides and exclusive offers from Monterra.</p>
             <div className="flex gap-2">

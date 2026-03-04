@@ -8,9 +8,9 @@ export default function Footer() {
     <footer className="bg-[#0F2B10] text-white pt-12 pb-6 mt-16">
       <div className="max-w-7xl mx-auto px-4 md:px-6">
         {/* Top Row */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 pb-10 border-b border-white/10">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 pb-10 border-b border-white/10">
           {/* Brand */}
-          <div className="md:col-span-1">
+          <div className="col-span-2 md:col-span-1">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-8 h-8 bg-[#66BB6A] rounded-lg flex items-center justify-center text-white font-bold text-sm">🌿</div>
               <span className="font-bold text-lg tracking-tight">Monterra</span>
@@ -28,7 +28,7 @@ export default function Footer() {
           </div>
 
           {/* Shop */}
-          <div>
+          <div className="col-span-1 md:col-span-1">
             <h4 className="font-bold text-sm uppercase tracking-wider mb-4 text-[#A5D6A7]">Shop</h4>
             <ul className="space-y-2">
               {[
@@ -46,7 +46,7 @@ export default function Footer() {
           </div>
 
           {/* Help */}
-          <div>
+          <div className="col-span-1 md:col-span-1">
             <h4 className="font-bold text-sm uppercase tracking-wider mb-4 text-[#A5D6A7]">Help</h4>
             <ul className="space-y-2">
               {['Track Order', 'Return Policy', 'Care Guides', 'FAQs', 'Contact Us']?.map(item => (
@@ -58,7 +58,7 @@ export default function Footer() {
           </div>
 
           {/* Contact */}
-          <div>
+          <div className="col-span-2 md:col-span-1">
             <h4 className="font-bold text-sm uppercase tracking-wider mb-4 text-[#A5D6A7]">Contact</h4>
             <div className="space-y-3">
               <div className="flex items-start gap-2 text-sm text-white/60">
