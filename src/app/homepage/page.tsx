@@ -20,8 +20,7 @@ export default function HomepagePage() {
   return (
     <div className="min-h-screen bg-[#FAFAF7]">
       <Header />
-
-      <main>
+      <main className="pb-16 sm:pb-0">
         {/* Hero */}
         <HeroSection />
 
@@ -60,7 +59,7 @@ export default function HomepagePage() {
         {/* Affiliate Banner */}
         <AffiliateBanner />
 
-        {/* All Featured */}
+        {/* Featured */}
         <ProductGrid
           title="Featured Plants"
           subtitle="Handpicked For You"
@@ -70,7 +69,6 @@ export default function HomepagePage() {
           viewAllHref="/plant-listing"
         />
       </main>
-
       <Footer />
     </div>
   );

@@ -25,6 +25,22 @@
     --ring: 124 55% 24%;
     --radius: 0.75rem;
   }
+
+  /* Prevent horizontal overflow on mobile */
+  html, body {
+    overflow-x: hidden;
+    width: 100%;
+  }
+
+  /* Better tap targets on mobile */
+  button, a {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
 }
 
 @layer components {
@@ -37,7 +53,7 @@
   }
 
   .product-card {
-    @apply bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-border/50;
+    @apply bg-white rounded-xl sm:rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-border/50;
   }
 
   .card-img {
@@ -45,11 +61,11 @@
   }
 
   .discount-badge {
-    @apply text-[10px] bg-destructive text-white font-black px-2 py-1 rounded shadow-sm uppercase tracking-wider;
+    @apply text-[9px] sm:text-[10px] bg-destructive text-white font-black px-1.5 sm:px-2 py-0.5 sm:py-1 rounded shadow-sm uppercase tracking-wider;
   }
 
   .wishlist-btn {
-    @apply absolute top-3 right-3 z-10 p-2 rounded-full bg-white/60 hover:bg-white backdrop-blur-sm shadow-sm transition-all;
+    @apply absolute top-2 right-2 sm:top-3 sm:right-3 z-10 p-1.5 sm:p-2 rounded-full bg-white/60 hover:bg-white backdrop-blur-sm shadow-sm transition-all;
   }
 
   .wishlist-btn.active {
@@ -57,11 +73,11 @@
   }
 
   .quick-add {
-    @apply absolute bottom-0 left-0 right-0 p-3 translate-y-full group-hover:translate-y-0 transition-transform duration-300 z-10;
+    @apply absolute bottom-0 left-0 right-0 p-2 sm:p-3 sm:translate-y-full sm:group-hover:translate-y-0 transition-transform duration-300 z-10;
   }
 
   .care-badge {
-    @apply inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold;
+    @apply inline-flex items-center px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold;
   }
 
   .care-easy { @apply bg-emerald-100 text-emerald-700; }
@@ -69,15 +85,15 @@
   .care-hard { @apply bg-red-100 text-red-700; }
 
   .btn-primary {
-    @apply inline-flex items-center gap-2 bg-primary text-primary-foreground font-bold px-6 py-3 rounded-xl hover:bg-primary/90 transition-all shadow-md active:scale-95;
+    @apply inline-flex items-center gap-2 bg-primary text-primary-foreground font-bold px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg sm:rounded-xl hover:bg-primary/90 transition-all shadow-md active:scale-95 text-sm;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center gap-2 bg-white border-2 border-primary text-primary font-bold px-6 py-3 rounded-xl hover:bg-accent transition-all shadow-sm active:scale-95;
+    @apply inline-flex items-center gap-2 bg-white border-2 border-primary text-primary font-bold px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg sm:rounded-xl hover:bg-accent transition-all shadow-sm active:scale-95 text-sm;
   }
 
   .search-input {
-    @apply w-full bg-white border border-[#D8EDD5] rounded-xl px-10 py-3 text-sm focus:outline-none focus:border-[#388E3C] transition-colors;
+    @apply w-full bg-white border border-[#D8EDD5] rounded-xl px-10 py-2.5 sm:py-3 text-sm focus:outline-none focus:border-[#388E3C] transition-colors;
   }
 
   .custom-checkbox {
@@ -88,40 +104,42 @@
   }
 
   .page-btn {
-    @apply w-9 h-9 rounded-lg border border-[#D8EDD5] flex items-center justify-center text-sm font-bold text-[#4A6741] hover:bg-[#F1F8E9] transition-all;
+    @apply w-8 h-8 sm:w-9 sm:h-9 rounded-lg border border-[#D8EDD5] flex items-center justify-center text-xs sm:text-sm font-bold text-[#4A6741] hover:bg-[#F1F8E9] transition-all;
   }
   .page-btn.active {
     @apply bg-[#1B5E20] border-[#1B5E20] text-white;
   }
 
   .tab-btn {
-    @apply px-6 py-4 text-sm font-bold transition-all border-b-2 border-transparent text-[#7A9B77] hover:text-[#1B5E20];
+    @apply px-4 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm font-bold transition-all border-b-2 border-transparent text-[#7A9B77] hover:text-[#1B5E20];
   }
   .tab-btn.active {
     @apply border-[#1B5E20] text-[#1B5E20] bg-[#F1F8E9]/30;
   }
 
   .toast {
-    @apply fixed bottom-24 left-1/2 -translate-x-1/2 z-[400] bg-primary text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 font-bold;
+    @apply fixed bottom-24 left-1/2 -translate-x-1/2 z-[400] bg-primary text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-full shadow-2xl flex items-center gap-2 sm:gap-3 font-bold text-sm;
   }
 
   .filter-drawer {
-    @apply fixed right-0 top-0 h-full w-full max-w-sm bg-white p-6 shadow-2xl translate-x-full transition-transform duration-300;
+    @apply fixed right-0 top-0 h-full w-full max-w-sm bg-white p-4 sm:p-6 shadow-2xl translate-x-full transition-transform duration-300;
   }
   .filter-drawer.open {
     @apply translate-x-0;
   }
 
   .qty-btn {
-    @apply w-8 h-8 flex items-center justify-center border border-[#D8EDD5] rounded hover:bg-accent transition-colors text-lg font-bold;
+    @apply w-8 h-8 flex items-center justify-center border border-[#D8EDD5] rounded hover:bg-accent transition-colors text-base sm:text-lg font-bold;
   }
 
+  /* Mobile bottom nav safe area */
   .sticky-cart-bar {
     @apply fixed bottom-0 left-0 right-0 bg-white border-t p-3 flex items-center gap-3 z-50 shadow-[0_-4px_20px_rgba(0,0,0,0.1)];
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
   }
 
   .offer-strip {
-    @apply bg-[#1B5E20] text-white text-center py-2 text-xs font-semibold tracking-wide fixed top-0 left-0 right-0 z-[110];
+    @apply bg-[#1B5E20] text-white text-center py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold tracking-wide fixed top-0 left-0 right-0 z-[110];
   }
 
   .nav-sticky {
@@ -129,26 +147,31 @@
   }
 
   .modal-overlay {
-    @apply fixed inset-0 z-[300] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4;
+    @apply fixed inset-0 z-[300] bg-black/50 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4;
   }
 
   .modal-card {
-    @apply bg-white w-full max-w-md rounded-2xl shadow-2xl p-6 relative animate-scale-in;
+    @apply bg-white w-full max-w-md rounded-xl sm:rounded-2xl shadow-2xl p-4 sm:p-6 relative animate-scale-in;
   }
 
   .gallery-thumb {
-    @apply relative h-20 w-20 rounded-lg overflow-hidden cursor-pointer border-2 transition-all border-transparent;
+    @apply relative h-16 w-16 sm:h-20 sm:w-20 rounded-lg overflow-hidden cursor-pointer border-2 transition-all border-transparent;
   }
   .gallery-thumb.active {
     @apply border-[#1B5E20];
   }
 
   .review-card {
-    @apply bg-white border border-[#D8EDD5] p-5 rounded-2xl shadow-sm hover:shadow-md transition-shadow;
+    @apply bg-white border border-[#D8EDD5] p-3 sm:p-5 rounded-xl sm:rounded-2xl shadow-sm hover:shadow-md transition-shadow;
   }
 
   .offer-tag {
-    @apply bg-white/20 backdrop-blur-md border border-white/30 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider;
+    @apply bg-white/20 backdrop-blur-md border border-white/30 text-white text-[9px] sm:text-[10px] font-bold px-2 sm:px-3 py-0.5 sm:py-1 rounded-full uppercase tracking-wider;
+  }
+
+  /* Mobile page bottom padding — accounts for bottom nav bar */
+  .mobile-bottom-safe {
+    padding-bottom: calc(4rem + env(safe-area-inset-bottom));
   }
 }
 
@@ -183,10 +206,7 @@
   100% { transform: scale(1); }
 }
 
-.animate-toast-in {
-  animation: toast-in 0.3s ease-out forwards;
-}
-
+.animate-toast-in { animation: toast-in 0.3s ease-out forwards; }
 .animate-scale-in { animation: scale-in 0.2s ease-out forwards; }
 .animate-slide-right { animation: slide-right 0.3s ease-out forwards; }
 .animate-badge-pop { animation: badge-pop 0.3s ease-out; }

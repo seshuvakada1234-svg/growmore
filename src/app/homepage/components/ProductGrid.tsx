@@ -11,10 +11,8 @@ import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { ShareButton } from '@/components/shared/ShareButton';
 
-// ── Utils ──
 const formatPrice = (price: number) => `₹${price.toLocaleString('en-IN')}`;
 
-// ── Plant Card ──
 function PlantCard({ plant }: { plant: Product }) {
   const [addedToCart, setAddedToCart] = useState(false);
   const router = useRouter();
@@ -22,7 +20,7 @@ function PlantCard({ plant }: { plant: Product }) {
   const db = useFirestore();
   const [isAnimating, setIsAnimating] = useState(false);
 
-  const wishlistRef = useMemoFirebase(() => 
+  const wishlistRef = useMemoFirebase(() =>
     user?.uid ? doc(db, 'users', user.uid, 'wishlist', plant.id) : null
   , [db, user?.uid, plant.id]);
 
@@ -32,28 +30,16 @@ function PlantCard({ plant }: { plant: Product }) {
   const toggleWishlist = async (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-
     if (!user) {
-      toast({
-        title: "Login Required",
-        description: "Please login to use wishlist",
-        variant: "destructive"
-      });
+      toast({ title: "Login Required", description: "Please login to use wishlist", variant: "destructive" });
       return;
     }
-
     const docRef = doc(db, 'users', user.uid, 'wishlist', plant.id);
-
     if (isWishlisted) {
-      deleteDoc(docRef).then(() => {
-        toast({ title: "Removed from Wishlist" });
-      });
+      deleteDoc(docRef).then(() => toast({ title: "Removed from Wishlist" }));
     } else {
       setIsAnimating(true);
-      setDoc(docRef, {
-        productId: plant.id,
-        createdAt: serverTimestamp()
-      }).then(() => {
+      setDoc(docRef, { productId: plant.id, createdAt: serverTimestamp() }).then(() => {
         toast({ title: "Added to Wishlist ❤️" });
         setTimeout(() => setIsAnimating(false), 400);
       });
@@ -65,7 +51,6 @@ function PlantCard({ plant }: { plant: Product }) {
     try {
       const cart: { id: string; quantity: number }[] = JSON.parse(localStorage.getItem('plantshop_cart') || '[]');
       const existing = cart.find(i => (i.id || (i as any).productId || (i as any).plantId) === plant.id);
-      
       if (existing) {
         existing.quantity = (existing.quantity || 0) + 1;
         existing.id = plant.id;
@@ -74,7 +59,6 @@ function PlantCard({ plant }: { plant: Product }) {
       } else {
         cart.push({ id: plant.id, quantity: 1 });
       }
-      
       localStorage.setItem('plantshop_cart', JSON.stringify(cart));
       window.dispatchEvent(new Event('cart-updated'));
       setAddedToCart(true);
@@ -85,97 +69,110 @@ function PlantCard({ plant }: { plant: Product }) {
   };
 
   const careLevel = plant.careLevel || 'easy';
-  const careLevelColor = { easy: 'bg-emerald-100 text-emerald-700', moderate: 'bg-yellow-100 text-yellow-700', hard: 'bg-red-100 text-red-700' }[careLevel];
-  const careLevelLabel = { easy: '🟢 Easy', moderate: '🟡 Moderate', hard: '🔴 Hard' }[careLevel];
+  const careLevelColor = {
+    easy: 'bg-emerald-100 text-emerald-700',
+    moderate: 'bg-yellow-100 text-yellow-700',
+    hard: 'bg-red-100 text-red-700'
+  }[careLevel];
+  const careLevelLabel = {
+    easy: '🟢 Easy',
+    moderate: '🟡 Moderate',
+    hard: '🔴 Hard'
+  }[careLevel];
 
   const discount = plant.oldPrice ? Math.round(((plant.oldPrice - plant.price) / plant.oldPrice) * 100) : 0;
 
   return (
-    <div 
-      className="group bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer border border-border/50" 
+    <div
+      className="group bg-white rounded-xl sm:rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer border border-border/50 flex flex-col"
       onClick={() => router.push(`/plants/${plant.id}`)}
     >
-      <div className="relative aspect-square overflow-hidden bg-muted">
+      {/* Image */}
+      <div className="relative overflow-hidden bg-muted" style={{ aspectRatio: '1/1' }}>
         <AppImage
           src={plant.imageUrl || null}
           alt={plant.name}
           fill
-          className="object-cover transition-transform duration-500 group-hover:scale-110 w-full h-auto"
+          className="object-cover transition-transform duration-500 group-hover:scale-110"
           data-ai-hint="plant"
         />
-        
-        <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-10">
+
+        {/* Badges top-left */}
+        <div className="absolute top-2 left-2 sm:top-3 sm:left-3 flex flex-col gap-1 z-10">
           {plant.isBestseller && (
-            <span className="text-[10px] bg-[#FF6F00] text-white font-black px-2 py-1 rounded shadow-sm uppercase tracking-wider">BESTSELLER</span>
+            <span className="text-[9px] sm:text-[10px] bg-[#FF6F00] text-white font-black px-1.5 sm:px-2 py-0.5 sm:py-1 rounded shadow-sm uppercase tracking-wider">BESTSELLER</span>
           )}
           {plant.isNew && (
-            <span className="text-[10px] bg-primary text-white font-black px-2 py-1 rounded shadow-sm uppercase tracking-wider">NEW</span>
+            <span className="text-[9px] sm:text-[10px] bg-primary text-white font-black px-1.5 sm:px-2 py-0.5 sm:py-1 rounded shadow-sm uppercase tracking-wider">NEW</span>
           )}
           {discount > 0 && (
-            <span className="text-[10px] bg-destructive text-white font-black px-2 py-1 rounded shadow-sm uppercase tracking-wider">{discount}% OFF</span>
+            <span className="text-[9px] sm:text-[10px] bg-destructive text-white font-black px-1.5 sm:px-2 py-0.5 sm:py-1 rounded shadow-sm uppercase tracking-wider">{discount}% OFF</span>
           )}
         </div>
 
-        <div className="absolute top-3 right-3 z-10 flex flex-col gap-2">
-          <button 
-            className="p-2 rounded-full transition-all bg-white/60 hover:bg-white backdrop-blur-sm shadow-sm"
+        {/* Action buttons top-right */}
+        <div className="absolute top-2 right-2 sm:top-3 sm:right-3 z-10 flex flex-col gap-1 sm:gap-2">
+          <button
+            className="p-1.5 sm:p-2 rounded-full transition-all bg-white/70 hover:bg-white backdrop-blur-sm shadow-sm"
             onClick={toggleWishlist}
             aria-label="Add to wishlist"
           >
-            <Heart 
+            <Heart
               className={cn(
-                "h-4 w-4 transition-all duration-300",
+                "h-3.5 w-3.5 sm:h-4 sm:w-4 transition-all duration-300",
                 isWishlisted ? "fill-red-500 text-red-500" : "text-muted-foreground",
-                isAnimating && "scale-[1.2]"
-              )} 
+                isAnimating && "scale-125"
+              )}
             />
           </button>
-          <ShareButton 
-            product={plant} 
-            className="p-2 h-auto w-auto rounded-full bg-white/60 hover:bg-white backdrop-blur-sm text-muted-foreground shadow-sm" 
+          <ShareButton
+            product={plant}
+            className="p-1.5 sm:p-2 h-auto w-auto rounded-full bg-white/70 hover:bg-white backdrop-blur-sm text-muted-foreground shadow-sm"
             variant="ghost"
           />
         </div>
 
-        <div className="absolute bottom-0 left-0 right-0 p-3 translate-y-full group-hover:translate-y-0 transition-transform duration-300 z-10">
-          <button 
+        {/* Quick Add — hover on desktop, always on mobile */}
+        <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-3 sm:translate-y-full sm:group-hover:translate-y-0 transition-transform duration-300 z-10">
+          <button
             onClick={addToCart}
-            className={`w-full py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest transition-all shadow-lg ${addedToCart ? 'bg-primary text-white' : 'bg-white/95 text-primary hover:bg-primary hover:text-white'}`}
+            className={`w-full py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold uppercase tracking-widest transition-all shadow-lg ${addedToCart ? 'bg-primary text-white' : 'bg-white/95 text-primary hover:bg-primary hover:text-white'}`}
           >
             {addedToCart ? '✓ Added' : '+ Quick Add'}
           </button>
         </div>
       </div>
 
-      <div className="p-4">
-        <div className="flex items-start justify-between gap-2 mb-1">
-          <h3 className="font-headline font-bold text-[#1A2E1A] text-sm leading-tight line-clamp-2 group-hover:text-primary transition-colors">
-            {plant.name}
-          </h3>
-        </div>
-        <p className="text-xs text-muted-foreground mb-3">{plant.category}</p>
+      {/* Content */}
+      <div className="p-2.5 sm:p-4 flex flex-col flex-1">
+        <h3 className="font-headline font-bold text-[#1A2E1A] text-xs sm:text-sm leading-tight line-clamp-2 group-hover:text-primary transition-colors mb-0.5 sm:mb-1">
+          {plant.name}
+        </h3>
+        <p className="text-[10px] sm:text-xs text-muted-foreground mb-2 sm:mb-3">{plant.category}</p>
 
-        <div className="flex items-center justify-between mb-3">
+        {/* Rating + Price */}
+        <div className="flex items-center justify-between mb-2 sm:mb-3">
           <div className="flex items-center gap-1">
-            <div className="flex items-center gap-0.5 bg-primary text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
+            <div className="flex items-center gap-0.5 bg-primary text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded">
               <span>{plant.rating}</span>
-              <Star className="h-2.5 w-2.5 fill-current" />
+              <Star className="h-2 w-2 sm:h-2.5 sm:w-2.5 fill-current" />
             </div>
-            <span className="text-[10px] text-muted-foreground font-medium">({plant.reviewCount})</span>
+            <span className="text-[9px] sm:text-[10px] text-muted-foreground">({plant.reviewCount})</span>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-primary text-base">{formatPrice(plant.price)}</span>
+          <div className="flex items-center gap-1 sm:gap-2">
+            <span className="font-bold text-primary text-sm sm:text-base">{formatPrice(plant.price)}</span>
             {plant.oldPrice && (
-              <span className="text-xs text-muted-foreground line-through">{formatPrice(plant.oldPrice)}</span>
+              <span className="text-[10px] sm:text-xs text-muted-foreground line-through">{formatPrice(plant.oldPrice)}</span>
             )}
           </div>
         </div>
 
-        <div className="flex items-center justify-between mt-auto pt-3 border-t border-dashed border-border">
-          <div className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${careLevelColor}`}>
+        {/* Care + Delivery */}
+        <div className="flex items-center justify-between mt-auto pt-2 sm:pt-3 border-t border-dashed border-border">
+          <div className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold ${careLevelColor}`}>
             {careLevelLabel}
           </div>
-          <p className="text-[10px] text-muted-foreground font-semibold flex items-center gap-1">
+          <p className="text-[9px] sm:text-[10px] text-muted-foreground font-semibold">
             {plant.price >= 499 ? '🚚 Free' : '🚚 ₹49'}
           </p>
         </div>
@@ -209,24 +206,31 @@ export default function ProductGrid({ title, subtitle, filterKey, limit = 8, sho
   const router = useRouter();
 
   return (
-    <section className="py-8 md:py-16 bg-neutral/30">
-      <div className="max-w-7xl mx-auto px-4 md:px-6">
-        <div className="flex flex-col md:flex-row items-start md:items-end justify-between mb-8 gap-4">
+    <section className="py-6 sm:py-8 md:py-16 bg-neutral/30">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6">
+
+        {/* Section Header */}
+        <div className="flex flex-row items-center justify-between mb-4 sm:mb-8 gap-2">
           <div>
-            {subtitle && <div className="text-primary font-bold uppercase tracking-wider text-xs mb-1">{subtitle}</div>}
-            <h2 className="text-2xl md:text-3xl font-headline font-extrabold text-[#1A2E1A]">{title}</h2>
+            {subtitle && (
+              <div className="text-primary font-bold uppercase tracking-wider text-[10px] sm:text-xs mb-0.5 sm:mb-1">{subtitle}</div>
+            )}
+            <h2 className="text-lg sm:text-2xl md:text-3xl font-headline font-extrabold text-[#1A2E1A] leading-tight">{title}</h2>
           </div>
           {showViewAll && (
-            <button 
+            <button
               onClick={() => router.push(viewAllHref)}
-              className="flex items-center gap-2 text-sm font-bold text-primary hover:underline group"
+              className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm font-bold text-primary hover:underline group flex-shrink-0"
             >
-              Explore Collection <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+              <span className="hidden sm:inline">Explore Collection</span>
+              <span className="sm:hidden">See All</span>
+              <ArrowRight className="h-3 w-3 sm:h-4 sm:w-4 transition-transform group-hover:translate-x-1" />
             </button>
           )}
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+        {/* Product Grid — 2 cols mobile, 3 tablet, 4 desktop */}
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4 md:gap-6">
           {plants.map(plant => (
             <PlantCard key={`grid-plant-${plant.id}`} plant={plant} />
           ))}
