@@ -89,37 +89,37 @@ export default function HeroSection() {
 
       {/* Content */}
       <div className="relative z-10 max-w-7xl mx-auto px-4 md:px-6 h-full flex items-center" style={{ minHeight: 'clamp(520px, 80vh, 720px)' }}>
-        <div className="flex flex-col md:flex-row items-center gap-8 w-full py-12 md:py-16">
+        <div className="flex flex-col md:flex-row items-center gap-8 w-full py-8 sm:py-12 md:py-16">
           {/* Left: Text */}
-          <div className="flex-1 max-w-xl">
+          <div className="flex-1 max-w-xl text-center md:text-left">
             {/* Badge */}
             <div className={`inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm border border-white/30 rounded-full px-4 py-1.5 mb-5 transition-opacity duration-500 ${transitioning ? 'opacity-0' : 'opacity-100'}`}>
-              <span className="text-sm font-semibold text-white">{slide.badge}</span>
+              <span className="text-xs sm:text-sm font-semibold text-white">{slide.badge}</span>
             </div>
 
             {/* Headline */}
-            <h1 className={`font-headline text-5xl md:text-6xl lg:text-7xl text-white font-extrabold leading-tight mb-4 transition-all duration-500 ${transitioning ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}`}>
+            <h1 className={`font-headline text-3xl sm:text-5xl md:text-6xl lg:text-7xl text-white font-extrabold leading-tight mb-4 transition-all duration-500 ${transitioning ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}`}>
               {slide.headline}<br />
               <span className="text-[#A5D6A7]">{slide.headlineAccent}</span>
             </h1>
 
-            <p className={`text-white/85 text-lg leading-relaxed mb-8 max-w-md transition-all duration-500 delay-100 ${transitioning ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}`}>
+            <p className={`text-white/85 text-sm sm:text-base md:text-lg leading-relaxed mb-8 max-w-md mx-auto md:mx-0 transition-all duration-500 delay-100 ${transitioning ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}`}>
               {slide.sub}
             </p>
 
             {/* CTAs */}
-            <div className={`flex flex-wrap gap-3 transition-all duration-500 delay-200 ${transitioning ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}`}>
-              <Link href={slide.ctaHref} className="inline-flex items-center gap-2 bg-white text-primary font-bold px-6 py-3.5 rounded-lg hover:bg-[#F1F8E9] transition-all hover:shadow-xl hover:-translate-y-0.5 text-base">
+            <div className={`flex flex-col sm:flex-row items-center justify-center md:justify-start gap-3 transition-all duration-500 delay-200 ${transitioning ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}`}>
+              <Link href={slide.ctaHref} className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-white text-primary font-bold px-6 py-3.5 rounded-lg hover:bg-[#F1F8E9] transition-all hover:shadow-xl hover:-translate-y-0.5 text-sm sm:text-base">
                 {slide.cta}
                 <ArrowRight className="h-4 w-4" />
               </Link>
-              <Link href="/plants" className="inline-flex items-center gap-2 bg-white/15 backdrop-blur-sm border border-white/30 text-white font-semibold px-6 py-3.5 rounded-lg hover:bg-white/25 transition-all text-base">
+              <Link href="/plants" className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-white/15 backdrop-blur-sm border border-white/30 text-white font-semibold px-6 py-3.5 rounded-lg hover:bg-white/25 transition-all text-sm sm:text-base">
                 View All Plants
               </Link>
             </div>
 
             {/* Slide Indicators */}
-            <div className="flex gap-2 mt-8">
+            <div className="flex justify-center md:justify-start gap-2 mt-8">
               {HERO_SLIDES.map((_, i) => (
                 <button
                   key={i}
