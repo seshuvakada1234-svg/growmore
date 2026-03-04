@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -73,7 +72,7 @@ export default function HeroSection() {
   const slide = HERO_SLIDES[currentSlide];
 
   return (
-    <section className="relative w-full overflow-hidden" style={{ minHeight: 'clamp(520px, 80vh, 720px)' }}>
+    <section className="relative w-full overflow-hidden bg-background" style={{ minHeight: 'clamp(520px, 80vh, 720px)' }}>
       {/* Background Image */}
       <div className={`absolute inset-0 transition-opacity duration-500 ${transitioning ? 'opacity-0' : 'opacity-100'}`}>
         <Image
@@ -84,14 +83,15 @@ export default function HeroSection() {
           priority
           data-ai-hint={slide.hint}
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-transparent"></div>
+        <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-transparent md:bg-gradient-to-r"></div>
+        <div className="absolute inset-0 bg-black/30 md:hidden"></div>
       </div>
 
       {/* Content */}
-      <div className="relative z-10 max-w-7xl mx-auto px-4 md:px-6 h-full flex items-center" style={{ minHeight: 'clamp(520px, 80vh, 720px)' }}>
-        <div className="flex flex-col md:flex-row items-center gap-8 w-full py-8 sm:py-12 md:py-16">
+      <div className="relative z-10 max-w-7xl mx-auto px-4 lg:px-12 h-full flex items-center" style={{ minHeight: 'clamp(520px, 80vh, 720px)' }}>
+        <div className="flex flex-col lg:flex-row items-center gap-8 md:gap-12 w-full py-12 lg:py-16">
           {/* Left: Text */}
-          <div className="flex-1 max-w-xl text-center md:text-left">
+          <div className="flex-1 max-w-xl text-center lg:text-left w-full">
             {/* Badge */}
             <div className={`inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm border border-white/30 rounded-full px-4 py-1.5 mb-5 transition-opacity duration-500 ${transitioning ? 'opacity-0' : 'opacity-100'}`}>
               <span className="text-xs sm:text-sm font-semibold text-white">{slide.badge}</span>
@@ -103,23 +103,23 @@ export default function HeroSection() {
               <span className="text-[#A5D6A7]">{slide.headlineAccent}</span>
             </h1>
 
-            <p className={`text-white/85 text-sm sm:text-base md:text-lg leading-relaxed mb-8 max-w-md mx-auto md:mx-0 transition-all duration-500 delay-100 ${transitioning ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}`}>
+            <p className={`text-white/85 text-sm sm:text-base md:text-lg leading-relaxed mb-8 max-w-md mx-auto lg:mx-0 transition-all duration-500 delay-100 ${transitioning ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}`}>
               {slide.sub}
             </p>
 
             {/* CTAs */}
-            <div className={`flex flex-col sm:flex-row items-center justify-center md:justify-start gap-3 transition-all duration-500 delay-200 ${transitioning ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}`}>
-              <Link href={slide.ctaHref} className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-white text-primary font-bold px-6 py-3.5 rounded-lg hover:bg-[#F1F8E9] transition-all hover:shadow-xl hover:-translate-y-0.5 text-sm sm:text-base">
+            <div className={`flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3 transition-all duration-500 delay-200 ${transitioning ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}`}>
+              <Link href={slide.ctaHref} className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-white text-primary font-bold px-8 py-4 h-[44px] sm:h-auto rounded-xl hover:bg-[#F1F8E9] transition-all hover:shadow-xl hover:-translate-y-0.5 text-sm sm:text-base">
                 {slide.cta}
                 <ArrowRight className="h-4 w-4" />
               </Link>
-              <Link href="/plants" className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-white/15 backdrop-blur-sm border border-white/30 text-white font-semibold px-6 py-3.5 rounded-lg hover:bg-white/25 transition-all text-sm sm:text-base">
+              <Link href="/plants" className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-white/15 backdrop-blur-sm border border-white/30 text-white font-semibold px-8 py-4 h-[44px] sm:h-auto rounded-xl hover:bg-white/25 transition-all text-sm sm:text-base">
                 View All Plants
               </Link>
             </div>
 
             {/* Slide Indicators */}
-            <div className="flex justify-center md:justify-start gap-2 mt-8">
+            <div className="flex justify-center lg:justify-start gap-2 mt-8">
               {HERO_SLIDES.map((_, i) => (
                 <button
                   key={i}
@@ -131,44 +131,37 @@ export default function HeroSection() {
           </div>
 
           {/* Right: Floating Cards */}
-          <div className="hidden md:flex flex-col gap-4 flex-shrink-0">
+          <div className="flex flex-col gap-4 flex-shrink-0 w-full md:w-auto items-center lg:items-end">
             {/* Offer Highlight */}
-            <div className={`bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-6 py-4 text-center min-w-[180px] transition-all duration-500 ${transitioning ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}>
-              <div className="text-3xl font-headline font-extrabold text-[#A5D6A7] mb-0.5">{slide.offer}</div>
-              <div className="text-xs text-white/80 font-semibold">{slide.offerSub}</div>
+            <div className={`bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-6 py-4 text-center min-w-[180px] w-full max-w-[260px] transition-all duration-500 ${transitioning ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}>
+              <div className="text-2xl md:text-3xl font-headline font-extrabold text-[#A5D6A7] mb-0.5">{slide.offer}</div>
+              <div className="text-[10px] md:text-xs text-white/80 font-semibold">{slide.offerSub}</div>
               <div className="mt-2 text-[10px] text-white/50 uppercase tracking-wider font-bold">Limited Time</div>
             </div>
 
             {/* Floating Trust Cards */}
-            {FLOATING_CARDS.map((card, i) => (
-              <div
-                key={i}
-                className="bg-white/10 backdrop-blur-sm border border-white/15 rounded-xl px-4 py-3 flex items-center gap-3 min-w-[200px]"
-                style={{
-                  animation: `float-y ${4 + i}s ease-in-out infinite`,
-                  animationDelay: card.delay,
-                  background: `${card.color}cc`,
-                  borderColor: card.border
-                }}
-              >
-                <span className="text-2xl">{card.icon}</span>
-                <div>
-                  <div className="text-sm font-bold text-[#1A2E1A]">{card.title}</div>
-                  <div className="text-xs text-[#4A6741]">{card.sub}</div>
+            <div className="grid grid-cols-1 gap-4 w-full max-w-[260px]">
+              {FLOATING_CARDS.map((card, i) => (
+                <div
+                  key={i}
+                  className="bg-white/10 backdrop-blur-sm border border-white/15 rounded-2xl p-3 md:px-4 md:py-3 flex items-center gap-3 w-full"
+                  style={{
+                    animation: `float-y ${4 + i}s ease-in-out infinite`,
+                    animationDelay: card.delay,
+                    background: `${card.color}cc`,
+                    borderColor: card.border
+                  }}
+                >
+                  <span className="text-xl md:text-2xl">{card.icon}</span>
+                  <div>
+                    <div className="text-xs md:text-sm font-bold text-[#1A2E1A]">{card.title}</div>
+                    <div className="text-[10px] md:text-xs text-[#4A6741]">{card.sub}</div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
-      </div>
-
-      {/* Mobile Offer Pill */}
-      <div className={`absolute bottom-6 left-4 right-4 md:hidden bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-4 py-3 flex items-center justify-between transition-all duration-500 ${transitioning ? 'opacity-0' : 'opacity-100'}`}>
-        <div>
-          <div className="text-lg font-bold text-[#A5D6A7]">{slide.offer}</div>
-          <div className="text-xs text-white/80">{slide.offerSub}</div>
-        </div>
-        <Link href={slide.ctaHref} className="bg-white text-primary text-xs font-bold px-4 py-2 rounded-full">Shop →</Link>
       </div>
     </section>
   );

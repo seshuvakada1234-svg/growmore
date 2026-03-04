@@ -39,16 +39,16 @@ function AnimatedNumber({ target, suffix, isFloat }: { target: number; suffix: s
 
 export default function StatsBar() {
   return (
-    <section className="bg-primary py-6 md:py-8">
-      <div className="max-w-7xl mx-auto px-4 md:px-6">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 md:gap-0 divide-y md:divide-y-0 md:divide-x divide-white/15">
+    <section className="bg-primary py-6 md:py-8 border-y border-white/10">
+      <div className="max-w-7xl mx-auto px-4 lg:px-12">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-y-8 md:gap-0 md:divide-x divide-white/15">
           {STATS.map((stat, i) => (
-            <div key={i} className="flex flex-col items-center py-2 md:py-0 gap-1">
-              <span className="text-2xl md:text-xl">{stat.icon}</span>
+            <div key={i} className="flex flex-col items-center py-2 md:py-0 gap-1 px-4">
+              <span className="text-xl md:text-2xl">{stat.icon}</span>
               <div className="text-2xl md:text-3xl font-bold font-headline text-white">
                 <AnimatedNumber target={stat.value} suffix={stat.suffix} isFloat={stat.isFloat} />
               </div>
-              <div className="text-xs text-accent font-semibold text-center">{stat.label}</div>
+              <div className="text-[10px] md:text-xs text-accent-light font-bold uppercase tracking-wider text-center">{stat.label}</div>
             </div>
           ))}
         </div>
