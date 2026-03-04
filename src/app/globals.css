@@ -27,9 +27,14 @@
   }
 
   /* Prevent horizontal overflow on mobile */
-  html, body {
-    overflow-x: hidden;
+  /* ✅ CRITICAL: Never set overflow:hidden on html or body — it breaks position:sticky */
+  body {
     width: 100%;
+    max-width: 100vw;
+  }
+  /* Use this on inner wrappers instead of body overflow-x:hidden */
+  main {
+    overflow-x: clip;
   }
 
   /* Better tap targets on mobile */

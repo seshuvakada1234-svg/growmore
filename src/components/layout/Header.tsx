@@ -23,22 +23,18 @@ import {
 
 export function Header() {
   const [cartCount, setCartCount] = useState(0);
-  const [mounted, setMounted] = useState(false);
   const { user } = useUser();
   const auth = useAuth();
   const db = useFirestore();
   const router = useRouter();
   const pathname = usePathname();
 
-  // Unified Affiliate Status
   const { isApproved: isAffiliate } = useAffiliate();
 
-  // Admin Check
   const userProfileRef = useMemoFirebase(() => (!db || !user?.uid) ? null : doc(db, 'users', user.uid), [db, user?.uid]);
   const { data: profile } = useDoc(userProfileRef);
   const isAdmin = profile?.role === 'admin';
 
-  // Barrier: Redirect Admins away from storefront to ensure pure Admin experience
   useEffect(() => {
     if (isAdmin && !pathname.startsWith('/admin')) {
       router.push('/admin');
@@ -46,7 +42,6 @@ export function Header() {
   }, [isAdmin, pathname, router]);
 
   useEffect(() => {
-    setMounted(true);
     const updateCount = () => {
       try {
         const cart = JSON.parse(localStorage.getItem('plantshop_cart') || '[]');
@@ -56,9 +51,9 @@ export function Header() {
     updateCount();
     window.addEventListener('cart-updated', updateCount);
     window.addEventListener('storage', updateCount);
-    return () => { 
-      window.removeEventListener('cart-updated', updateCount); 
-      window.removeEventListener('storage', updateCount); 
+    return () => {
+      window.removeEventListener('cart-updated', updateCount);
+      window.removeEventListener('storage', updateCount);
     };
   }, []);
 
@@ -72,8 +67,7 @@ export function Header() {
   };
 
   // --- ADMIN HEADER ---
-  // We defer the admin header until after hydration to ensure the initial HTML matches the server.
-  if (mounted && isAdmin) {
+  if (isAdmin) {
     return (
       <header className="sticky top-0 z-50 w-full border-b bg-primary text-white h-16 flex items-center shadow-lg">
         <div className="container mx-auto px-4 flex items-center justify-between">
@@ -83,7 +77,9 @@ export function Header() {
           </Link>
           <div className="flex items-center gap-4">
             <Badge variant="outline" className="text-white border-white/30 bg-white/10 uppercase tracking-widest text-[10px]">Super Admin</Badge>
-            <Button variant="ghost" size="icon" onClick={handleLogout} className="text-white hover:bg-red-500/20"><LogOut className="h-5 w-5" /></Button>
+            <Button variant="ghost" size="icon" onClick={handleLogout} className="text-white hover:bg-red-500/20">
+              <LogOut className="h-5 w-5" />
+            </Button>
           </div>
         </div>
       </header>
@@ -92,71 +88,107 @@ export function Header() {
 
   // --- STOREFRONT HEADER ---
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 h-16 flex items-center">
+    // ✅ FIXED: removed "md:static" — now sticky on ALL screen sizes including mobile
+    <header
+      className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 h-16 flex items-center"
+      style={{ position: 'sticky', top: 0 }}
+    >
       <div className="container mx-auto px-4 flex items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           <Sheet>
-            <SheetTrigger asChild><Button variant="ghost" size="icon" className="md:hidden"><Menu className="h-6 w-6" /></Button></SheetTrigger>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" className="md:hidden">
+                <Menu className="h-6 w-6" />
+              </Button>
+            </SheetTrigger>
             <SheetContent side="left">
               <nav className="flex flex-col gap-6 mt-12">
-                <Link href="/plants" className="text-xl font-bold flex items-center gap-2"><Leaf className="h-5 w-5" /> Shop Plants</Link>
-                <Link href="/affiliate" className="text-xl font-bold flex items-center gap-2"><Award className="h-5 w-5" /> Monterra Partners</Link>
+                <Link href="/plants" className="text-xl font-bold flex items-center gap-2">
+                  <Leaf className="h-5 w-5" /> Shop Plants
+                </Link>
+                <Link href="/affiliate" className="text-xl font-bold flex items-center gap-2">
+                  <Award className="h-5 w-5" /> Monterra Partners
+                </Link>
               </nav>
             </SheetContent>
           </Sheet>
+
           <Link href="/" className="flex items-center gap-2 text-primary group">
             <Leaf className="h-8 w-8 fill-current transition-transform group-hover:rotate-12" />
             <span className="font-headline font-extrabold text-xl tracking-tight hidden sm:inline-block">Monterra</span>
           </Link>
         </div>
 
+        {/* Search — desktop only */}
         <div className="flex-1 max-md:hidden max-w-md flex items-center relative">
           <Search className="absolute left-3 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Find your perfect plant..." className="pl-10 h-10 bg-muted/50 border-none rounded-full" />
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-4">
+        {/* Right Icons */}
+        <div className="flex items-center gap-1 sm:gap-2">
           <Link href="/">
             <Button variant="ghost" size="icon">
-              <Home className="h-6 w-6" />
+              <Home className="h-5 w-5 sm:h-6 sm:w-6" />
             </Button>
           </Link>
-          
+
           <Link href="/cart">
             <Button variant="ghost" size="icon" className="relative">
-              <ShoppingCart className="h-6 w-6" />
-              {cartCount > 0 && <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-[10px] bg-primary">{cartCount}</Badge>}
+              <ShoppingCart className="h-5 w-5 sm:h-6 sm:w-6" />
+              {cartCount > 0 && (
+                <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-[10px] bg-primary">
+                  {cartCount}
+                </Badge>
+              )}
             </Button>
           </Link>
 
           <Link href="/wishlist">
             <Button variant="ghost" size="icon">
-              <Heart className="h-6 w-6" />
+              <Heart className="h-5 w-5 sm:h-6 sm:w-6" />
             </Button>
           </Link>
-          
-          {mounted && user ? (
+
+          {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="rounded-full bg-accent text-primary p-0 overflow-hidden shadow-sm border-2 border-white">
-                  {user.photoURL ? <img src={user.photoURL} alt="Profile" className="h-full w-full object-cover" /> : <User className="h-5 w-5" />}
+                  {user.photoURL
+                    ? <img src={user.photoURL} alt="Profile" className="h-full w-full object-cover" />
+                    : <User className="h-5 w-5" />
+                  }
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-60 rounded-2xl mt-2 p-2">
                 <DropdownMenuLabel className="px-3 py-2">
                   <div className="font-bold truncate">{user.displayName || "User"}</div>
-                  {isAffiliate && <div className="text-[10px] text-emerald-600 font-black uppercase tracking-widest mt-1">Official Partner</div>}
+                  {isAffiliate && (
+                    <div className="text-[10px] text-emerald-600 font-black uppercase tracking-widest mt-1">Official Partner</div>
+                  )}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem asChild className="rounded-xl cursor-pointer"><Link href="/profile"><User className="mr-2 h-4 w-4" /> My Profile</Link></DropdownMenuItem>
-                <DropdownMenuItem asChild className="rounded-xl cursor-pointer"><Link href="/orders"><ShoppingCart className="mr-2 h-4 w-4" /> My Orders</Link></DropdownMenuItem>
-                <DropdownMenuItem asChild className="rounded-xl cursor-pointer"><Link href="/affiliate"><Award className="mr-2 h-4 w-4" /> {isAffiliate ? "Partner Dashboard" : "Become a Partner"}</Link></DropdownMenuItem>
+                <DropdownMenuItem asChild className="rounded-xl cursor-pointer">
+                  <Link href="/profile"><User className="mr-2 h-4 w-4" /> My Profile</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className="rounded-xl cursor-pointer">
+                  <Link href="/orders"><ShoppingCart className="mr-2 h-4 w-4" /> My Orders</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className="rounded-xl cursor-pointer">
+                  <Link href="/affiliate"><Award className="mr-2 h-4 w-4" /> {isAffiliate ? "Partner Dashboard" : "Become a Partner"}</Link>
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout} className="rounded-xl cursor-pointer text-destructive focus:bg-red-50 focus:text-destructive"><LogOut className="mr-2 h-4 w-4" /> Sign Out</DropdownMenuItem>
+                <DropdownMenuItem onClick={handleLogout} className="rounded-xl cursor-pointer text-destructive focus:bg-red-50 focus:text-destructive">
+                  <LogOut className="mr-2 h-4 w-4" /> Sign Out
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <Link href="/login"><Button className="rounded-full px-6 font-bold shadow-lg shadow-primary/20">Login</Button></Link>
+            <Link href="/login">
+              <Button className="rounded-full px-4 sm:px-6 font-bold shadow-lg shadow-primary/20 text-sm">
+                Login
+              </Button>
+            </Link>
           )}
         </div>
       </div>
