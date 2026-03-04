@@ -98,12 +98,12 @@ export default function HeroSection() {
             </div>
 
             {/* Headline */}
-            <h1 className={`font-headline text-xl sm:text-4xl md:text-6xl lg:text-7xl text-white font-extrabold leading-tight mb-2 lg:mb-4 transition-all duration-500 ${transitioning ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}`}>
+            <h1 className={`font-headline text-2xl lg:text-7xl text-white font-extrabold leading-tight mb-2 lg:mb-4 transition-all duration-500 ${transitioning ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}`}>
               {slide.headline}<br />
               <span className="text-[#A5D6A7]">{slide.headlineAccent}</span>
             </h1>
 
-            <p className={`text-white/85 text-[10px] sm:text-base lg:text-lg leading-relaxed mb-4 lg:mb-8 max-w-md transition-all duration-500 delay-100 ${transitioning ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}`}>
+            <p className={`text-white/85 text-[11px] lg:text-lg leading-relaxed mb-4 lg:mb-8 max-w-md transition-all duration-500 delay-100 ${transitioning ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'}`}>
               {slide.sub}
             </p>
 
@@ -134,7 +134,7 @@ export default function HeroSection() {
           <div className="flex flex-col gap-2 lg:gap-4 flex-shrink-0">
             {/* Offer Highlight */}
             <div className={`bg-white/10 backdrop-blur-md border border-white/20 rounded-xl lg:rounded-2xl px-3 lg:px-6 py-2 lg:py-4 text-center min-w-[100px] lg:min-w-[180px] transition-all duration-500 ${transitioning ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}>
-              <div className="text-sm sm:text-lg lg:text-3xl font-headline font-extrabold text-[#A5D6A7] mb-0.5">{slide.offer}</div>
+              <div className="text-sm lg:text-3xl font-headline font-extrabold text-[#A5D6A7] mb-0.5">{slide.offer}</div>
               <div className="text-[8px] lg:text-xs text-white/80 font-semibold">{slide.offerSub}</div>
             </div>
 
@@ -153,7 +153,7 @@ export default function HeroSection() {
                 <span className="text-base lg:text-2xl">{card.icon}</span>
                 <div>
                   <div className="text-[9px] lg:text-sm font-bold text-[#1A2E1A] leading-tight">{card.title}</div>
-                  <div className="hidden sm:block text-[8px] lg:text-xs text-[#4A6741]">{card.sub}</div>
+                  <div className="text-[8px] lg:text-xs text-[#4A6741]">{card.sub}</div>
                 </div>
               </div>
             ))}
