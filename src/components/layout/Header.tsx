@@ -89,7 +89,7 @@ export function Header() {
 
   // --- STOREFRONT HEADER ---
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 h-16 flex items-center">
+    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 h-16 flex items-center md:static">
       <div className="container mx-auto px-4 flex items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           <Sheet>
@@ -107,7 +107,7 @@ export function Header() {
           </Link>
         </div>
 
-        <div className="flex-1 max-w-md hidden md:flex items-center relative">
+        <div className="flex-1 max-md:hidden max-w-md flex items-center relative">
           <Search className="absolute left-3 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Find your perfect plant..." className="pl-10 h-10 bg-muted/50 border-none rounded-full" />
         </div>
