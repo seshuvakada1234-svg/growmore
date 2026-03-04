@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState } from 'react';
@@ -101,7 +100,7 @@ function PlantCard({ plant }: { plant: Product }) {
           src={plant.imageUrl || null}
           alt={plant.name}
           fill
-          className="object-cover transition-transform duration-500 group-hover:scale-110"
+          className="object-cover transition-transform duration-500 group-hover:scale-110 w-full h-auto"
           data-ai-hint="plant"
         />
         
@@ -210,12 +209,12 @@ export default function ProductGrid({ title, subtitle, filterKey, limit = 8, sho
   const router = useRouter();
 
   return (
-    <section className="py-12 md:py-16 bg-neutral/30">
+    <section className="py-8 md:py-16 bg-neutral/30">
       <div className="max-w-7xl mx-auto px-4 md:px-6">
         <div className="flex flex-col md:flex-row items-start md:items-end justify-between mb-8 gap-4">
           <div>
             {subtitle && <div className="text-primary font-bold uppercase tracking-wider text-xs mb-1">{subtitle}</div>}
-            <h2 className="text-3xl font-headline font-extrabold text-[#1A2E1A]">{title}</h2>
+            <h2 className="text-2xl md:text-3xl font-headline font-extrabold text-[#1A2E1A]">{title}</h2>
           </div>
           {showViewAll && (
             <button 
@@ -227,7 +226,7 @@ export default function ProductGrid({ title, subtitle, filterKey, limit = 8, sho
           )}
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
           {plants.map(plant => (
             <PlantCard key={`grid-plant-${plant.id}`} plant={plant} />
           ))}
