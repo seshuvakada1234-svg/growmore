@@ -5,19 +5,46 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { StatusChip } from "@/components/shared/StatusChip";
-import { Package, Calendar, ArrowUpRight, Loader2, Search } from "lucide-react";
+import { Package, Calendar, ArrowUpRight, Loader2, Search, XCircle, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
-import { collection, query, where, orderBy } from "firebase/firestore";
-import { format } from "date-fns";
+import { useEffect, useState } from "react";
+import { collection, query, where, orderBy, doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { format, differenceInHours } from "date-fns";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { toast } from "@/hooks/use-toast";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
 
 export default function OrdersPage() {
   const { user, isUserLoading } = useUser();
   const db = useFirestore();
   const router = useRouter();
+
+  // State for cancellation modal
+  const [cancellingOrder, setCancellingOrder] = useState<any>(null);
+  const [cancelReason, setCancelReason] = useState<string>("");
+  const [cancelFeedback, setCancelFeedback] = useState<string>("");
+  const [isSubmittingCancel, setIsSubmittingCancel] = useState(false);
 
   // Fetch real orders from Firestore for the current user
   const ordersQuery = useMemoFirebase(() => {
@@ -36,6 +63,54 @@ export default function OrdersPage() {
       router.push('/login?redirect=/orders');
     }
   }, [user, isUserLoading, router]);
+
+  const canCancel = (order: any) => {
+    if (order.status === "Cancelled") return false;
+    
+    // Rule 1: Correct Status
+    const isCorrectStatus = ["Pending", "Approved"].includes(order.status);
+    if (!isCorrectStatus) return false;
+
+    // Rule 2: Within 24 hours
+    const createdAt = order.createdAt?.seconds ? new Date(order.createdAt.seconds * 1000) : new Date();
+    const hoursElapsed = differenceInHours(new Date(), createdAt);
+    return hoursElapsed <= 24;
+  };
+
+  const handleConfirmCancel = async () => {
+    if (!cancellingOrder || !cancelReason) return;
+
+    setIsSubmittingCancel(true);
+    const orderRef = doc(db, "orders", cancellingOrder.id);
+    const cancelData = {
+      status: "Cancelled",
+      cancelled: true,
+      cancelReason,
+      cancelFeedback: cancelReason === "Other" ? cancelFeedback : "",
+      cancelledAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    };
+
+    try {
+      await updateDoc(orderRef, cancelData);
+      toast({
+        title: "Order Cancelled",
+        description: "Your order has been successfully cancelled.",
+      });
+      setCancellingOrder(null);
+      setCancelReason("");
+      setCancelFeedback("");
+    } catch (error) {
+      const permissionError = new FirestorePermissionError({
+        path: orderRef.path,
+        operation: 'update',
+        requestResourceData: cancelData
+      });
+      errorEmitter.emit('permission-error', permissionError);
+    } finally {
+      setIsSubmittingCancel(false);
+    }
+  };
 
   if (isUserLoading || isOrdersLoading) {
     return (
@@ -65,7 +140,7 @@ export default function OrdersPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <input 
                 placeholder="Search orders..." 
-                className="pl-10 h-10 w-full md:w-64 rounded-full border-none bg-white shadow-sm text-sm focus:ring-2 focus:ring-primary"
+                className="pl-10 h-10 w-full md:w-64 rounded-full border-none bg-white shadow-sm text-sm focus:ring-2 focus:ring-primary outline-none"
               />
             </div>
           </div>
@@ -134,9 +209,17 @@ export default function OrdersPage() {
                       ))}
                     </div>
                     
-                    <div className="mt-8 pt-6 border-t flex flex-col sm:flex-row justify-end gap-3">
-                      <Link href={`/track-order/${order.id}`}>
-                        <button className="w-full sm:w-auto text-sm font-bold px-8 py-2.5 rounded-full border-2 border-primary/10 text-primary hover:bg-accent transition-all">
+                    <div className="mt-8 pt-6 border-t flex flex-col sm:flex-row justify-end items-center gap-3">
+                      {canCancel(order) && (
+                        <button 
+                          onClick={() => setCancellingOrder(order)}
+                          className="w-full sm:w-auto text-sm font-bold px-8 py-2.5 rounded-full text-destructive hover:bg-destructive/5 transition-all flex items-center justify-center gap-2"
+                        >
+                          <XCircle className="h-4 w-4" /> Cancel Order
+                        </button>
+                      )}
+                      <Link href={`/track-order/${order.id}`} className="w-full sm:w-auto">
+                        <button className="w-full text-sm font-bold px-8 py-2.5 rounded-full border-2 border-primary/10 text-primary hover:bg-accent transition-all">
                           Track Order
                         </button>
                       </Link>
@@ -151,6 +234,70 @@ export default function OrdersPage() {
           )}
         </div>
       </main>
+
+      {/* Cancellation Modal */}
+      <Dialog open={!!cancellingOrder} onOpenChange={(open) => !open && setCancellingOrder(null)}>
+        <DialogContent className="rounded-[2rem] max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-headline font-extrabold text-primary flex items-center gap-2">
+              <AlertTriangle className="h-6 w-6 text-destructive" />
+              Cancel Order?
+            </DialogTitle>
+            <DialogDescription>
+              We're sorry to see you go. Please let us know why you're cancelling.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 py-4">
+            <div className="space-y-2">
+              <Label className="font-bold">Reason for cancellation</Label>
+              <Select onValueChange={setCancelReason} value={cancelReason}>
+                <SelectTrigger className="rounded-xl h-12 border-muted">
+                  <SelectValue placeholder="Select a reason" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Ordered by mistake">Ordered by mistake</SelectItem>
+                  <SelectItem value="Found cheaper elsewhere">Found cheaper elsewhere</SelectItem>
+                  <SelectItem value="Changed my mind">Changed my mind</SelectItem>
+                  <SelectItem value="Delivery time too long">Delivery time too long</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {cancelReason === "Other" && (
+              <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                <Label className="font-bold">Additional feedback</Label>
+                <Textarea 
+                  placeholder="Please tell us more..."
+                  value={cancelFeedback}
+                  onChange={(e) => setCancelFeedback(e.target.value)}
+                  className="rounded-xl min-h-[100px] border-muted"
+                />
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            <Button 
+              variant="ghost" 
+              onClick={() => setCancellingOrder(null)}
+              className="rounded-full flex-1"
+            >
+              Keep Order
+            </Button>
+            <Button 
+              variant="destructive" 
+              disabled={!cancelReason || (cancelReason === "Other" && !cancelFeedback) || isSubmittingCancel}
+              onClick={handleConfirmCancel}
+              className="rounded-full flex-1 font-bold h-11"
+            >
+              {isSubmittingCancel ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm Cancellation"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Footer />
     </div>
   );
