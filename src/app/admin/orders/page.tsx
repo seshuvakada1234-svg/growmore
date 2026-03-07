@@ -29,7 +29,9 @@ import {
   Phone,
   MapPin,
   CreditCard,
-  Package
+  Package,
+  AlertTriangle,
+  Clock
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -264,6 +266,36 @@ export default function AdminOrders() {
                   </div>
                 </div>
               </div>
+
+              {/* Cancellation Info Block */}
+              {selectedOrder.status === "Cancelled" && (
+                <div className="space-y-4 bg-red-50 border border-red-100 p-6 rounded-3xl">
+                  <h3 className="text-sm font-black uppercase tracking-widest text-red-600 flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4" /> Cancellation Details
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div>
+                      <p className="text-[10px] text-red-400 uppercase font-black tracking-wider mb-1">Reason</p>
+                      <p className="font-bold text-red-700">{selectedOrder.cancelReason || "Not specified"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-red-400 uppercase font-black tracking-wider mb-1">Cancelled On</p>
+                      <div className="flex items-center gap-1 font-bold text-red-700">
+                        <Clock className="h-3.5 w-3.5" />
+                        {selectedOrder.cancelledAt?.seconds 
+                          ? format(new Date(selectedOrder.cancelledAt.seconds * 1000), "iii, d MMM ''yy - h:mma")
+                          : "Recently"}
+                      </div>
+                    </div>
+                  </div>
+                  {selectedOrder.cancelFeedback && (
+                    <div className="pt-2 border-t border-red-100">
+                      <p className="text-[10px] text-red-400 uppercase font-black tracking-wider mb-1">Customer Feedback</p>
+                      <p className="text-sm text-red-700 italic">"{selectedOrder.cancelFeedback}"</p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <Separator />
 

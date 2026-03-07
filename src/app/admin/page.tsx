@@ -7,11 +7,16 @@ import {
   TrendingUp, 
   DollarSign, 
   Award, 
-  Loader2
+  Loader2,
+  AlertTriangle,
+  ChevronRight
 } from "lucide-react";
 import { useFirestore, useCollection, useMemoFirebase, useUser, useDoc } from "@/firebase";
 import { collection, query, orderBy, limit, doc } from "firebase/firestore";
 import { cn } from "@/lib/utils";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+
+const COLORS = ['#1B5E20', '#EF4444', '#F59E0B', '#3B82F6', '#8B5CF6'];
 
 export default function AdminDashboard() {
   const db = useFirestore();
@@ -42,6 +47,22 @@ export default function AdminDashboard() {
     return collection(db, 'users');
   }, [db, isAdmin]);
   const { data: allUsers } = useCollection(usersQuery);
+
+  // --- ANALYTICS LOGIC ---
+  const cancelledOrders = allOrders?.filter(o => o.status === 'Cancelled') || [];
+  const totalCancelled = cancelledOrders.length;
+  
+  const reasonsMap = cancelledOrders.reduce((acc: any, o) => {
+    const reason = o.cancelReason || 'Not specified';
+    acc[reason] = (acc[reason] || 0) + 1;
+    return acc;
+  }, {});
+
+  const cancellationInsights = Object.entries(reasonsMap).map(([name, value]) => ({
+    name,
+    value,
+    percentage: totalCancelled > 0 ? Math.round(((value as number) / totalCancelled) * 100) : 0
+  })).sort((a, b) => b.value - a.value);
 
   const stats = [
     { 
@@ -97,18 +118,61 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Cancellation Insights Widget */}
         <Card className="rounded-[2rem] border-none shadow-sm bg-white p-8">
-          <h3 className="text-xl font-headline font-extrabold text-primary mb-6 flex items-center gap-2">
-            <TrendingUp className="h-5 w-5" /> Sales Trend
-          </h3>
-          <div className="h-[300px] w-full bg-muted/20 rounded-2xl flex items-center justify-center text-muted-foreground italic">
-            Chart data updates daily at midnight.
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-xl font-headline font-extrabold text-primary flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-red-500" /> Cancellation Insights
+            </h3>
+            <Badge variant="outline" className="rounded-full text-[10px] font-black">{totalCancelled} Total</Badge>
+          </div>
+          
+          <div className="h-[200px] w-full mb-6">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={cancellationInsights}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={80}
+                  paddingAngle={5}
+                  dataKey="value"
+                >
+                  {cancellationInsights.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="space-y-3">
+            {cancellationInsights.slice(0, 4).map((item, i) => (
+              <div key={i} className="flex items-center justify-between text-sm">
+                <div className="flex items-center gap-2 truncate pr-4">
+                  <div className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                  <span className="text-muted-foreground truncate">{item.name}</span>
+                </div>
+                <span className="font-bold text-primary">{item.percentage}%</span>
+              </div>
+            ))}
+            {cancellationInsights.length === 0 && (
+              <p className="text-center text-sm text-muted-foreground italic py-10">No cancellations recorded yet.</p>
+            )}
           </div>
         </Card>
 
-        <Card className="rounded-[2rem] border-none shadow-sm bg-white p-8 overflow-hidden">
-          <h3 className="text-xl font-headline font-extrabold text-primary mb-6">Recent Orders</h3>
+        {/* Recent Orders Widget */}
+        <Card className="lg:col-span-2 rounded-[2rem] border-none shadow-sm bg-white p-8 overflow-hidden">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-xl font-headline font-extrabold text-primary">Recent Activity</h3>
+            <button className="text-xs font-bold text-primary flex items-center gap-1 hover:underline">
+              View All <ChevronRight className="h-3 w-3" />
+            </button>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -129,6 +193,7 @@ export default function AdminDashboard() {
                       <span className={cn(
                         "px-3 py-1 rounded-full text-[10px] font-bold uppercase",
                         order.status === "Delivered" ? "bg-emerald-100 text-emerald-800" :
+                        order.status === "Cancelled" ? "bg-red-100 text-red-800" :
                         order.status === "Pending" ? "bg-yellow-100 text-yellow-800" : "bg-blue-100 text-blue-800"
                       )}>
                         {order.status}
