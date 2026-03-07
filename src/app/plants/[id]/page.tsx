@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PRODUCTS } from "@/lib/mock-data";
 import { Star, Truck, ShieldCheck, Heart, ShoppingCart, Minus, Plus, Sun, Droplets, Leaf } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import Link from "next/link";
@@ -16,6 +16,8 @@ import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
 import { doc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { cn } from "@/lib/utils";
 import { ShareButton } from "@/components/shared/ShareButton";
+import { calculateEarning } from "@/lib/affiliateEngine";
+import { MonterraUser } from "@/types/affiliate.types";
 
 export default function PlantDetailPage() {
   const { id } = useParams();
@@ -31,6 +33,12 @@ export default function PlantDetailPage() {
 
   const { data: wishlistItem } = useDoc(wishlistRef);
   const isWishlisted = !!wishlistItem;
+
+  const userProfileRef = useMemoFirebase(() => !user?.uid ? null : doc(db, 'users', user.uid), [db, user?.uid]);
+  const { data: profile } = useDoc(userProfileRef);
+  const monterraUser = profile as unknown as MonterraUser;
+
+  const earning = calculateEarning(product.price, (product as any).affiliateCommission);
 
   const handleToggleWishlist = async () => {
     if (!user) {
@@ -164,6 +172,16 @@ export default function PlantDetailPage() {
               )}
             </div>
 
+            {/* Affiliate Earning Info */}
+            {monterraUser?.affiliateApproved && earning && (
+              <div className="mb-6 p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-center gap-3">
+                <span className="text-xl">💰</span>
+                <p className="text-sm font-bold text-emerald-800">
+                  Earn ₹{earning} if someone buys this plant through your link 🌱
+                </p>
+              </div>
+            )}
+
             <p className="text-lg text-muted-foreground mb-8 leading-relaxed">
               {product.description}
             </p>
@@ -222,7 +240,7 @@ export default function PlantDetailPage() {
           </div>
         </div>
 
-        {/* Tabs */}
+        {/* Tabs and rest of content... */}
         <div className="max-w-4xl mx-auto">
           <Tabs defaultValue="care" className="w-full">
             <TabsList className="w-full justify-start border-b rounded-none h-14 bg-transparent p-0 gap-8">

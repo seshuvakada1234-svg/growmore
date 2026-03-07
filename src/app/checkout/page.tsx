@@ -1,4 +1,3 @@
-
 "use client";
 
 import { Header } from "@/components/layout/Header";
@@ -31,6 +30,7 @@ import { useState, useEffect } from "react";
 import { PRODUCTS } from "@/lib/mock-data";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
+import { saveCommissionRecord } from "@/lib/affiliateEngine";
 
 declare global {
   interface Window {
@@ -103,22 +103,9 @@ export default function CheckoutPage() {
   const saveOrderToFirestore = async (orderId: string, razorpayPaymentId: string | null = null) => {
     if (!user) return;
 
-    const affiliateRefId = localStorage.getItem("affiliate_ref");
+    const affiliateRefId = localStorage.getItem("monterra_referrer");
     const isSelfReferral = affiliateRefId === user.uid;
     const finalReferrerId = isSelfReferral ? null : affiliateRefId;
-
-    let calculatedCommission = 0;
-    if (finalReferrerId) {
-      const productSnaps = await Promise.all(
-        cartItems.map((item) => getDoc(doc(db, "products", item.id)))
-      );
-      cartItems.forEach((item, idx) => {
-        const rate = productSnaps[idx]?.exists()
-          ? productSnaps[idx].data().affiliateCommission || 5
-          : 5;
-        calculatedCommission += item.price * item.quantity * (rate / 100);
-      });
-    }
 
     const orderRef = doc(db, "orders", orderId);
     const orderData = {
@@ -138,7 +125,6 @@ export default function CheckoutPage() {
       totalAmount: total,
       status: paymentMethod === 'cod' ? "Pending" : "Paid",
       affiliateId: finalReferrerId,
-      commissionAmount: calculatedCommission,
       items: cartItems.map((i) => ({
         productId: i.id,
         name: i.name,
@@ -151,7 +137,29 @@ export default function CheckoutPage() {
       rejectedSelfReferral: isSelfReferral,
     };
 
-    await setDoc(orderRef, orderData).catch((err) => {
+    try {
+      await setDoc(orderRef, orderData);
+      
+      // Upgrade: Log commission for each item if there's a valid referrer
+      if (finalReferrerId) {
+        for (const item of cartItems) {
+          // Fetch the latest commission rate from the product document
+          const productSnap = await getDoc(doc(db, "products", item.id));
+          const rate = productSnap.exists() ? productSnap.data().affiliateCommission || 5 : 5;
+          
+          await saveCommissionRecord({
+            productId: item.slug,
+            orderId: orderId,
+            orderValue: item.price * item.quantity,
+            commissionRate: rate
+          });
+        }
+      }
+
+      localStorage.removeItem("plantshop_cart");
+      window.dispatchEvent(new Event("cart-updated"));
+      router.push(`/order-success?id=${orderId}`);
+    } catch (err) {
       errorEmitter.emit(
         "permission-error",
         new FirestorePermissionError({
@@ -160,11 +168,7 @@ export default function CheckoutPage() {
           requestResourceData: orderData,
         })
       );
-    });
-
-    localStorage.removeItem("plantshop_cart");
-    window.dispatchEvent(new Event("cart-updated"));
-    router.push(`/order-success?id=${orderId}`);
+    }
   };
 
   const handlePlaceOrder = async (e: React.FormEvent) => {
