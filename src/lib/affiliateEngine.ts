@@ -8,13 +8,10 @@ import {
   query, 
   where, 
   getDocs, 
-  serverTimestamp,
-  Firestore 
+  serverTimestamp
 } from "firebase/firestore";
-import { initializeFirebase } from "@/firebase";
+import { db } from "@/lib/firebase";
 import { MonterraUser, SharePlatform, MonterraProduct } from "@/types/affiliate.types";
-
-const { firestore: db } = initializeFirebase();
 
 /**
  * 1. Generates a referral link if the user is an approved affiliate.

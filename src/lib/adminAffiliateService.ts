@@ -1,3 +1,5 @@
+'use client';
+
 import { 
   collection, 
   getDocs, 
@@ -6,15 +8,12 @@ import {
   updateDoc, 
   doc, 
   getDoc,
-  deleteDoc, 
   writeBatch,
   serverTimestamp,
   orderBy,
   getCountFromServer
 } from "firebase/firestore";
-import { initializeFirebase } from "@/firebase";
-
-const { firestore: db } = initializeFirebase();
+import { db } from "@/lib/firebase";
 
 /**
  * Approves a user's affiliate status.

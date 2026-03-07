@@ -1,3 +1,5 @@
+'use client';
+
 import { 
   collection, 
   addDoc, 
@@ -9,10 +11,8 @@ import {
   orderBy, 
   serverTimestamp 
 } from "firebase/firestore";
-import { initializeFirebase } from "@/firebase";
+import { db } from "@/lib/firebase";
 import { MonterraProduct } from "@/types/affiliate.types";
-
-const { firestore: db } = initializeFirebase();
 
 /**
  * Admin utility to create a new product with commission validation.
