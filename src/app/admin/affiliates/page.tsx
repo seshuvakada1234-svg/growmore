@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
-import { Search, Loader2, Clock, Award, Landmark, ShieldAlert, TrendingUp } from "lucide-react";
+import { Search, Loader2, Clock, Award, Landmark, ShieldAlert, TrendingUp, UserMinus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useFirestore, useCollection, useMemoFirebase, useUser, useDoc } from "@/firebase";
 import { collection, query, orderBy, where, doc } from "firebase/firestore";
 import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
-import { approveAffiliate, suspendAffiliate, getAffiliateProfile } from "@/lib/adminAffiliateService";
+import { approveAffiliate, suspendAffiliate, getAffiliateProfile, removeAffiliate } from "@/lib/adminAffiliateService";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 export default function AdminAffiliates() {
@@ -57,14 +57,15 @@ export default function AdminAffiliates() {
     }
   };
 
-  const handleSuspend = async (userId: string) => {
-    if (!confirm("Are you sure? This will remove their role and suspend all referral links.")) return;
+  const handleRemove = async (userId: string) => {
+    if (!confirm("Are you sure? This will remove their affiliate status and suspend all referral links.")) return;
     setIsProcessing(userId);
     try {
-      await suspendAffiliate(userId);
-      toast({ title: "Partner Suspended" });
+      await removeAffiliate(userId);
+      toast({ title: "Partner Removed", description: "User converted back to standard role." });
     } catch (e) {
-      toast({ title: "Error", variant: "destructive" });
+      console.error(e);
+      toast({ title: "Error", description: "Failed to remove affiliate.", variant: "destructive" });
     } finally {
       setIsProcessing(null);
     }
@@ -154,7 +155,16 @@ export default function AdminAffiliates() {
                   <td className="p-6 text-right">
                     <div className="flex gap-2 justify-end">
                       <Button size="sm" variant="outline" onClick={() => viewDetails(aff.id)}>Profile</Button>
-                      <Button size="sm" variant="ghost" onClick={() => handleSuspend(aff.id)} disabled={isProcessing === aff.id} className="text-destructive"><ShieldAlert className="h-4 w-4" /></Button>
+                      <Button 
+                        size="sm" 
+                        variant="ghost" 
+                        onClick={() => handleRemove(aff.id)} 
+                        disabled={isProcessing === aff.id} 
+                        className="text-destructive hover:bg-destructive/5 gap-1"
+                      >
+                        <UserMinus className="h-4 w-4" />
+                        <span className="hidden sm:inline">Remove</span>
+                      </Button>
                     </div>
                   </td>
                 </tr>

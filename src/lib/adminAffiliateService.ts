@@ -52,6 +52,35 @@ export async function suspendAffiliate(userId: string) {
 }
 
 /**
+ * Removes an affiliate, converts them back to a user and suspends their links.
+ */
+export async function removeAffiliate(userId: string) {
+  const batch = writeBatch(db);
+  
+  const userRef = doc(db, "users", userId);
+  batch.update(userRef, {
+    role: "user",
+    affiliateApproved: false,
+    updatedAt: serverTimestamp()
+  });
+
+  const linksQuery = query(
+    collection(db, "affiliate_links"),
+    where("userId", "==", userId)
+  );
+
+  const linksSnapshot = await getDocs(linksQuery);
+  linksSnapshot.forEach(linkDoc => {
+    batch.update(linkDoc.ref, { 
+      status: "suspended",
+      updatedAt: serverTimestamp()
+    });
+  });
+
+  return await batch.commit();
+}
+
+/**
  * Returns bank details and profile info.
  */
 export async function getAffiliateProfile(userId: string) {
