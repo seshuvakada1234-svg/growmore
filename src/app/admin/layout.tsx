@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -17,18 +18,20 @@ import {
   BarChart3
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useUser, useFirestore, useDoc, useMemoFirebase, useAuth } from "@/firebase";
-import { doc } from "firebase/firestore";
+import { doc, collection, query, where, onSnapshot, Timestamp } from "firebase/firestore";
 import { signOut } from "firebase/auth";
+import { toast } from "@/hooks/use-toast";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [hasUnread, setHasUnread] = useState(false);
   const { user, isUserLoading } = useUser();
   const auth = useAuth();
   const db = useFirestore();
@@ -41,14 +44,47 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   
   const { data: profile, isLoading: isProfileLoading } = useDoc(userProfileRef);
 
+  // Determine admin status.
+  const isAdmin = profile?.role === 'admin' || user?.email === 'seshuvakada1234@gmail.com';
+
   useEffect(() => {
     if (!isUserLoading && !user) {
       router.push('/login');
-    } else if (!isUserLoading && user && !isProfileLoading && profile && profile.role !== 'admin') {
+    } else if (!isUserLoading && user && !isProfileLoading && profile && !isAdmin) {
       // Redirect non-admins away
       router.push('/');
     }
-  }, [user, isUserLoading, profile, isProfileLoading, router]);
+  }, [user, isUserLoading, profile, isProfileLoading, router, isAdmin]);
+
+  // Real-time Order Notifications
+  useEffect(() => {
+    if (!db || !isAdmin) return;
+
+    // Listen only for orders created after the current moment
+    const startTime = Timestamp.now();
+    const ordersQuery = query(
+      collection(db, "orders"),
+      where("createdAt", ">", startTime)
+    );
+
+    const unsubscribe = onSnapshot(ordersQuery, (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === "added") {
+          const orderData = change.doc.data();
+          const firstItemName = orderData.items?.[0]?.name || "New Product";
+          const total = orderData.totalAmount || orderData.total || 0;
+          
+          toast({
+            title: "🔔 New Order Received",
+            description: `${firstItemName} - ₹${total.toLocaleString()}`,
+          });
+          setHasUnread(true);
+        }
+      });
+    });
+
+    return () => unsubscribe();
+  }, [db, isAdmin]);
 
   const handleLogout = async () => {
     try {
@@ -73,7 +109,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   // Final catch for unauthorized access during redirect
-  if (!user || profile?.role !== 'admin') {
+  if (!user || !isAdmin) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-neutral p-4 text-center">
         <ShieldAlert className="h-16 w-16 text-destructive mb-4" />
@@ -162,9 +198,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
           
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" className="relative text-muted-foreground">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="relative text-muted-foreground"
+              onClick={() => setHasUnread(false)}
+            >
               <Bell className="h-5 w-5" />
-              <span className="absolute top-2 right-2 h-2 w-2 bg-destructive rounded-full border-2 border-white" />
+              {hasUnread && (
+                <span className="absolute top-2 right-2 h-2 w-2 bg-destructive rounded-full border-2 border-white animate-pulse" />
+              )}
             </Button>
             <div className="flex items-center gap-3 pl-4 border-l">
               <div className="text-right hidden sm:block">
