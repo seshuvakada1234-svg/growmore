@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Header } from "@/components/layout/Header";
@@ -58,10 +59,6 @@ export default function CheckoutPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [cartItems, setCartItems] = useState<any[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cod");
-  const [upiId, setUpiId] = useState("");
-  const [cardNum, setCardNum] = useState("");
-  const [cardExpiry, setCardExpiry] = useState("");
-  const [cardCvv, setCardCvv] = useState("");
 
   const [formData, setFormData] = useState({
     fullName: "",
@@ -131,7 +128,7 @@ export default function CheckoutPage() {
       customerEmail: formData.email,
       customerPhone: formData.phone,
       shippingAddress: {
-        address: formData.address,
+        fullAddress: formData.address,
         city: formData.city,
         state: formData.state,
         pincode: formData.pincode,
@@ -139,7 +136,7 @@ export default function CheckoutPage() {
       paymentMethod,
       razorpayPaymentId,
       totalAmount: total,
-      status: paymentMethod === 'cod' ? "COD Pending" : "Paid",
+      status: paymentMethod === 'cod' ? "Pending" : "Paid",
       affiliateId: finalReferrerId,
       commissionAmount: calculatedCommission,
       items: cartItems.map((i) => ({
@@ -186,7 +183,6 @@ export default function CheckoutPage() {
         await saveOrderToFirestore(orderId);
         toast({ title: "Order Placed Successfully 🌿" });
       } else {
-        // Razorpay Online Payment Flow
         const res = await fetch('/api/create-order', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -209,7 +205,6 @@ export default function CheckoutPage() {
           description: "Premium Plant Purchase",
           order_id: razorpayOrder.id,
           handler: async function (response: any) {
-            // Verify payment signature
             const verifyRes = await fetch('/api/verify-payment', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },

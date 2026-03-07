@@ -24,7 +24,13 @@ import {
   Loader2,
   Calendar,
   User as UserIcon,
-  ChevronRight
+  ChevronRight,
+  Eye,
+  Mail,
+  Phone,
+  MapPin,
+  CreditCard,
+  Package
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useFirestore, useCollection, useMemoFirebase, useUser, useDoc } from "@/firebase";
@@ -35,16 +41,26 @@ import { OrderStatus } from "@/lib/mock-data";
 import { toast } from "@/hooks/use-toast";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
 
 export default function AdminOrders() {
   const db = useFirestore();
   const { user } = useUser();
   const [searchTerm, setSearchQuery] = useState("");
+  const [selectedOrder, setSelectedOrder] = useState<any>(null);
 
   // Fetch role to gate queries
   const userProfileRef = useMemoFirebase(() => !user?.uid ? null : doc(db, 'users', user.uid), [db, user?.uid]);
   const { data: profile } = useDoc(userProfileRef);
-  const isAdmin = profile?.role === 'admin';
+  const isAdmin = profile?.role === 'admin' || user?.email === 'seshuvakada1234@gmail.com';
 
   // Fetch all orders from the root collection - gated
   const ordersQuery = useMemoFirebase(() => {
@@ -176,9 +192,14 @@ export default function AdminOrders() {
                             <SelectItem value="Cancelled">Cancelled</SelectItem>
                           </SelectContent>
                         </Select>
-                        <button className="h-9 w-9 rounded-lg hover:bg-white flex items-center justify-center border border-transparent hover:border-muted transition-all text-muted-foreground hover:text-primary">
-                          <ChevronRight className="h-4 w-4" />
-                        </button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-9 w-9 rounded-lg hover:bg-white flex items-center justify-center border border-transparent hover:border-muted transition-all text-muted-foreground hover:text-primary"
+                          onClick={() => setSelectedOrder(order)}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -195,6 +216,115 @@ export default function AdminOrders() {
           </div>
         </Card>
       )}
+
+      {/* Order Details Modal */}
+      <Dialog open={!!selectedOrder} onOpenChange={(open) => !open && setSelectedOrder(null)}>
+        <DialogContent className="max-w-3xl rounded-[2rem] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-headline font-extrabold text-primary flex items-center gap-2">
+              <ShoppingBag className="h-6 w-6" />
+              Order Details
+            </DialogTitle>
+            <DialogDescription className="font-mono text-xs uppercase tracking-widest font-bold">
+              ID: {selectedOrder?.id}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedOrder && (
+            <div className="space-y-8 pt-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* Customer Section */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                    <UserIcon className="h-4 w-4" /> Customer Info
+                  </h3>
+                  <div className="bg-muted/30 p-5 rounded-2xl space-y-3">
+                    <p className="font-bold text-lg text-primary">{selectedOrder.customerName}</p>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Mail className="h-4 w-4" /> {selectedOrder.customerEmail}
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Phone className="h-4 w-4" /> {selectedOrder.customerPhone || 'N/A'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Shipping Section */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                    <MapPin className="h-4 w-4" /> Delivery Address
+                  </h3>
+                  <div className="bg-muted/30 p-5 rounded-2xl space-y-2">
+                    <p className="text-sm font-semibold text-primary leading-relaxed">
+                      {selectedOrder.shippingAddress?.fullAddress || selectedOrder.shippingAddress?.address}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedOrder.shippingAddress?.city}, {selectedOrder.shippingAddress?.state} - {selectedOrder.shippingAddress?.pincode}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Items Section */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                  <Package className="h-4 w-4" /> Order Summary
+                </h3>
+                <div className="space-y-3">
+                  {(selectedOrder.items || []).map((item: any, idx: number) => (
+                    <div key={idx} className="flex items-center justify-between p-4 bg-white border border-muted rounded-2xl shadow-sm">
+                      <div className="flex items-center gap-4">
+                        <div className="relative h-12 w-12 rounded-xl overflow-hidden bg-muted flex-shrink-0">
+                          <img src={item.imageUrl || "https://picsum.photos/seed/plant/200/200"} alt={item.name} className="object-cover w-full h-full" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-sm text-primary">{item.name}</p>
+                          <p className="text-xs text-muted-foreground">Qty: {item.qty || item.quantity || 1} • ₹{item.price}</p>
+                        </div>
+                      </div>
+                      <p className="font-black text-primary">
+                        ₹{(item.qty || item.quantity || 1) * item.price}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Footer Stats */}
+              <div className="flex flex-wrap items-center justify-between gap-6 bg-primary text-white p-6 rounded-3xl">
+                <div className="flex items-center gap-4">
+                  <div className="bg-white/10 p-3 rounded-2xl">
+                    <CreditCard className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-black opacity-60">Payment Method</p>
+                    <p className="font-bold uppercase tracking-wider">{selectedOrder.paymentMethod || 'COD'}</p>
+                  </div>
+                </div>
+
+                <div className="text-right">
+                  <p className="text-[10px] uppercase font-black opacity-60">Grand Total</p>
+                  <p className="text-3xl font-extrabold">₹{selectedOrder.totalAmount || selectedOrder.total || 0}</p>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3">
+                <Button variant="outline" className="rounded-full px-8" onClick={() => setSelectedOrder(null)}>
+                  Close
+                </Button>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-muted-foreground">Current Status:</span>
+                  <StatusChip status={selectedOrder.status as OrderStatus} />
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
