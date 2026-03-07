@@ -17,7 +17,7 @@ service cloud.firestore {
     function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
     
     function isApprovedAffiliate() {
-      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.affiliateApproved == true;
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('affiliateApproved', false) == true;
     }
 
     // --- Admin Whitelist ---
@@ -38,7 +38,7 @@ service cloud.firestore {
       allow list: if isAdmin();
       allow create: if isOwner(userId) && 
         request.resource.data.role == "user" && 
-        request.resource.data.affiliateApproved == false;
+        request.resource.data.get('affiliateApproved', false) == false;
       allow update: if isAdmin();
     }
 
@@ -47,11 +47,23 @@ service cloud.firestore {
       allow read: if isOwner(userId) || isAdmin();
       allow create: if isOwner(userId) && !exists(/databases/$(database)/documents/affiliateProfiles/$(userId));
       allow update: if isAdmin() || (isOwner(userId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['totalEarnings', 'withdrawableAmount', 'approved']));
+      
+      // Subcollection for specific profiles
+      match /payouts/{payoutId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId);
+        allow update: if isAdmin();
+      }
+    }
+
+    // --- Collection Group for Payouts (Admin View) ---
+    match /{path=**}/payouts/{payoutId} {
+      allow read: if isAdmin();
     }
 
     // --- Affiliate Links ---
     match /affiliate_links/{linkId} {
-      allow read: if isAdmin() || isOwner(resource.data.userId);
+      allow read: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
       allow create: if isApprovedAffiliate() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isAdmin();
     }
@@ -70,7 +82,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // --- Withdraw Requests ---
+    // --- Withdraw Requests (Root Collection) ---
     match /affiliateWithdrawRequests/{requestId} {
       allow read: if isAdmin() || (isSignedIn() && resource.data.affiliateId == request.auth.uid);
       allow create: if isApprovedAffiliate() && 

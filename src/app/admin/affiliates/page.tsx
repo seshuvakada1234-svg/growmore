@@ -5,8 +5,8 @@ import { Card } from "@/components/ui/card";
 import { Search, Loader2, Clock, Award, Landmark, ShieldAlert, TrendingUp } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
-import { collection, query, orderBy, where } from "firebase/firestore";
+import { useFirestore, useCollection, useMemoFirebase, useUser, useDoc } from "@/firebase";
+import { collection, query, orderBy, where, doc } from "firebase/firestore";
 import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 import { approveAffiliate, suspendAffiliate, getAffiliateProfile } from "@/lib/adminAffiliateService";
@@ -14,16 +14,35 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 
 export default function AdminAffiliates() {
   const db = useFirestore();
+  const { user } = useUser();
   const [searchTerm, setSearchQuery] = useState("");
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
   const [selectedProfile, setSelectedProfile] = useState<any>(null);
 
+  /* ---------------- ADMIN CHECK ---------------- */
+
+  const profileRef = useMemoFirebase(() => {
+    if (!db || !user?.uid) return null;
+    return doc(db, "users", user.uid);
+  }, [db, user?.uid]);
+
+  const { data: profile, isLoading: profileLoading } = useDoc(profileRef);
+  const isAdmin = profile?.role === "admin" || user?.email === 'seshuvakada1234@gmail.com';
+
+  /* ---------------- GATED QUERIES ---------------- */
+
   // Fetch Pending Applications
-  const appsQuery = useMemoFirebase(() => query(collection(db, 'affiliateApplications'), where('status', '==', 'pending'), orderBy('createdAt', 'desc')), [db]);
+  const appsQuery = useMemoFirebase(() => {
+    if (!db || !isAdmin) return null;
+    return query(collection(db, 'affiliateApplications'), where('status', '==', 'pending'), orderBy('createdAt', 'desc'));
+  }, [db, isAdmin]);
   const { data: applications, isLoading: appsLoading } = useCollection(appsQuery);
 
   // Fetch Approved Partners
-  const affiliatesQuery = useMemoFirebase(() => query(collection(db, 'users'), where('role', '==', 'affiliate')), [db]);
+  const affiliatesQuery = useMemoFirebase(() => {
+    if (!db || !isAdmin) return null;
+    return query(collection(db, 'users'), where('role', '==', 'affiliate'));
+  }, [db, isAdmin]);
   const { data: affiliates, isLoading: affLoading } = useCollection(affiliatesQuery);
 
   const handleApprove = async (userId: string) => {
@@ -56,11 +75,18 @@ export default function AdminAffiliates() {
     setSelectedProfile(data);
   };
 
-  if (appsLoading || affLoading) return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-primary" /></div>;
+  if (profileLoading) {
+    return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-primary" /></div>;
+  }
+
+  if (!isAdmin) {
+    return <div className="text-center py-20 font-bold text-destructive">Access Denied.</div>;
+  }
 
   const filteredAffiliates = affiliates?.filter(a => 
     a.email?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    a.displayName?.toLowerCase().includes(searchTerm.toLowerCase())
+    a.displayName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    `${a.firstName} ${a.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -85,7 +111,9 @@ export default function AdminAffiliates() {
               </tr>
             </thead>
             <tbody className="divide-y divide-muted">
-              {applications?.map(app => (
+              {appsLoading ? (
+                <tr><td colSpan={3} className="p-12 text-center"><Loader2 className="animate-spin mx-auto text-primary" /></td></tr>
+              ) : applications?.map(app => (
                 <tr key={app.id}>
                   <td className="p-6 font-mono text-xs">{app.userId}</td>
                   <td className="p-6 text-sm">{app.createdAt?.seconds ? format(new Date(app.createdAt.seconds * 1000), 'MMM d') : 'Recent'}</td>
@@ -97,7 +125,7 @@ export default function AdminAffiliates() {
                   </td>
                 </tr>
               ))}
-              {(!applications || applications.length === 0) && <tr><td colSpan={3} className="p-12 text-center text-muted-foreground italic">No applications pending.</td></tr>}
+              {(!applications || applications.length === 0) && !appsLoading && <tr><td colSpan={3} className="p-12 text-center text-muted-foreground italic">No applications pending.</td></tr>}
             </tbody>
           </table>
         </Card>
@@ -115,9 +143,13 @@ export default function AdminAffiliates() {
               </tr>
             </thead>
             <tbody className="divide-y divide-muted">
-              {filteredAffiliates?.map(aff => (
+              {affLoading ? (
+                <tr><td colSpan={3} className="p-12 text-center"><Loader2 className="animate-spin mx-auto text-primary" /></td></tr>
+              ) : filteredAffiliates?.map(aff => (
                 <tr key={aff.id}>
-                  <td className="p-6"><p className="font-bold text-primary">{aff.displayName || 'Unnamed'}</p></td>
+                  <td className="p-6">
+                    <p className="font-bold text-primary">{aff.displayName || `${aff.firstName} ${aff.lastName}` || 'Unnamed'}</p>
+                  </td>
                   <td className="p-6 text-sm">{aff.email}</td>
                   <td className="p-6 text-right">
                     <div className="flex gap-2 justify-end">
