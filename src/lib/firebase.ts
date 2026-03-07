@@ -1,18 +1,21 @@
 'use client';
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, Auth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { firebaseConfig } from '@/firebase/config';
 
-// Initialize Firebase only once
-// We use a singleton pattern to prevent multiple initializations in Next.js development environment
+/**
+ * Ensures Firebase is initialized only once.
+ * Auth is strictly initialized on the client side to avoid SSR assertion errors.
+ */
 export const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// Export initialized singletons for use in services and hooks
-export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
+
+// Auth instance - initialized once on client
+export const auth: Auth = typeof window !== 'undefined' ? getAuth(app) : (null as unknown as Auth);
 
 export default app;

@@ -1,5 +1,6 @@
 'use client';
-import { getAuth, type User } from 'firebase/auth';
+import { type User } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 
 type SecurityRuleContext = {
   path: string;
@@ -77,15 +78,14 @@ function buildAuthObject(currentUser: User | null): FirebaseAuthObject | null {
 function buildRequestObject(context: SecurityRuleContext): SecurityRuleRequest {
   let authObject: FirebaseAuthObject | null = null;
   try {
-    // Safely attempt to get the current user.
-    const firebaseAuth = getAuth();
-    const currentUser = firebaseAuth.currentUser;
+    // CRITICAL: Use the shared auth singleton instead of calling getAuth()
+    // This prevents the "Pending promise was never set" assertion error.
+    const currentUser = auth?.currentUser;
     if (currentUser) {
       authObject = buildAuthObject(currentUser);
     }
-  } catch {
-    // This will catch errors if the Firebase app is not yet initialized.
-    // In this case, we'll proceed without auth information.
+  } catch (err) {
+    // Proceed without auth information if initialization fails or is pending
   }
 
   return {
@@ -102,8 +102,7 @@ function buildRequestObject(context: SecurityRuleContext): SecurityRuleRequest {
  * @returns A string containing the error message and the JSON payload.
  */
 function buildErrorMessage(requestObject: SecurityRuleRequest): string {
-  return `Missing or insufficient permissions: The following request was denied by Firestore Security Rules:
-${JSON.stringify(requestObject, null, 2)}`;
+  return `Missing or insufficient permissions: The following request was denied by Firestore Security Rules:\n${JSON.stringify(requestObject, null, 2)}`;
 }
 
 /**
