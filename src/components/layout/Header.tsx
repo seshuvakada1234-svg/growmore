@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export function Header() {
+  const [hasMounted, setHasMounted] = useState(false);
   const [cartCount, setCartCount] = useState(0);
   const { user } = useUser();
   const auth = useAuth();
@@ -34,6 +35,10 @@ export function Header() {
   const userProfileRef = useMemoFirebase(() => (!db || !user?.uid) ? null : doc(db, 'users', user.uid), [db, user?.uid]);
   const { data: profile } = useDoc(userProfileRef);
   const isAdmin = profile?.role === 'admin';
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
 
   useEffect(() => {
     if (isAdmin && !pathname.startsWith('/admin')) {
@@ -66,6 +71,25 @@ export function Header() {
     router.push('/');
   };
 
+  // Prevent hydration mismatch by rendering a consistent placeholder until mounted on client
+  if (!hasMounted) {
+    return (
+      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur h-16 flex items-center">
+        <div className="container mx-auto px-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 text-primary">
+              <Leaf className="h-8 w-8 fill-current" />
+              <span className="font-headline font-extrabold text-xl tracking-tight hidden sm:inline-block">Monterra</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="h-10 w-10 rounded-full bg-muted animate-pulse" />
+          </div>
+        </div>
+      </header>
+    );
+  }
+
   // --- ADMIN HEADER ---
   if (isAdmin) {
     return (
@@ -88,10 +112,8 @@ export function Header() {
 
   // --- STOREFRONT HEADER ---
   return (
-    // ✅ FIXED: removed "md:static" — now sticky on ALL screen sizes including mobile
     <header
       className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 h-16 flex items-center"
-      style={{ position: 'sticky', top: 0 }}
     >
       <div className="container mx-auto px-4 flex items-center justify-between gap-4">
         <div className="flex items-center gap-2">
