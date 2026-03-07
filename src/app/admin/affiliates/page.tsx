@@ -61,8 +61,10 @@ export default function AdminAffiliates() {
     if (!confirm("Are you sure? This will remove their affiliate status and suspend all referral links.")) return;
     setIsProcessing(userId);
     try {
+      // Execute the removal logic
       await removeAffiliate(userId);
       toast({ title: "Partner Removed", description: "User converted back to standard role." });
+      // The list 'affiliates' will automatically refresh because useCollection is real-time (onSnapshot).
     } catch (e) {
       console.error(e);
       toast({ title: "Error", description: "Failed to remove affiliate.", variant: "destructive" });
@@ -169,6 +171,9 @@ export default function AdminAffiliates() {
                   </td>
                 </tr>
               ))}
+              {(!filteredAffiliates || filteredAffiliates.length === 0) && !affLoading && (
+                <tr><td colSpan={3} className="p-12 text-center text-muted-foreground italic">No active partners found.</td></tr>
+              )}
             </tbody>
           </table>
         </Card>

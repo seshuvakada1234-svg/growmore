@@ -57,6 +57,7 @@ export async function suspendAffiliate(userId: string) {
 export async function removeAffiliate(userId: string) {
   const batch = writeBatch(db);
   
+  // 1. Update the user document
   const userRef = doc(db, "users", userId);
   batch.update(userRef, {
     role: "user",
@@ -64,6 +65,7 @@ export async function removeAffiliate(userId: string) {
     updatedAt: serverTimestamp()
   });
 
+  // 2. Find and suspend all associated affiliate links
   const linksQuery = query(
     collection(db, "affiliate_links"),
     where("userId", "==", userId)
@@ -77,6 +79,7 @@ export async function removeAffiliate(userId: string) {
     });
   });
 
+  // 3. Commit all changes
   return await batch.commit();
 }
 
