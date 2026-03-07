@@ -40,13 +40,29 @@ service cloud.firestore {
         request.resource.data.role == "user" && 
         request.resource.data.get('affiliateApproved', false) == false;
       allow update: if isAdmin();
+
+      // Subcollections for addresses and wishlist
+      match /addresses/{addressId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+      match /wishlist/{productId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    // --- Affiliate Applications ---
+    match /affiliateApplications/{userId} {
+      allow read: if isAdmin() || isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.status == "pending";
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
 
     // --- Affiliate Profiles & Bank Details ---
     match /affiliateProfiles/{userId} {
       allow read: if isOwner(userId) || isAdmin();
       allow create: if isOwner(userId) && !exists(/databases/$(database)/documents/affiliateProfiles/$(userId));
-      allow update: if isAdmin() || (isOwner(userId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['totalEarnings', 'withdrawableAmount', 'approved']));
+      allow update: if isAdmin() || (isOwner(userId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['totalEarnings', 'withdrawableAmount', 'approved', 'role']));
       
       // Subcollection for specific profiles
       match /payouts/{payoutId} {
