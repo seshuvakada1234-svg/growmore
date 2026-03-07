@@ -5,38 +5,21 @@ import {
   where, 
   updateDoc, 
   doc, 
+  getDoc,
   deleteDoc, 
   writeBatch,
-  serverTimestamp 
+  serverTimestamp,
+  orderBy,
+  getCountFromServer
 } from "firebase/firestore";
 import { initializeFirebase } from "@/firebase";
 
 const { firestore: db } = initializeFirebase();
 
 /**
- * Admin utilities for managing affiliate accounts and links.
- */
-export async function adminGetAllAffiliateLinks() {
-  const snap = await getDocs(collection(db, "affiliate_links"));
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-}
-
-export async function adminGetLinksByUser(userId: string) {
-  const q = query(collection(db, "affiliate_links"), where("userId", "==", userId));
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-}
-
-export async function adminGetAllAffiliateProfiles() {
-  const q = query(collection(db, "users"), where("role", "==", "affiliate"));
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-}
-
-/**
  * Approves a user's affiliate status.
  */
-export async function adminApproveAffiliate(userId: string) {
+export async function approveAffiliate(userId: string) {
   const userRef = doc(db, "users", userId);
   return await updateDoc(userRef, {
     role: "affiliate",
@@ -46,14 +29,17 @@ export async function adminApproveAffiliate(userId: string) {
 }
 
 /**
- * Rejects an affiliate and suspends all their links in a single transaction.
+ * Rejects or suspends an affiliate and their links.
  */
-export async function adminRejectAffiliate(userId: string) {
+export async function suspendAffiliate(userId: string) {
   const batch = writeBatch(db);
   
   // 1. Update user profile
   const userRef = doc(db, "users", userId);
-  batch.update(userRef, { affiliateApproved: false });
+  batch.update(userRef, { 
+    affiliateApproved: false,
+    role: "user" 
+  });
   
   // 2. Suspend all links
   const linksQuery = query(collection(db, "affiliate_links"), where("userId", "==", userId));
@@ -65,18 +51,60 @@ export async function adminRejectAffiliate(userId: string) {
   return await batch.commit();
 }
 
-export async function adminUpdateClicks(linkId: string, clicks: number) {
-  return await updateDoc(doc(db, "affiliate_links", linkId), { clicks });
+/**
+ * Returns bank details and profile info.
+ */
+export async function getAffiliateProfile(userId: string) {
+  const profileRef = doc(db, "affiliateProfiles", userId);
+  const snap = await getDoc(profileRef);
+  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
 }
 
-export async function adminUpdateCommission(commId: string, data: { status: string, paidAt?: any }) {
-  return await updateDoc(doc(db, "affiliate_commissions", commId), data);
+/**
+ * Calculates real-time performance stats.
+ */
+export async function getAffiliateStats(userId: string) {
+  const clicksQuery = query(collection(db, "affiliateClicks"), where("referrerId", "==", userId));
+  const commsQuery = query(collection(db, "affiliate_commissions"), where("affiliateId", "==", userId));
+  
+  const [clicksSnap, commsSnap] = await Promise.all([
+    getCountFromServer(clicksQuery),
+    getDocs(commsQuery)
+  ]);
+
+  const commissions = commsSnap.docs.map(d => d.data());
+  const totalEarnings = commissions.reduce((acc, curr) => acc + (curr.commissionAmount || 0), 0);
+  const totalOrders = commissions.length;
+
+  return {
+    totalClicks: clicksSnap.data().count,
+    totalOrders,
+    totalEarnings
+  };
 }
 
-export async function adminSetLinkStatus(linkId: string, status: "active" | "suspended") {
-  return await updateDoc(doc(db, "affiliate_links", linkId), { status });
+/**
+ * Returns all users with the affiliate role.
+ */
+export async function getAllAffiliates() {
+  const q = query(collection(db, "users"), where("role", "==", "affiliate"));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
-export async function adminDeleteLink(linkId: string) {
-  return await deleteDoc(doc(db, "affiliate_links", linkId));
+/**
+ * Returns all payout requests sorted by date.
+ */
+export async function getAllWithdrawRequests() {
+  const q = query(collection(db, "affiliateWithdrawRequests"), orderBy("requestedAt", "desc"));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+/**
+ * Legacy support for fetching all links (admin only).
+ */
+export async function adminGetAllAffiliateLinks() {
+  const snap = await getDocs(collection(db, "affiliate_links"));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }

@@ -29,9 +29,7 @@ service cloud.firestore {
     // --- Products ---
     match /products/{productId} {
       allow read: if true;
-      allow write: if isAdmin() && 
-        request.resource.data.affiliateCommission >= 0 && 
-        request.resource.data.affiliateCommission <= 100;
+      allow write: if isAdmin();
     }
 
     // --- Users ---
@@ -42,47 +40,45 @@ service cloud.firestore {
         request.resource.data.role == "user" && 
         request.resource.data.affiliateApproved == false;
       allow update: if isAdmin();
-      
-      match /addresses/{addressId} {
-        allow read, write: if isOwner(userId);
-      }
-      match /wishlist/{productId} {
-        allow read, write: if isOwner(userId);
-      }
+    }
+
+    // --- Affiliate Profiles & Bank Details ---
+    match /affiliateProfiles/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && !exists(/databases/$(database)/documents/affiliateProfiles/$(userId));
+      allow update: if isAdmin() || (isOwner(userId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['totalEarnings', 'withdrawableAmount', 'approved']));
     }
 
     // --- Affiliate Links ---
     match /affiliate_links/{linkId} {
       allow read: if isAdmin() || isOwner(resource.data.userId);
-      allow create: if isApprovedAffiliate() && 
-        request.resource.data.userId == request.auth.uid &&
-        !request.resource.data.keys().hasAny(['commission', 'paid']);
+      allow create: if isApprovedAffiliate() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isAdmin();
     }
 
     // --- Affiliate Clicks ---
     match /affiliateClicks/{clickId} {
-      allow create: if true; // Public landing pages
+      allow create: if true;
       allow read, update, delete: if isAdmin();
     }
 
     // --- Affiliate Commissions ---
     match /affiliate_commissions/{commId} {
       allow read: if isAdmin() || (isSignedIn() && resource.data.affiliateId == request.auth.uid);
-      allow create: if isSignedIn() && 
-        request.resource.data.status == "pending" && 
-        !request.resource.data.keys().hasAny(['paidAt', 'processedBy']);
+      allow create: if isSignedIn(); 
       allow update: if isAdmin();
       allow delete: if false;
     }
 
-    // --- Legacy / Compatibility ---
-    match /affiliateProfiles/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
-      allow write: if isAdmin();
-      match /{allSubcollections=**} {
-        allow read, write: if isAdmin() || isOwner(userId);
-      }
+    // --- Withdraw Requests ---
+    match /affiliateWithdrawRequests/{requestId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.affiliateId == request.auth.uid);
+      allow create: if isApprovedAffiliate() && 
+        request.resource.data.affiliateId == request.auth.uid &&
+        request.resource.data.amount >= 500 &&
+        request.resource.data.status == "pending";
+      allow update: if isAdmin();
+      allow delete: if false;
     }
     
     match /orders/{id} {

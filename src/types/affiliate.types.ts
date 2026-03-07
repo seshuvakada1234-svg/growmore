@@ -22,6 +22,21 @@ export interface MonterraProduct {
   createdAt: Timestamp;
 }
 
+export interface AffiliateProfile {
+  userId: string;
+  accountHolderName: string;
+  bankAccountNumber: string;
+  ifscCode: string;
+  upiId: string;
+  address: string;
+  city: string;
+  state: string;
+  pincode: string;
+  totalEarnings: number;
+  withdrawableAmount: number;
+  createdAt: Timestamp;
+}
+
 export interface AffiliateLinkRecord {
   id?: string;
   userId: string;
@@ -50,6 +65,17 @@ export interface AffiliateCommissionRecord {
   commissionAmount: number;
   status: "pending" | "approved" | "paid" | "rejected";
   createdAt: Timestamp;
+}
+
+export interface WithdrawRequest {
+  id?: string;
+  affiliateId: string;
+  amount: number;
+  bankAccountNumber: string;
+  ifscCode: string;
+  upiId: string;
+  status: "pending" | "approved" | "paid" | "rejected";
+  requestedAt: Timestamp;
 }
 
 export type SharePlatform = "whatsapp" | "telegram" | "facebook" | "instagram" | "copy";
