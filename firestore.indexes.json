@@ -28,6 +28,14 @@
       "collectionGroup": "affiliateWithdrawRequests",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "requestedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "affiliateWithdrawRequests",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "affiliateId", "order": "ASCENDING" },
         { "fieldPath": "requestedAt", "order": "DESCENDING" }
       ]
