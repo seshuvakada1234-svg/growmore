@@ -15,6 +15,7 @@ import { useFirestore, useCollection, useMemoFirebase, useUser, useDoc } from "@
 import { collection, query, orderBy, limit, doc } from "firebase/firestore";
 import { cn } from "@/lib/utils";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { Badge } from "@/components/ui/badge";
 
 const COLORS = ['#1B5E20', '#EF4444', '#F59E0B', '#3B82F6', '#8B5CF6'];
 
