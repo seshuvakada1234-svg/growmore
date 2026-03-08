@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Header } from "@/components/layout/Header";
@@ -6,7 +7,26 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Users, TrendingUp, Wallet, Copy, Link as LinkIcon, CheckCircle2, Clock, Zap, Loader2, Landmark } from "lucide-react";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
+import { 
+  Users, 
+  TrendingUp, 
+  Wallet, 
+  Copy, 
+  Link as LinkIcon, 
+  CheckCircle2, 
+  Clock, 
+  Zap, 
+  Loader2, 
+  Landmark,
+  AlertCircle
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "@/hooks/use-toast";
 import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase";
@@ -16,19 +36,33 @@ import { useAffiliate } from "@/context/affiliate-context";
 import Link from "next/link";
 import { format } from "date-fns";
 
+const INDIA_STATES = [
+  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar",
+  "Chhattisgarh", "Goa", "Gujarat", "Haryana", "Himachal Pradesh",
+  "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra",
+  "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab",
+  "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura",
+  "Uttar Pradesh", "Uttarakhand", "West Bengal",
+  "Andaman and Nicobar Islands", "Chandigarh",
+  "Dadra and Nagar Haveli and Daman and Diu", "Delhi",
+  "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry"
+];
+
+function isValidPincode(pin: string): boolean {
+  return /^[1-9][0-9]{5}$/.test(pin);
+}
+
 export default function AffiliateDashboard() {
   const { user, isUserLoading } = useUser();
   const db = useFirestore();
   const router = useRouter();
   const [isApplying, setIsApplying] = useState(false);
 
-  // Unified source of truth
-  const { isApproved, affiliateProfile, loading: isAffiliateLoading } = useAffiliate();
-
-  // Application Form State
+  // Form State
   const [formData, setFormData] = useState({
     accountHolderName: "",
     bankAccountNumber: "",
+    bankName: "",
     ifscCode: "",
     upiId: "",
     address: "",
@@ -36,6 +70,14 @@ export default function AffiliateDashboard() {
     state: "",
     pincode: ""
   });
+
+  // Helper States for API and Validation
+  const [branchName, setBranchName] = useState("");
+  const [ifscError, setIfscError] = useState("");
+  const [isFetchingIfsc, setIsFetchingIfsc] = useState(false);
+
+  // Unified source of truth
+  const { isApproved, affiliateProfile, loading: isAffiliateLoading } = useAffiliate();
 
   // Fetch Application
   const appRef = useMemoFirebase(() => !user?.uid ? null : doc(db, 'affiliateApplications', user.uid), [db, user?.uid]);
@@ -52,9 +94,49 @@ export default function AffiliateDashboard() {
     if (!isUserLoading && !user) router.push('/login?redirect=/affiliate');
   }, [user, isUserLoading, router]);
 
+  const fetchBankFromIFSC = async (ifsc: string) => {
+    if (ifsc.length !== 11) return;
+    setIsFetchingIfsc(true);
+    setIfscError("");
+    try {
+      const res = await fetch(`https://ifsc.razorpay.com/${ifsc}`);
+      if (!res.ok) throw new Error("Invalid IFSC");
+      const data = await res.json();
+      setFormData(prev => ({ ...prev, bankName: data.BANK }));
+      setBranchName(data.BRANCH);
+    } catch (err) {
+      setFormData(prev => ({ ...prev, bankName: "" }));
+      setBranchName("");
+      setIfscError("Invalid IFSC Code");
+    } finally {
+      setIsFetchingIfsc(false);
+    }
+  };
+
+  const handleIfscChange = (val: string) => {
+    const code = val.toUpperCase().slice(0, 11);
+    setFormData(prev => ({ ...prev, ifscCode: code }));
+    if (code.length === 11) {
+      fetchBankFromIFSC(code);
+    } else {
+      setBranchName("");
+      setIfscError("");
+    }
+  };
+
+  const handlePincodeChange = (val: string) => {
+    const pin = val.replace(/\D/g, "").slice(0, 6);
+    setFormData(prev => ({ ...prev, pincode: pin }));
+  };
+
   const handleApply = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user?.uid) return;
+
+    if (!isValidPincode(formData.pincode)) {
+      toast({ title: "Invalid Pincode", description: "Please enter a valid 6-digit Indian pincode", variant: "destructive" });
+      return;
+    }
     
     setIsApplying(true);
     try {
@@ -64,7 +146,8 @@ export default function AffiliateDashboard() {
         ...formData,
         totalEarnings: 0,
         withdrawableAmount: 0,
-        createdAt: serverTimestamp()
+        createdAt: serverTimestamp(),
+        approved: false
       };
       await setDoc(doc(db, 'affiliateProfiles', user.uid), profileData);
 
@@ -86,8 +169,6 @@ export default function AffiliateDashboard() {
     toast({ title: "Link Copied!" });
   };
 
-  // --- EARLY RETURNS (AFTER ALL HOOKS) ---
-
   if (isUserLoading || isAffiliateLoading) {
     return (
       <div className="min-h-screen flex flex-col">
@@ -105,6 +186,8 @@ export default function AffiliateDashboard() {
   const isPending = !!application && application.status === 'pending';
 
   if (!isApproved) {
+    const isPinValid = formData.pincode.length === 6 && isValidPincode(formData.pincode);
+
     return (
       <div className="min-h-screen flex flex-col">
         <Header />
@@ -130,13 +213,58 @@ export default function AffiliateDashboard() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-2"><Label>Account Holder Name</Label><Input required value={formData.accountHolderName} onChange={e => setFormData({...formData, accountHolderName: e.target.value})} placeholder="As per bank records" className="rounded-xl h-12" /></div>
                         <div className="space-y-2"><Label>Bank Account Number</Label><Input required value={formData.bankAccountNumber} onChange={e => setFormData({...formData, bankAccountNumber: e.target.value})} placeholder="Your account number" className="rounded-xl h-12" /></div>
-                        <div className="space-y-2"><Label>IFSC Code</Label><Input required value={formData.ifscCode} onChange={e => setFormData({...formData, ifscCode: e.target.value})} placeholder="IFSC" className="rounded-xl h-12" /></div>
+                        
+                        <div className="space-y-2">
+                          <Label>Bank Name</Label>
+                          <Input readOnly value={formData.bankName} placeholder="Auto-filled from IFSC" className="rounded-xl h-12 bg-muted/50" />
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center">
+                            <Label>IFSC Code</Label>
+                            {isFetchingIfsc && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
+                          </div>
+                          <Input required value={formData.ifscCode} onChange={e => handleIfscChange(e.target.value)} placeholder="11-digit IFSC" className="rounded-xl h-12" maxLength={11} />
+                          {branchName && <p className="text-[10px] text-primary font-bold">{branchName}</p>}
+                          {ifscError && <p className="text-[10px] text-destructive font-bold">{ifscError}</p>}
+                        </div>
+
                         <div className="space-y-2"><Label>UPI ID (Optional)</Label><Input value={formData.upiId} onChange={e => setFormData({...formData, upiId: e.target.value})} placeholder="example@upi" className="rounded-xl h-12" /></div>
                         <div className="md:col-span-2 space-y-2"><Label>Complete Address</Label><Input required value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} placeholder="House, Street, Area" className="rounded-xl h-12" /></div>
                         <div className="space-y-2"><Label>City</Label><Input required value={formData.city} onChange={e => setFormData({...formData, city: e.target.value})} className="rounded-xl h-12" /></div>
+                        
                         <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2"><Label>State</Label><Input required value={formData.state} onChange={e => setFormData({...formData, state: e.target.value})} className="rounded-xl h-12" /></div>
-                          <div className="space-y-2"><Label>Pincode</Label><Input required value={formData.pincode} onChange={e => setFormData({...formData, pincode: e.target.value})} className="rounded-xl h-12" /></div>
+                          <div className="space-y-2">
+                            <Label>State</Label>
+                            <Select onValueChange={(val) => setFormData({...formData, state: val})} value={formData.state}>
+                              <SelectTrigger className="rounded-xl h-12">
+                                <SelectValue placeholder="Select" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {INDIA_STATES.map(s => (
+                                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center">
+                              <Label>Pincode</Label>
+                              {isPinValid && <CheckCircle2 className="h-3 w-3 text-emerald-500" />}
+                            </div>
+                            <Input 
+                              required 
+                              value={formData.pincode} 
+                              onChange={e => handlePincodeChange(e.target.value)} 
+                              placeholder="6 digits" 
+                              className="rounded-xl h-12" 
+                              maxLength={6}
+                              inputMode="numeric"
+                            />
+                            {formData.pincode.length > 0 && !isPinValid && (
+                              <p className="text-[10px] text-destructive font-bold">Enter a valid 6-digit Indian pincode</p>
+                            )}
+                          </div>
                         </div>
                       </div>
                       <Button type="submit" disabled={isApplying} className="w-full h-14 rounded-full text-lg font-bold shadow-xl shadow-primary/20">
