@@ -2,72 +2,120 @@
 
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
-import { Search, Loader2, Clock, Award, Landmark, ShieldAlert, TrendingUp, UserMinus } from "lucide-react";
+import {
+  Search,
+  Loader2,
+  Clock,
+  Award,
+  Landmark,
+  TrendingUp,
+  UserMinus
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useFirestore, useCollection, useMemoFirebase, useUser, useDoc } from "@/firebase";
-import { collection, query, orderBy, where, doc } from "firebase/firestore";
+import {
+  useFirestore,
+  useCollection,
+  useMemoFirebase,
+  useUser
+} from "@/firebase";
+import { collection, query, where } from "firebase/firestore";
 import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
-import { approveAffiliate, suspendAffiliate, getAffiliateProfile, removeAffiliate } from "@/lib/adminAffiliateService";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  approveAffiliate,
+  getAffiliateProfile,
+  removeAffiliate
+} from "@/lib/adminAffiliateService";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
 
 export default function AdminAffiliates() {
+
   const db = useFirestore();
   const { user } = useUser();
-  const [searchTerm, setSearchQuery] = useState("");
+
+  const [searchTerm, setSearchTerm] = useState("");
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
   const [selectedProfile, setSelectedProfile] = useState<any>(null);
 
-  /* ---------------- ADMIN CHECK ---------------- */
+  // ✅ FIX: isAdmin check must be derived BEFORE any hooks
+  const isAdmin = user?.email === "seshuvakada1234@gmail.com";
 
-  const profileRef = useMemoFirebase(() => {
-    if (!db || !user?.uid) return null;
-    return doc(db, "users", user.uid);
-  }, [db, user?.uid]);
+  // ✅ FIX: ALL hooks must be called before any early returns
+  // Pass null to queries when not admin — hooks still run but fetch nothing
 
-  const { data: profile, isLoading: profileLoading } = useDoc(profileRef);
-  const isAdmin = profile?.role === "admin" || user?.email === 'seshuvakada1234@gmail.com';
-
-  /* ---------------- GATED QUERIES ---------------- */
-
-  // Fetch Pending Applications
   const appsQuery = useMemoFirebase(() => {
     if (!db || !isAdmin) return null;
-    return query(collection(db, 'affiliateApplications'), where('status', '==', 'pending'), orderBy('createdAt', 'desc'));
+    return query(
+      collection(db, "affiliateApplications"),
+      where("status", "==", "pending")
+    );
   }, [db, isAdmin]);
-  const { data: applications, isLoading: appsLoading } = useCollection(appsQuery);
 
-  // Fetch Approved Partners
+  const { data: applicationsRaw, isLoading: appsLoading } =
+    useCollection(appsQuery);
+
   const affiliatesQuery = useMemoFirebase(() => {
     if (!db || !isAdmin) return null;
-    return query(collection(db, 'users'), where('role', '==', 'affiliate'));
+    return query(
+      collection(db, "users"),
+      where("role", "==", "affiliate")
+    );
   }, [db, isAdmin]);
-  const { data: affiliates, isLoading: affLoading } = useCollection(affiliatesQuery);
+
+  const { data: affiliates, isLoading: affLoading } =
+    useCollection(affiliatesQuery);
+
+  // ✅ Sort applications client-side — no orderBy needed, no extra index
+  const applications = applicationsRaw
+    ? [...applicationsRaw].sort((a, b) => {
+        const aTime = a.createdAt?.seconds ?? 0;
+        const bTime = b.createdAt?.seconds ?? 0;
+        return bTime - aTime;
+      })
+    : [];
+
+  /* ---------------- HANDLERS ---------------- */
 
   const handleApprove = async (userId: string) => {
     setIsProcessing(userId);
     try {
       await approveAffiliate(userId);
-      toast({ title: "Approved!", description: "Partner role activated." });
+      toast({
+        title: "Affiliate Approved",
+        description: "User is now an affiliate partner"
+      });
     } catch (e) {
-      toast({ title: "Error", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: "Failed to approve affiliate",
+        variant: "destructive"
+      });
     } finally {
       setIsProcessing(null);
     }
   };
 
   const handleRemove = async (userId: string) => {
-    if (!confirm("Are you sure? This will remove their affiliate status and suspend all referral links.")) return;
+    if (!confirm("Remove affiliate partner?")) return;
     setIsProcessing(userId);
     try {
-      // Execute the removal logic
       await removeAffiliate(userId);
-      toast({ title: "Partner Removed", description: "User converted back to standard role." });
-      // The list 'affiliates' will automatically refresh because useCollection is real-time (onSnapshot).
+      toast({
+        title: "Affiliate Removed",
+        description: "User is now a normal user"
+      });
     } catch (e) {
-      console.error(e);
-      toast({ title: "Error", description: "Failed to remove affiliate.", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: "Failed to remove affiliate",
+        variant: "destructive"
+      });
     } finally {
       setIsProcessing(null);
     }
@@ -78,139 +126,237 @@ export default function AdminAffiliates() {
     setSelectedProfile(data);
   };
 
-  if (profileLoading) {
-    return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-primary" /></div>;
-  }
+  /* ---------------- EARLY RETURNS (after all hooks) ---------------- */
+
+  // ✅ FIX: Early returns ONLY after all hooks have been called above
+  if (!user) return null;
 
   if (!isAdmin) {
-    return <div className="text-center py-20 font-bold text-destructive">Access Denied.</div>;
+    return (
+      <div className="text-center py-20 font-bold text-destructive">
+        Access Denied
+      </div>
+    );
   }
 
-  const filteredAffiliates = affiliates?.filter(a => 
-    a.email?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    a.displayName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    `${a.firstName} ${a.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
+  /* ---------------- FILTER ---------------- */
+
+  const filteredAffiliates = affiliates?.filter((a) =>
+    a.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    a.displayName?.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  /* ---------------- RENDER ---------------- */
 
   return (
     <div className="space-y-10">
+
+      {/* HEADER */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-        <h1 className="text-3xl font-headline font-extrabold text-primary">Affiliate Management</h1>
+        <h1 className="text-3xl font-bold text-primary">
+          Affiliate Management
+        </h1>
         <div className="relative w-full sm:w-80">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search partners..." className="pl-10 rounded-xl" value={searchTerm} onChange={(e) => setSearchQuery(e.target.value)} />
+          <Input
+            placeholder="Search affiliates..."
+            className="pl-10"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
         </div>
       </div>
 
+      {/* PENDING APPLICATIONS */}
       <section className="space-y-4">
-        <h2 className="text-xl font-bold flex items-center gap-2"><Clock className="h-5 w-5 text-yellow-600" /> Pending Approval</h2>
-        <Card className="rounded-[2rem] border-none shadow-sm overflow-hidden bg-white">
+        <h2 className="text-xl font-bold flex items-center gap-2">
+          <Clock className="h-5 w-5 text-yellow-600" />
+          Pending Applications
+        </h2>
+        <Card className="rounded-2xl overflow-hidden">
           <table className="w-full text-left">
             <thead className="bg-muted/30 border-b">
               <tr>
-                <th className="p-6 text-xs uppercase font-bold text-muted-foreground">User ID</th>
-                <th className="p-6 text-xs uppercase font-bold text-muted-foreground">Date</th>
-                <th className="p-6 text-xs uppercase font-bold text-muted-foreground text-right">Action</th>
+                <th className="p-6 text-xs uppercase">User</th>
+                <th className="p-6 text-xs uppercase">Date</th>
+                <th className="p-6 text-xs uppercase text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-muted">
+            <tbody>
               {appsLoading ? (
-                <tr><td colSpan={3} className="p-12 text-center"><Loader2 className="animate-spin mx-auto text-primary" /></td></tr>
-              ) : applications?.map(app => (
-                <tr key={app.id}>
-                  <td className="p-6 font-mono text-xs">{app.userId}</td>
-                  <td className="p-6 text-sm">{app.createdAt?.seconds ? format(new Date(app.createdAt.seconds * 1000), 'MMM d') : 'Recent'}</td>
-                  <td className="p-6 text-right">
-                    <div className="flex gap-2 justify-end">
-                      <Button size="sm" onClick={() => viewDetails(app.userId)} variant="outline">Details</Button>
-                      <Button size="sm" onClick={() => handleApprove(app.userId)} disabled={isProcessing === app.userId} className="bg-emerald-600">Approve</Button>
-                    </div>
+                <tr>
+                  <td colSpan={3} className="p-12 text-center">
+                    <Loader2 className="animate-spin mx-auto" />
                   </td>
                 </tr>
-              ))}
-              {(!applications || applications.length === 0) && !appsLoading && <tr><td colSpan={3} className="p-12 text-center text-muted-foreground italic">No applications pending.</td></tr>}
-            </tbody>
-          </table>
-        </Card>
-      </section>
-
-      <section className="space-y-4">
-        <h2 className="text-xl font-bold flex items-center gap-2"><Award className="h-5 w-5 text-primary" /> Active Partners</h2>
-        <Card className="rounded-[2rem] border-none shadow-sm overflow-hidden bg-white">
-          <table className="w-full text-left">
-            <thead className="bg-muted/30 border-b">
-              <tr>
-                <th className="p-6 text-xs uppercase font-bold text-muted-foreground">Partner</th>
-                <th className="p-6 text-xs uppercase font-bold text-muted-foreground">Contact</th>
-                <th className="p-6 text-xs uppercase font-bold text-muted-foreground text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-muted">
-              {affLoading ? (
-                <tr><td colSpan={3} className="p-12 text-center"><Loader2 className="animate-spin mx-auto text-primary" /></td></tr>
-              ) : filteredAffiliates?.map(aff => (
-                <tr key={aff.id}>
-                  <td className="p-6">
-                    <p className="font-bold text-primary">{aff.displayName || `${aff.firstName} ${aff.lastName}` || 'Unnamed'}</p>
-                  </td>
-                  <td className="p-6 text-sm">{aff.email}</td>
-                  <td className="p-6 text-right">
-                    <div className="flex gap-2 justify-end">
-                      <Button size="sm" variant="outline" onClick={() => viewDetails(aff.id)}>Profile</Button>
-                      <Button 
-                        size="sm" 
-                        variant="ghost" 
-                        onClick={() => handleRemove(aff.id)} 
-                        disabled={isProcessing === aff.id} 
-                        className="text-destructive hover:bg-destructive/5 gap-1"
-                      >
-                        <UserMinus className="h-4 w-4" />
-                        <span className="hidden sm:inline">Remove</span>
-                      </Button>
-                    </div>
+              ) : applications.length > 0 ? (
+                applications.map((app) => (
+                  <tr key={app.id}>
+                    <td className="p-6 text-sm font-mono">{app.userId}</td>
+                    <td className="p-6 text-sm">
+                      {app.createdAt?.seconds
+                        ? format(new Date(app.createdAt.seconds * 1000), "MMM d")
+                        : "Recent"}
+                    </td>
+                    <td className="p-6 text-right">
+                      <div className="flex gap-2 justify-end">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => viewDetails(app.userId)}
+                        >
+                          Details
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleApprove(app.userId)}
+                          disabled={isProcessing === app.userId}
+                          className="bg-emerald-600 hover:bg-emerald-700"
+                        >
+                          {isProcessing === app.userId
+                            ? <Loader2 className="animate-spin h-4 w-4" />
+                            : "Approve"}
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={3} className="p-12 text-center text-muted-foreground">
+                    No applications pending
                   </td>
                 </tr>
-              ))}
-              {(!filteredAffiliates || filteredAffiliates.length === 0) && !affLoading && (
-                <tr><td colSpan={3} className="p-12 text-center text-muted-foreground italic">No active partners found.</td></tr>
               )}
             </tbody>
           </table>
         </Card>
       </section>
 
-      <Dialog open={!!selectedProfile} onOpenChange={(open) => !open && setSelectedProfile(null)}>
-        <DialogContent className="max-w-2xl rounded-[2rem]">
-          <DialogHeader><DialogTitle className="text-2xl font-headline font-bold text-primary flex items-center gap-2"><Landmark className="h-6 w-6" /> Affiliate Data</DialogTitle></DialogHeader>
+      {/* ACTIVE AFFILIATES */}
+      <section className="space-y-4">
+        <h2 className="text-xl font-bold flex items-center gap-2">
+          <Award className="h-5 w-5 text-primary" />
+          Active Affiliates
+        </h2>
+        <Card className="rounded-2xl overflow-hidden">
+          <table className="w-full text-left">
+            <thead className="bg-muted/30 border-b">
+              <tr>
+                <th className="p-6 text-xs uppercase">Partner</th>
+                <th className="p-6 text-xs uppercase">Email</th>
+                <th className="p-6 text-xs uppercase text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {affLoading ? (
+                <tr>
+                  <td colSpan={3} className="p-12 text-center">
+                    <Loader2 className="animate-spin mx-auto" />
+                  </td>
+                </tr>
+              ) : filteredAffiliates?.length ? (
+                filteredAffiliates.map((aff) => (
+                  <tr key={aff.id}>
+                    <td className="p-6 font-bold">
+                      {aff.displayName || aff.email}
+                    </td>
+                    <td className="p-6 text-sm">{aff.email}</td>
+                    <td className="p-6 text-right">
+                      <div className="flex gap-2 justify-end">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => viewDetails(aff.id)}
+                        >
+                          Profile
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleRemove(aff.id)}
+                          disabled={isProcessing === aff.id}
+                          className="text-red-600 hover:bg-red-50"
+                        >
+                          {isProcessing === aff.id
+                            ? <Loader2 className="animate-spin h-4 w-4" />
+                            : (
+                              <>
+                                <UserMinus className="h-4 w-4 mr-1" />
+                                Remove
+                              </>
+                            )}
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={3} className="p-12 text-center text-muted-foreground">
+                    No affiliates found
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </Card>
+      </section>
+
+      {/* PROFILE DIALOG */}
+      <Dialog
+        open={!!selectedProfile}
+        onOpenChange={() => setSelectedProfile(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Landmark className="h-5 w-5" />
+              Affiliate Details
+            </DialogTitle>
+          </DialogHeader>
           {selectedProfile && (
-            <div className="grid grid-cols-2 gap-8 py-4">
-              <div className="space-y-4">
-                <h4 className="text-xs font-black uppercase text-muted-foreground">Bank Details</h4>
-                <div className="space-y-1">
-                  <p className="text-sm font-bold">{selectedProfile.accountHolderName}</p>
-                  <p className="text-xs font-mono">{selectedProfile.bankAccountNumber}</p>
-                  <p className="text-xs font-mono">IFSC: {selectedProfile.ifscCode}</p>
-                  <p className="text-xs text-primary font-bold">UPI: {selectedProfile.upiId}</p>
+            <div className="space-y-3 py-2">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase font-bold mb-1">Account Holder</p>
+                  <p className="font-medium">{selectedProfile.accountHolderName}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase font-bold mb-1">UPI ID</p>
+                  <p className="font-medium text-primary">{selectedProfile.upiId}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase font-bold mb-1">Account Number</p>
+                  <p className="font-mono text-sm">{selectedProfile.bankAccountNumber}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase font-bold mb-1">IFSC Code</p>
+                  <p className="font-mono text-sm">{selectedProfile.ifscCode}</p>
                 </div>
               </div>
-              <div className="space-y-4">
-                <h4 className="text-xs font-black uppercase text-muted-foreground">Location</h4>
-                <p className="text-xs leading-relaxed">{selectedProfile.address}, {selectedProfile.city}, {selectedProfile.state} - {selectedProfile.pincode}</p>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase font-bold mb-1">Address</p>
+                <p className="text-sm">{selectedProfile.address}, {selectedProfile.city}, {selectedProfile.state} - {selectedProfile.pincode}</p>
               </div>
-              <div className="col-span-2 bg-accent/30 p-6 rounded-2xl flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <TrendingUp className="text-primary h-8 w-8" />
-                  <div><p className="text-[10px] uppercase font-black text-primary/60">Total Earnings</p><p className="text-2xl font-black text-primary">₹{selectedProfile.totalEarnings || 0}</p></div>
+              <div className="flex gap-6 bg-muted/30 p-4 rounded-xl mt-2">
+                <div className="flex items-center gap-3">
+                  <TrendingUp className="h-6 w-6 text-primary" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Total Earnings</p>
+                    <p className="text-xl font-black text-primary">₹{selectedProfile.totalEarnings || 0}</p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-[10px] uppercase font-black text-primary/60">Withdrawable</p>
-                  <p className="text-2xl font-black text-emerald-600">₹{selectedProfile.withdrawableAmount || 0}</p>
+                <div>
+                  <p className="text-xs text-muted-foreground">Withdrawable</p>
+                  <p className="text-xl font-black text-emerald-600">₹{selectedProfile.withdrawableAmount || 0}</p>
                 </div>
               </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
+
     </div>
   );
 }
