@@ -10,7 +10,7 @@ import { Users, TrendingUp, Wallet, Copy, Link as LinkIcon, CheckCircle2, Clock,
 import { useEffect, useState } from "react";
 import { toast } from "@/hooks/use-toast";
 import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase";
-import { doc, setDoc, serverTimestamp, query, collection, orderBy } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp, query, collection, orderBy, where } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { useAffiliate } from "@/context/affiliate-context";
 import Link from "next/link";
@@ -43,7 +43,7 @@ export default function AffiliateDashboard() {
 
   // Fetch Commissions
   const commQuery = useMemoFirebase(() => {
-    if (!user?.uid) return null;
+    if (!user?.uid || !db) return null;
     return query(collection(db, 'affiliate_commissions'), where('affiliateId', '==', user.uid), orderBy('createdAt', 'desc'));
   }, [db, user?.uid]);
   const { data: commissions } = useCollection(commQuery);
@@ -81,14 +81,26 @@ export default function AffiliateDashboard() {
   };
 
   const handleCopy = () => {
-    const link = `${window.location.origin}/?ref=${user?.uid}`;
+    const link = `${typeof window !== 'undefined' ? window.location.origin : ''}/?ref=${user?.uid}`;
     navigator.clipboard.writeText(link);
     toast({ title: "Link Copied!" });
   };
 
+  // --- EARLY RETURNS (AFTER ALL HOOKS) ---
+
   if (isUserLoading || isAffiliateLoading) {
-    return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>;
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <main className="flex-grow flex items-center justify-center bg-neutral/30">
+          <Loader2 className="animate-spin text-primary h-10 w-10" />
+        </main>
+        <Footer />
+      </div>
+    );
   }
+
+  if (!user) return null;
 
   const isPending = !!application && application.status === 'pending';
 
@@ -180,7 +192,7 @@ export default function AffiliateDashboard() {
                 <h3 className="text-xl font-headline font-extrabold text-primary mb-6 flex items-center gap-2"><LinkIcon className="h-5 w-5" /> Your Referral Link</h3>
                 <div className="flex gap-2">
                   <div className="flex-grow p-4 bg-muted rounded-2xl font-mono text-sm overflow-hidden truncate">
-                    {window.location.origin}/?ref={user?.uid}
+                    {typeof window !== 'undefined' ? `${window.location.origin}/?ref=${user?.uid}` : ''}
                   </div>
                   <Button onClick={handleCopy} size="icon" className="h-auto w-14 rounded-2xl"><Copy className="h-5 w-5" /></Button>
                 </div>
