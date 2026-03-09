@@ -25,7 +25,9 @@ import {
   Zap, 
   Loader2, 
   Landmark,
-  AlertCircle
+  AlertCircle,
+  UserCheck,
+  BadgeCheck
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "@/hooks/use-toast";
@@ -33,6 +35,7 @@ import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from "@
 import { doc, setDoc, serverTimestamp, query, collection, orderBy, where } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { useAffiliate } from "@/context/affiliate-context";
+import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { format } from "date-fns";
 
@@ -57,6 +60,7 @@ export default function AffiliateDashboard() {
   const db = useFirestore();
   const router = useRouter();
   const [isApplying, setIsApplying] = useState(false);
+  const [timeLeft, setTimeLeft] = useState<string | null>(null);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -89,6 +93,31 @@ export default function AffiliateDashboard() {
     return query(collection(db, 'affiliate_commissions'), where('affiliateId', '==', user.uid), orderBy('createdAt', 'desc'));
   }, [db, user?.uid]);
   const { data: commissions } = useCollection(commQuery);
+
+  // Countdown logic
+  useEffect(() => {
+    if (!application?.createdAt) return;
+    
+    const calculateTime = () => {
+      const start = application.createdAt.seconds * 1000;
+      const deadline = start + (48 * 60 * 60 * 1000);
+      const now = Date.now();
+      const diff = deadline - now;
+
+      if (diff <= 0) {
+        setTimeLeft("EXPIRED");
+      } else {
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        setTimeLeft(`${hours}h ${minutes}m remaining`);
+      }
+    };
+
+    calculateTime();
+    const timer = setInterval(calculateTime, 60000); // Update every minute
+
+    return () => clearInterval(timer);
+  }, [application?.createdAt]);
 
   useEffect(() => {
     if (!isUserLoading && !user) router.push('/login?redirect=/affiliate');
@@ -152,7 +181,7 @@ export default function AffiliateDashboard() {
       await setDoc(doc(db, 'affiliateProfiles', user.uid), profileData);
 
       // 2. Submit Application for Admin Review
-      const appData = { userId: user.uid, status: "pending", createdAt: serverTimestamp() };
+      const appData = { userId: user.uid, status: "submitted", createdAt: serverTimestamp() };
       await setDoc(doc(db, 'affiliateApplications', user.uid), appData);
       
       toast({ title: "Application Sent!", description: "We'll review your bank details and profile shortly." });
@@ -169,6 +198,26 @@ export default function AffiliateDashboard() {
     toast({ title: "Link Copied!" });
   };
 
+  const getStepStatus = (stepId: string) => {
+    const status = application?.status || 'submitted';
+    const order = ['submitted', 'verifying', 'review', 'approved'];
+    // Treat 'pending' from legacy schema as 'submitted'
+    const normalizedStatus = status === 'pending' ? 'submitted' : status;
+    const currentIndex = order.indexOf(normalizedStatus);
+    const stepIndex = order.indexOf(stepId);
+
+    if (currentIndex > stepIndex) return 'completed';
+    if (currentIndex === stepIndex) return 'active';
+    return 'pending';
+  };
+
+  const steps = [
+    { id: 'submitted', label: 'Application Submitted', icon: CheckCircle2 },
+    { id: 'verifying', label: 'Bank Details Verification', icon: Clock },
+    { id: 'review', label: 'Profile Review', icon: UserCheck },
+    { id: 'approved', label: 'Affiliate Activated', icon: BadgeCheck },
+  ];
+
   if (isUserLoading || isAffiliateLoading) {
     return (
       <div className="min-h-screen flex flex-col">
@@ -183,7 +232,7 @@ export default function AffiliateDashboard() {
 
   if (!user) return null;
 
-  const isPending = !!application && application.status === 'pending';
+  const isPending = !!application && application.status !== 'rejected';
 
   if (!isApproved) {
     const isPinValid = formData.pincode.length === 6 && isValidPincode(formData.pincode);
@@ -194,10 +243,66 @@ export default function AffiliateDashboard() {
         <main className="flex-grow bg-neutral/30 py-20">
           <div className="container mx-auto px-4 max-w-4xl">
             {isPending ? (
-              <Card className="p-12 space-y-6 rounded-[3rem] border-none shadow-xl text-center">
-                <div className="h-20 w-20 bg-yellow-50 text-yellow-600 rounded-full flex items-center justify-center mx-auto"><Clock className="h-10 w-10 animate-pulse" /></div>
-                <h1 className="text-4xl font-headline font-extrabold text-primary">Application Under Review</h1>
-                <p className="text-muted-foreground text-lg">Our team is verifying your bank details and profile.</p>
+              <Card className="p-8 md:p-12 space-y-10 rounded-[3rem] border-none shadow-xl text-center overflow-hidden">
+                <div className="space-y-4">
+                  <h1 className="text-4xl font-headline font-extrabold text-primary">Application Under Review</h1>
+                  <p className="text-muted-foreground text-lg">We are processing your request to join the Monterra Partner Program.</p>
+                </div>
+
+                {/* Progress Tracker */}
+                <div className="relative flex justify-between items-start max-w-2xl mx-auto mb-12 px-4">
+                  {/* Progress Lines Background */}
+                  <div className="absolute top-5 left-0 w-full h-0.5 bg-gray-100 -z-0">
+                    <div 
+                      className="h-full bg-emerald-400 transition-all duration-500" 
+                      style={{ width: `${(Math.max(0, ['submitted', 'verifying', 'review', 'approved'].indexOf(application?.status === 'pending' ? 'submitted' : application?.status)) / 3) * 100}%` }}
+                    />
+                  </div>
+
+                  {steps.map((step) => {
+                    const status = getStepStatus(step.id);
+                    const Icon = step.icon;
+                    
+                    return (
+                      <div key={step.id} className="relative z-10 flex flex-col items-center text-center gap-3 w-1/4">
+                        <div className={cn(
+                          "w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 shadow-sm",
+                          status === 'completed' ? "bg-emerald-500 text-white" : 
+                          status === 'active' ? "bg-yellow-500 text-white animate-pulse" : 
+                          "bg-white border-2 border-gray-100 text-gray-400"
+                        )}>
+                          <Icon className="h-5 w-5" />
+                        </div>
+                        <p className={cn(
+                          "text-[10px] font-bold uppercase tracking-tight leading-tight max-w-[80px]",
+                          status === 'pending' ? "text-gray-400" : "text-primary"
+                        )}>
+                          {step.label}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Countdown Timer */}
+                <div className="bg-neutral/50 rounded-3xl p-8 border border-muted flex flex-col items-center gap-4">
+                  <div className="space-y-1">
+                    <p className="text-xs font-black text-muted-foreground uppercase tracking-widest">Estimated Review Time Remaining</p>
+                    {timeLeft === "EXPIRED" ? (
+                      <p className="text-emerald-600 font-bold text-lg">Review taking longer than expected. Our team will update you shortly.</p>
+                    ) : (
+                      <div className="flex flex-col items-center gap-1">
+                        <p className="text-4xl font-headline font-black text-primary tracking-tighter">{timeLeft || "--h --m"}</p>
+                        <p className="text-[10px] text-muted-foreground italic">Affiliate approval usually takes 24–48 hours.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground pt-4">
+                  <AlertCircle className="h-4 w-4" />
+                  <span>Need help? Contact partners@monterra.in</span>
+                </div>
               </Card>
             ) : (
               <div className="space-y-12">
