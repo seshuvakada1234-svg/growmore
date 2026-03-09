@@ -35,14 +35,11 @@ import {
   useFirestore, 
   useDoc, 
   useMemoFirebase, 
-  useCollection,
-  errorEmitter,
-  FirestorePermissionError
+  useCollection
 } from "@/firebase";
 import { 
   doc, 
-  setDoc, 
-  updateDoc,
+  setDoc,
   writeBatch,
   serverTimestamp, 
   query, 
@@ -92,7 +89,7 @@ export default function AffiliateDashboard() {
     pincode: ""
   });
 
-  // Helper States for API and Validation
+  // Helper States
   const [branchName, setBranchName] = useState("");
   const [ifscError, setIfscError] = useState("");
   const [isFetchingIfsc, setIsFetchingIfsc] = useState(false);
@@ -101,17 +98,27 @@ export default function AffiliateDashboard() {
   const { isApproved, affiliateProfile, loading: isAffiliateLoading } = useAffiliate();
 
   // Fetch Application status
-  const appRef = useMemoFirebase(() => !user?.uid ? null : doc(db, 'affiliateApplications', user.uid), [db, user?.uid]);
+  const appRef = useMemoFirebase(
+    () => !user?.uid ? null : doc(db, 'affiliateApplications', user.uid), 
+    [db, user?.uid]
+  );
   const { data: application } = useDoc(appRef);
 
-  // Fetch User Profile for rendering logic
-  const userProfileRef = useMemoFirebase(() => !user?.uid ? null : doc(db, 'users', user.uid), [db, user?.uid]);
+  // Fetch User Profile
+  const userProfileRef = useMemoFirebase(
+    () => !user?.uid ? null : doc(db, 'users', user.uid), 
+    [db, user?.uid]
+  );
   const { data: profile, isLoading: isProfileLoading } = useDoc(userProfileRef);
 
   // Fetch Commissions
   const commQuery = useMemoFirebase(() => {
     if (!user?.uid || !db) return null;
-    return query(collection(db, 'affiliate_commissions'), where('affiliateId', '==', user.uid), orderBy('createdAt', 'desc'));
+    return query(
+      collection(db, 'affiliate_commissions'), 
+      where('affiliateId', '==', user.uid), 
+      orderBy('createdAt', 'desc')
+    );
   }, [db, user?.uid]);
   const { data: commissions } = useCollection(commQuery);
 
@@ -136,10 +143,10 @@ export default function AffiliateDashboard() {
 
     calculateTime();
     const timer = setInterval(calculateTime, 60000);
-
     return () => clearInterval(timer);
   }, [application?.createdAt]);
 
+  // Redirect if not logged in
   useEffect(() => {
     if (!isUserLoading && !user) router.push('/login?redirect=/affiliate');
   }, [user, isUserLoading, router]);
@@ -197,9 +204,9 @@ export default function AffiliateDashboard() {
     try {
       const batch = writeBatch(db);
 
-      // 1. Prepare Affiliate Profile
+      // 1. Affiliate Profile — user can create/update their own profile
       const profileRef = doc(db, 'affiliateProfiles', user.uid);
-      const profileData = {
+      batch.set(profileRef, {
         userId: user.uid,
         ...formData,
         totalEarnings: 0,
@@ -208,64 +215,36 @@ export default function AffiliateDashboard() {
         approved: false,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
-      };
-      batch.set(profileRef, profileData, { merge: true });
+      }, { merge: true });
 
-      // 2. Prepare Affiliate Application
-      const appRef = doc(db, 'affiliateApplications', user.uid);
-      const appData = { 
+      // 2. Affiliate Application — doc ID = user UID, status must be "pending"
+      const applicationRef = doc(db, 'affiliateApplications', user.uid);
+      batch.set(applicationRef, { 
         userId: user.uid, 
         status: "pending", 
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
-      };
-      batch.set(appRef, appData, { merge: true });
+      }, { merge: true });
 
-      // 3. Update User Document
-      const userRef = doc(db, 'users', user.uid);
-      batch.update(userRef, {
-        role: "affiliate",
-        affiliateApproved: false,
-        updatedAt: serverTimestamp()
+      // ✅ NO users update here — role is set by admin on approval only
+      // Updating role/affiliateApproved yourself violates Firestore rules
+
+      await batch.commit();
+
+      toast({ 
+        title: "Application Sent! 🎉", 
+        description: "We'll review your bank details and profile shortly." 
       });
 
-      // Execute non-blocking batch commit
-      batch.commit()
-        .then(() => {
-          toast({ 
-            title: "Application Sent!", 
-            description: "We'll review your bank details and profile shortly." 
-          });
-          setIsApplying(false);
-        })
-        .catch(async (error) => {
-          console.error("Affiliate application submission error:", error);
-          setIsApplying(false);
-          
-          // Construct rich error for the listener
-          const permissionError = new FirestorePermissionError({
-            path: `affiliateApplications/${user.uid}`,
-            operation: 'write',
-            requestResourceData: appData
-          });
-          
-          errorEmitter.emit('permission-error', permissionError);
-          
-          toast({ 
-            title: "Submission Failed", 
-            description: error.message || "Could not save application data.",
-            variant: "destructive" 
-          });
-        });
-
-    } catch (err: any) {
-      console.error("Setup error:", err);
-      setIsApplying(false);
+    } catch (error: any) {
+      console.error("Affiliate application submission error:", error);
       toast({ 
-        title: "Setup Error", 
-        description: "Failed to prepare application data.",
+        title: "Submission Failed", 
+        description: error.message || "Could not save application data.",
         variant: "destructive" 
       });
+    } finally {
+      setIsApplying(false);
     }
   };
 
@@ -295,6 +274,7 @@ export default function AffiliateDashboard() {
     { id: 'approved', label: 'Affiliate Activated', icon: BadgeCheck },
   ];
 
+  // --- LOADING STATE ---
   if (isUserLoading || isAffiliateLoading || isProfileLoading) {
     return (
       <div className="min-h-screen flex flex-col">
@@ -309,34 +289,43 @@ export default function AffiliateDashboard() {
 
   if (!user) return null;
 
-  // RENDERING LOGIC BASED ON STATUS
+  // --- NOT APPROVED VIEW ---
   if (!isApproved) {
-    const isPending = profile?.role === 'affiliate' && profile?.affiliateApproved === false;
+    const isPending = application?.status === 'pending' || profile?.role === 'affiliate' && profile?.affiliateApproved === false;
 
     return (
       <div className="min-h-screen flex flex-col">
         <Header />
         <main className="flex-grow bg-neutral/30 py-20">
           <div className="container mx-auto px-4 max-w-4xl">
+
             {isPending ? (
+              // --- PENDING APPLICATION VIEW ---
               <Card className="p-8 md:p-12 space-y-10 rounded-[3rem] border-none shadow-xl text-center overflow-hidden bg-white">
                 <div className="space-y-4">
-                  <h1 className="text-4xl font-headline font-extrabold text-primary">Application Under Review</h1>
-                  <p className="text-muted-foreground text-lg">We are processing your request to join the Monterra Partner Program.</p>
+                  <h1 className="text-4xl font-headline font-extrabold text-primary">
+                    Application Under Review
+                  </h1>
+                  <p className="text-muted-foreground text-lg">
+                    We are processing your request to join the Monterra Partner Program.
+                  </p>
                 </div>
 
+                {/* Progress Steps */}
                 <div className="relative flex justify-between items-start max-w-2xl mx-auto mb-12 px-4">
                   <div className="absolute top-5 left-0 w-full h-0.5 bg-gray-100 -z-0">
                     <div 
                       className="h-full bg-emerald-400 transition-all duration-500" 
-                      style={{ width: `${(Math.max(0, ['submitted', 'verifying', 'review', 'approved'].indexOf(application?.status === 'pending' ? 'submitted' : application?.status)) / 3) * 100}%` }}
+                      style={{ 
+                        width: `${(Math.max(0, ['submitted', 'verifying', 'review', 'approved']
+                          .indexOf(application?.status === 'pending' ? 'submitted' : application?.status)) / 3) * 100}%` 
+                      }}
                     />
                   </div>
 
                   {steps.map((step) => {
                     const status = getStepStatus(step.id);
                     const Icon = step.icon;
-                    
                     return (
                       <div key={step.id} className="relative z-10 flex flex-col items-center text-center gap-3 w-1/4">
                         <div className={cn(
@@ -358,15 +347,24 @@ export default function AffiliateDashboard() {
                   })}
                 </div>
 
+                {/* Countdown */}
                 <div className="bg-neutral/50 rounded-3xl p-8 border border-muted flex flex-col items-center gap-4">
                   <div className="space-y-1">
-                    <p className="text-xs font-black text-muted-foreground uppercase tracking-widest">Estimated Review Time Remaining</p>
+                    <p className="text-xs font-black text-muted-foreground uppercase tracking-widest">
+                      Estimated Review Time Remaining
+                    </p>
                     {timeLeft === "EXPIRED" ? (
-                      <p className="text-emerald-600 font-bold text-lg">Review taking longer than expected. Our team will update you shortly.</p>
+                      <p className="text-emerald-600 font-bold text-lg">
+                        Review taking longer than expected. Our team will update you shortly.
+                      </p>
                     ) : (
                       <div className="flex flex-col items-center gap-1">
-                        <p className="text-4xl font-headline font-black text-primary tracking-tighter">{timeLeft || "--h --m"}</p>
-                        <p className="text-[10px] text-muted-foreground italic">Affiliate approval usually takes 24–48 hours.</p>
+                        <p className="text-4xl font-headline font-black text-primary tracking-tighter">
+                          {timeLeft || "--h --m"}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground italic">
+                          Affiliate approval usually takes 24–48 hours.
+                        </p>
                       </div>
                     )}
                   </div>
@@ -377,24 +375,59 @@ export default function AffiliateDashboard() {
                   <span>Need help? Contact partners@monterra.in</span>
                 </div>
               </Card>
+
             ) : (
+              // --- APPLICATION FORM VIEW ---
               <div className="space-y-12">
                 <div className="text-center space-y-4">
-                  <h1 className="text-5xl md:text-7xl font-headline font-extrabold text-primary">Earn with Monterra.</h1>
-                  <p className="text-xl text-muted-foreground max-w-2xl mx-auto">Join our partner program and get paid directly to your bank account.</p>
+                  <h1 className="text-5xl md:text-7xl font-headline font-extrabold text-primary">
+                    Earn with Monterra.
+                  </h1>
+                  <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+                    Join our partner program and get paid directly to your bank account.
+                  </p>
                 </div>
 
                 <Card className="rounded-[2.5rem] border-none shadow-xl overflow-hidden bg-white">
-                  <CardHeader className="p-8 pb-0"><CardTitle className="text-2xl font-headline font-bold text-primary flex items-center gap-2"><Landmark className="h-6 w-6" /> Partner Application</CardTitle></CardHeader>
+                  <CardHeader className="p-8 pb-0">
+                    <CardTitle className="text-2xl font-headline font-bold text-primary flex items-center gap-2">
+                      <Landmark className="h-6 w-6" /> Partner Application
+                    </CardTitle>
+                  </CardHeader>
                   <CardContent className="p-8">
                     <form onSubmit={handleApply} className="space-y-8">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-2"><Label>Account Holder Name</Label><Input required value={formData.accountHolderName} onChange={e => setFormData({...formData, accountHolderName: e.target.value})} placeholder="As per bank records" className="rounded-xl h-12" /></div>
-                        <div className="space-y-2"><Label>Bank Account Number</Label><Input required value={formData.bankAccountNumber} onChange={e => setFormData({...formData, bankAccountNumber: e.target.value})} placeholder="Your account number" className="rounded-xl h-12" /></div>
-                        
+
+                        <div className="space-y-2">
+                          <Label>Account Holder Name</Label>
+                          <Input 
+                            required 
+                            value={formData.accountHolderName} 
+                            onChange={e => setFormData({...formData, accountHolderName: e.target.value})} 
+                            placeholder="As per bank records" 
+                            className="rounded-xl h-12" 
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Bank Account Number</Label>
+                          <Input 
+                            required 
+                            value={formData.bankAccountNumber} 
+                            onChange={e => setFormData({...formData, bankAccountNumber: e.target.value})} 
+                            placeholder="Your account number" 
+                            className="rounded-xl h-12" 
+                          />
+                        </div>
+
                         <div className="space-y-2">
                           <Label>Bank Name</Label>
-                          <Input readOnly value={formData.bankName} placeholder="Auto-filled from IFSC" className="rounded-xl h-12 bg-muted/50" />
+                          <Input 
+                            readOnly 
+                            value={formData.bankName} 
+                            placeholder="Auto-filled from IFSC" 
+                            className="rounded-xl h-12 bg-muted/50" 
+                          />
                         </div>
 
                         <div className="space-y-2">
@@ -402,19 +435,56 @@ export default function AffiliateDashboard() {
                             <Label>IFSC Code</Label>
                             {isFetchingIfsc && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
                           </div>
-                          <Input required value={formData.ifscCode} onChange={e => handleIfscChange(e.target.value)} placeholder="11-digit IFSC" className="rounded-xl h-12" maxLength={11} />
+                          <Input 
+                            required 
+                            value={formData.ifscCode} 
+                            onChange={e => handleIfscChange(e.target.value)} 
+                            placeholder="11-digit IFSC" 
+                            className="rounded-xl h-12" 
+                            maxLength={11} 
+                          />
                           {branchName && <p className="text-[10px] text-primary font-bold">{branchName}</p>}
                           {ifscError && <p className="text-[10px] text-destructive font-bold">{ifscError}</p>}
                         </div>
 
-                        <div className="space-y-2"><Label>UPI ID (Optional)</Label><Input value={formData.upiId} onChange={e => setFormData({...formData, upiId: e.target.value})} placeholder="example@upi" className="rounded-xl h-12" /></div>
-                        <div className="md:col-span-2 space-y-2"><Label>Complete Address</Label><Input required value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} placeholder="House, Street, Area" className="rounded-xl h-12" /></div>
-                        <div className="space-y-2"><Label>City</Label><Input required value={formData.city} onChange={e => setFormData({...formData, city: e.target.value})} className="rounded-xl h-12" /></div>
-                        
+                        <div className="space-y-2">
+                          <Label>UPI ID (Optional)</Label>
+                          <Input 
+                            value={formData.upiId} 
+                            onChange={e => setFormData({...formData, upiId: e.target.value})} 
+                            placeholder="example@upi" 
+                            className="rounded-xl h-12" 
+                          />
+                        </div>
+
+                        <div className="md:col-span-2 space-y-2">
+                          <Label>Complete Address</Label>
+                          <Input 
+                            required 
+                            value={formData.address} 
+                            onChange={e => setFormData({...formData, address: e.target.value})} 
+                            placeholder="House, Street, Area" 
+                            className="rounded-xl h-12" 
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>City</Label>
+                          <Input 
+                            required 
+                            value={formData.city} 
+                            onChange={e => setFormData({...formData, city: e.target.value})} 
+                            className="rounded-xl h-12" 
+                          />
+                        </div>
+
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
                             <Label>State</Label>
-                            <Select onValueChange={(val) => setFormData({...formData, state: val})} value={formData.state}>
+                            <Select 
+                              onValueChange={(val) => setFormData({...formData, state: val})} 
+                              value={formData.state}
+                            >
                               <SelectTrigger className="rounded-xl h-12">
                                 <SelectValue placeholder="Select" />
                               </SelectTrigger>
@@ -425,10 +495,13 @@ export default function AffiliateDashboard() {
                               </SelectContent>
                             </Select>
                           </div>
+
                           <div className="space-y-2">
                             <div className="flex justify-between items-center">
                               <Label>Pincode</Label>
-                              {isValidPincode(formData.pincode) && <CheckCircle2 className="h-3 w-3 text-emerald-500" />}
+                              {isValidPincode(formData.pincode) && (
+                                <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                              )}
                             </div>
                             <Input 
                               required 
@@ -440,13 +513,23 @@ export default function AffiliateDashboard() {
                               inputMode="numeric"
                             />
                             {formData.pincode.length > 0 && !isValidPincode(formData.pincode) && (
-                              <p className="text-[10px] text-destructive font-bold">Enter a valid 6-digit Indian pincode</p>
+                              <p className="text-[10px] text-destructive font-bold">
+                                Enter a valid 6-digit Indian pincode
+                              </p>
                             )}
                           </div>
                         </div>
                       </div>
-                      <Button type="submit" disabled={isApplying} className="w-full h-14 rounded-full text-lg font-bold shadow-xl shadow-primary/20">
-                        {isApplying ? <Loader2 className="animate-spin mr-2" /> : "Complete Application"}
+
+                      <Button 
+                        type="submit" 
+                        disabled={isApplying} 
+                        className="w-full h-14 rounded-full text-lg font-bold shadow-xl shadow-primary/20"
+                      >
+                        {isApplying 
+                          ? <><Loader2 className="animate-spin mr-2" /> Submitting...</> 
+                          : "Complete Application"
+                        }
                       </Button>
                     </form>
                   </CardContent>
@@ -460,7 +543,7 @@ export default function AffiliateDashboard() {
     );
   }
 
-  // AFFILIATE DASHBOARD VIEW (APPROVED)
+  // --- APPROVED AFFILIATE DASHBOARD ---
   const stats = affiliateProfile;
   const balance = stats?.withdrawableAmount || 0;
 
@@ -469,6 +552,7 @@ export default function AffiliateDashboard() {
       <Header />
       <main className="flex-grow bg-neutral/30 py-12">
         <div className="container mx-auto px-4">
+
           <div className="flex flex-col md:flex-row items-end justify-between mb-10 gap-4">
             <div>
               <h1 className="text-3xl font-headline font-extrabold text-primary">Partner Dashboard</h1>
@@ -479,6 +563,7 @@ export default function AffiliateDashboard() {
             </div>
           </div>
 
+          {/* Stats */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
             {[
               { label: "Gross Earnings", value: `₹${(stats?.totalEarnings || 0).toLocaleString()}`, icon: Wallet, color: "bg-blue-50 text-blue-600" },
@@ -487,24 +572,36 @@ export default function AffiliateDashboard() {
               { label: "Total Clicks", value: stats?.totalClicks || 0, icon: TrendingUp, color: "bg-orange-50 text-orange-600" }
             ].map((s, i) => (
               <Card key={i} className="rounded-3xl border-none shadow-sm p-6 bg-white flex flex-col justify-between">
-                <div className={`h-12 w-12 rounded-2xl flex items-center justify-center mb-4 ${s.color}`}><s.icon className="h-6 w-6" /></div>
-                <div><p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{s.label}</p><h3 className="text-2xl font-extrabold text-primary mt-1">{s.value}</h3></div>
+                <div className={`h-12 w-12 rounded-2xl flex items-center justify-center mb-4 ${s.color}`}>
+                  <s.icon className="h-6 w-6" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{s.label}</p>
+                  <h3 className="text-2xl font-extrabold text-primary mt-1">{s.value}</h3>
+                </div>
               </Card>
             ))}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-8">
+
+              {/* Referral Link */}
               <Card className="rounded-[2rem] border-none shadow-sm bg-white p-8">
-                <h3 className="text-xl font-headline font-extrabold text-primary mb-6 flex items-center gap-2"><LinkIcon className="h-5 w-5" /> Your Referral Link</h3>
+                <h3 className="text-xl font-headline font-extrabold text-primary mb-6 flex items-center gap-2">
+                  <LinkIcon className="h-5 w-5" /> Your Referral Link
+                </h3>
                 <div className="flex gap-2">
                   <div className="flex-grow p-4 bg-muted rounded-2xl font-mono text-sm overflow-hidden truncate">
                     {typeof window !== 'undefined' ? `${window.location.origin}/?ref=${user?.uid}` : ''}
                   </div>
-                  <Button onClick={handleCopy} size="icon" className="h-auto w-14 rounded-2xl"><Copy className="h-5 w-5" /></Button>
+                  <Button onClick={handleCopy} size="icon" className="h-auto w-14 rounded-2xl">
+                    <Copy className="h-5 w-5" />
+                  </Button>
                 </div>
               </Card>
 
+              {/* Recent Earnings */}
               <div className="space-y-4">
                 <h3 className="text-xl font-headline font-extrabold text-primary">Recent Earnings</h3>
                 <Card className="rounded-[2rem] border-none shadow-sm bg-white overflow-hidden">
@@ -520,21 +617,40 @@ export default function AffiliateDashboard() {
                     <tbody className="divide-y divide-muted">
                       {commissions?.map(c => (
                         <tr key={c.id} className="hover:bg-accent/30 transition-colors">
-                          <td className="p-6 font-mono text-xs font-bold text-primary">#{c.orderId?.substring(0, 10)}</td>
+                          <td className="p-6 font-mono text-xs font-bold text-primary">
+                            #{c.orderId?.substring(0, 10)}
+                          </td>
                           <td className="p-6 font-extrabold">₹{c.commissionAmount.toLocaleString()}</td>
-                          <td className="p-6 text-sm text-muted-foreground">{c.createdAt?.seconds ? format(new Date(c.createdAt.seconds * 1000), 'MMM d, yyyy') : 'Recent'}</td>
+                          <td className="p-6 text-sm text-muted-foreground">
+                            {c.createdAt?.seconds 
+                              ? format(new Date(c.createdAt.seconds * 1000), 'MMM d, yyyy') 
+                              : 'Recent'}
+                          </td>
                           <td className="p-6">
-                            <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${c.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>{c.status}</span>
+                            <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${
+                              c.status === 'paid' 
+                                ? 'bg-emerald-100 text-emerald-700' 
+                                : 'bg-blue-100 text-blue-700'
+                            }`}>
+                              {c.status}
+                            </span>
                           </td>
                         </tr>
                       ))}
-                      {(!commissions || commissions.length === 0) && <tr><td colSpan={4} className="p-20 text-center text-muted-foreground italic">No commissions earned yet.</td></tr>}
+                      {(!commissions || commissions.length === 0) && (
+                        <tr>
+                          <td colSpan={4} className="p-20 text-center text-muted-foreground italic">
+                            No commissions earned yet.
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </Card>
               </div>
             </div>
 
+            {/* Withdraw Card */}
             <div className="space-y-6">
               <Card className="rounded-[2rem] border-none shadow-sm bg-primary text-white p-8">
                 <h3 className="text-xl font-headline font-bold mb-6">Withdraw Balance</h3>
@@ -546,7 +662,12 @@ export default function AffiliateDashboard() {
                   <div className="pt-6 border-t border-white/10 space-y-4">
                     <p className="text-xs text-white/70 italic">Minimum withdrawal amount is ₹500.</p>
                     <Link href="/affiliate/payouts" className="block">
-                      <Button disabled={balance < 500} className="w-full h-12 rounded-full bg-white text-primary hover:bg-emerald-50 font-bold">Request Payout</Button>
+                      <Button 
+                        disabled={balance < 500} 
+                        className="w-full h-12 rounded-full bg-white text-primary hover:bg-emerald-50 font-bold"
+                      >
+                        Request Payout
+                      </Button>
                     </Link>
                   </div>
                 </div>
