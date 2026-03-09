@@ -7,6 +7,7 @@ import { AffiliateProvider } from '@/context/affiliate-context';
 import { Suspense } from 'react';
 import Link from 'next/link';
 import { Home, Leaf, ShoppingCart, User } from 'lucide-react';
+import MonterraChatbot from '@/components/MonterraChatbot';
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -65,6 +66,7 @@ export default function RootLayout({
               </Link>
             </nav>
 
+            <MonterraChatbot />
             <Toaster />
           </AffiliateProvider>
         </FirebaseClientProvider>
