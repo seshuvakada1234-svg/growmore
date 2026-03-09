@@ -6,18 +6,18 @@ service cloud.firestore {
     function isSignedIn() { return request.auth != null; }
     
     function isAdmin() { 
+      // Simplified admin check to reduce lookup overhead in batches
       return isSignedIn() && (
         request.auth.token.email == 'seshuvakada1234@gmail.com' ||
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
-        exists(/databases/$(database)/documents/roles_admin/$(request.auth.uid)) || 
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == 'admin')
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == 'admin'
       ); 
     }
     
     function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
     
     function isApprovedAffiliate() {
-      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('affiliateApproved', false) == true;
+      // Direct get is more efficient than exists + get
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('affiliateApproved', false) == true;
     }
 
     // --- Admin Whitelist ---
@@ -37,7 +37,16 @@ service cloud.firestore {
       allow get: if isSignedIn();
       allow list: if isAdmin();
       allow create: if isOwner(userId);
-      allow update: if isAdmin() || isOwner(userId);
+      allow update: if isOwner(userId) && (
+        // Allow self-update of basic info (not touching roles)
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'affiliateApproved', 'approvedAt']) ||
+        // OR allow transition to affiliate role (waiting for admin approval)
+        (
+          request.resource.data.role == 'affiliate' && 
+          request.resource.data.affiliateApproved == false &&
+          resource.data.role == 'user'
+        )
+      ) || isAdmin();
 
       // Subcollections for addresses and wishlist
       match /addresses/{addressId} {
@@ -50,7 +59,7 @@ service cloud.firestore {
 
     // --- Affiliate Applications ---
     match /affiliateApplications/{userId} {
-      allow read: if isAdmin() || isOwner(userId);
+      allow read: if isOwner(userId) || isAdmin();
       allow create, update: if isOwner(userId) && 
         (request.resource.data.status == "pending" || request.resource.data.status == "submitted");
       allow delete: if isAdmin();
@@ -61,16 +70,19 @@ service cloud.firestore {
       allow read: if isOwner(userId) || isAdmin();
       allow create, update: if isOwner(userId) && 
         (
-          // Allow creation with initial zero stats
+          // Case 1: Initial creation or reset (doc doesn't exist or is zeroed)
           (
             request.resource.data.get('totalEarnings', 0) == 0 &&
             request.resource.data.get('withdrawableAmount', 0) == 0 &&
             request.resource.data.get('paidEarnings', 0) == 0 &&
             request.resource.data.get('approved', false) == false
           ) ||
-          // OR allow updates that don't touch sensitive financial fields
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['totalEarnings', 'withdrawableAmount', 'approved', 'paidEarnings'])
-        );
+          // Case 2: Update existing (must not touch sensitive financial fields)
+          (
+            resource != null &&
+            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['totalEarnings', 'withdrawableAmount', 'approved', 'paidEarnings'])
+          )
+        ) || isAdmin();
       
       // Subcollection for specific profiles
       match /payouts/{payoutId} {
@@ -87,7 +99,7 @@ service cloud.firestore {
 
     // --- Affiliate Links ---
     match /affiliate_links/{linkId} {
-      allow read: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow read: if (isSignedIn() && resource.data.userId == request.auth.uid) || isAdmin();
       allow create: if isApprovedAffiliate() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isAdmin();
     }
@@ -100,7 +112,7 @@ service cloud.firestore {
 
     // --- Affiliate Commissions ---
     match /affiliate_commissions/{commId} {
-      allow read: if isAdmin() || (isSignedIn() && resource.data.affiliateId == request.auth.uid);
+      allow read: if (isSignedIn() && resource.data.affiliateId == request.auth.uid) || isAdmin();
       allow create: if isSignedIn(); 
       allow update: if isAdmin();
       allow delete: if false;
@@ -108,7 +120,7 @@ service cloud.firestore {
 
     // --- Withdraw Requests (Root Collection) ---
     match /affiliateWithdrawRequests/{requestId} {
-      allow read: if isAdmin() || (isSignedIn() && resource.data.affiliateId == request.auth.uid);
+      allow read: if (isSignedIn() && resource.data.affiliateId == request.auth.uid) || isAdmin();
       allow create: if isApprovedAffiliate() && 
         request.resource.data.affiliateId == request.auth.uid &&
         request.resource.data.amount >= 500 &&
@@ -119,7 +131,7 @@ service cloud.firestore {
     
     match /orders/{id} {
       allow create: if isSignedIn();
-      allow read: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow read: if (isSignedIn() && resource.data.userId == request.auth.uid) || isAdmin();
       allow update: if isAdmin();
     }
   }
