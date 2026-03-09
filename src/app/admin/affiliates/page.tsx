@@ -327,6 +327,10 @@ export default function AdminAffiliates() {
                   <p className="font-medium text-primary">{selectedProfile.upiId}</p>
                 </div>
                 <div>
+                  <p className="text-xs text-muted-foreground uppercase font-bold mb-1">Bank Name</p>
+                  <p className="font-medium">{selectedProfile.bankName || "Not provided"}</p>
+                </div>
+                <div>
                   <p className="text-xs text-muted-foreground uppercase font-bold mb-1">Account Number</p>
                   <p className="font-mono text-sm">{selectedProfile.bankAccountNumber}</p>
                 </div>

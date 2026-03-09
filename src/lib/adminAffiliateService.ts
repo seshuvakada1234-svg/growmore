@@ -86,9 +86,9 @@ export async function removeAffiliate(userId: string) {
  * Returns bank details and profile info.
  */
 export async function getAffiliateProfile(userId: string) {
-  const profileRef = doc(db, "affiliateProfiles", userId);
-  const snap = await getDoc(profileRef);
-  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+  const snap = await getDoc(doc(db, "affiliateProfiles", userId))
+  if (!snap.exists()) return null
+  return { id: snap.id, ...snap.data() }
 }
 
 /**
