@@ -71,7 +71,6 @@ export function Header() {
     router.push('/');
   };
 
-  // Prevent hydration mismatch by rendering a consistent placeholder until mounted on client
   if (!hasMounted) {
     return (
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur h-16 flex items-center">
@@ -90,7 +89,6 @@ export function Header() {
     );
   }
 
-  // --- ADMIN HEADER ---
   if (isAdmin) {
     return (
       <header className="sticky top-0 z-50 w-full border-b bg-primary text-white h-16 flex items-center shadow-lg">
@@ -110,7 +108,6 @@ export function Header() {
     );
   }
 
-  // --- STOREFRONT HEADER ---
   return (
     <header
       className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 h-16 flex items-center"
@@ -141,13 +138,11 @@ export function Header() {
           </Link>
         </div>
 
-        {/* Search — desktop only */}
         <div className="flex-1 max-md:hidden max-w-md flex items-center relative">
           <Search className="absolute left-3 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Find your perfect plant..." className="pl-10 h-10 bg-muted/50 border-none rounded-full" />
         </div>
 
-        {/* Right Icons */}
         <div className="flex items-center gap-1 sm:gap-2">
           <Link href="/">
             <Button variant="ghost" size="icon">
@@ -197,7 +192,10 @@ export function Header() {
                   <Link href="/orders"><ShoppingCart className="mr-2 h-4 w-4" /> My Orders</Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild className="rounded-xl cursor-pointer">
-                  <Link href="/affiliate"><Award className="mr-2 h-4 w-4" /> {isAffiliate ? "Partner Dashboard" : "Become a Partner"}</Link>
+                  <Link href="/affiliate">
+                    <Award className="mr-2 h-4 w-4" /> 
+                    {isAffiliate ? "Partner Dashboard" : "Become a Partner"}
+                  </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="rounded-xl cursor-pointer text-destructive focus:bg-red-50 focus:text-destructive">

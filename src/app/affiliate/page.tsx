@@ -1,4 +1,3 @@
-
 "use client";
 
 import { Header } from "@/components/layout/Header";
@@ -80,12 +79,16 @@ export default function AffiliateDashboard() {
   const [ifscError, setIfscError] = useState("");
   const [isFetchingIfsc, setIsFetchingIfsc] = useState(false);
 
-  // Unified source of truth
+  // Unified status from context
   const { isApproved, affiliateProfile, loading: isAffiliateLoading } = useAffiliate();
 
-  // Fetch Application
+  // Fetch Application status
   const appRef = useMemoFirebase(() => !user?.uid ? null : doc(db, 'affiliateApplications', user.uid), [db, user?.uid]);
   const { data: application } = useDoc(appRef);
+
+  // Fetch User Profile for rendering logic
+  const userProfileRef = useMemoFirebase(() => !user?.uid ? null : doc(db, 'users', user.uid), [db, user?.uid]);
+  const { data: profile, isLoading: isProfileLoading } = useDoc(userProfileRef);
 
   // Fetch Commissions
   const commQuery = useMemoFirebase(() => {
@@ -114,7 +117,7 @@ export default function AffiliateDashboard() {
     };
 
     calculateTime();
-    const timer = setInterval(calculateTime, 60000); // Update every minute
+    const timer = setInterval(calculateTime, 60000);
 
     return () => clearInterval(timer);
   }, [application?.createdAt]);
@@ -169,7 +172,6 @@ export default function AffiliateDashboard() {
     
     setIsApplying(true);
     try {
-      // 1. Save Bank & Address Details
       const profileData = {
         userId: user.uid,
         ...formData,
@@ -180,7 +182,6 @@ export default function AffiliateDashboard() {
       };
       await setDoc(doc(db, 'affiliateProfiles', user.uid), profileData);
 
-      // 2. Submit Application for Admin Review
       const appData = { userId: user.uid, status: "submitted", createdAt: serverTimestamp() };
       await setDoc(doc(db, 'affiliateApplications', user.uid), appData);
       
@@ -193,7 +194,8 @@ export default function AffiliateDashboard() {
   };
 
   const handleCopy = () => {
-    const link = `${typeof window !== 'undefined' ? window.location.origin : ''}/?ref=${user?.uid}`;
+    if (typeof window === 'undefined' || !user?.uid) return;
+    const link = `${window.location.origin}/?ref=${user.uid}`;
     navigator.clipboard.writeText(link);
     toast({ title: "Link Copied!" });
   };
@@ -201,7 +203,6 @@ export default function AffiliateDashboard() {
   const getStepStatus = (stepId: string) => {
     const status = application?.status || 'submitted';
     const order = ['submitted', 'verifying', 'review', 'approved'];
-    // Treat 'pending' from legacy schema as 'submitted'
     const normalizedStatus = status === 'pending' ? 'submitted' : status;
     const currentIndex = order.indexOf(normalizedStatus);
     const stepIndex = order.indexOf(stepId);
@@ -218,7 +219,7 @@ export default function AffiliateDashboard() {
     { id: 'approved', label: 'Affiliate Activated', icon: BadgeCheck },
   ];
 
-  if (isUserLoading || isAffiliateLoading) {
+  if (isUserLoading || isAffiliateLoading || isProfileLoading) {
     return (
       <div className="min-h-screen flex flex-col">
         <Header />
@@ -232,9 +233,9 @@ export default function AffiliateDashboard() {
 
   if (!user) return null;
 
-  const isPending = !!application && application.status !== 'rejected';
-
+  // RENDERING LOGIC BASED ON STATUS
   if (!isApproved) {
+    const isPending = !!application && application.status !== 'rejected';
     const isPinValid = formData.pincode.length === 6 && isValidPincode(formData.pincode);
 
     return (
@@ -243,15 +244,13 @@ export default function AffiliateDashboard() {
         <main className="flex-grow bg-neutral/30 py-20">
           <div className="container mx-auto px-4 max-w-4xl">
             {isPending ? (
-              <Card className="p-8 md:p-12 space-y-10 rounded-[3rem] border-none shadow-xl text-center overflow-hidden">
+              <Card className="p-8 md:p-12 space-y-10 rounded-[3rem] border-none shadow-xl text-center overflow-hidden bg-white">
                 <div className="space-y-4">
                   <h1 className="text-4xl font-headline font-extrabold text-primary">Application Under Review</h1>
                   <p className="text-muted-foreground text-lg">We are processing your request to join the Monterra Partner Program.</p>
                 </div>
 
-                {/* Progress Tracker */}
                 <div className="relative flex justify-between items-start max-w-2xl mx-auto mb-12 px-4">
-                  {/* Progress Lines Background */}
                   <div className="absolute top-5 left-0 w-full h-0.5 bg-gray-100 -z-0">
                     <div 
                       className="h-full bg-emerald-400 transition-all duration-500" 
@@ -284,7 +283,6 @@ export default function AffiliateDashboard() {
                   })}
                 </div>
 
-                {/* Countdown Timer */}
                 <div className="bg-neutral/50 rounded-3xl p-8 border border-muted flex flex-col items-center gap-4">
                   <div className="space-y-1">
                     <p className="text-xs font-black text-muted-foreground uppercase tracking-widest">Estimated Review Time Remaining</p>
@@ -387,6 +385,7 @@ export default function AffiliateDashboard() {
     );
   }
 
+  // AFFILIATE DASHBOARD VIEW (APPROVED)
   const stats = affiliateProfile;
   const balance = stats?.withdrawableAmount || 0;
 
