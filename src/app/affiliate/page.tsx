@@ -30,8 +30,26 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "@/hooks/use-toast";
-import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase";
-import { doc, setDoc, serverTimestamp, query, collection, orderBy, where } from "firebase/firestore";
+import { 
+  useUser, 
+  useFirestore, 
+  useDoc, 
+  useMemoFirebase, 
+  useCollection,
+  errorEmitter,
+  FirestorePermissionError
+} from "@/firebase";
+import { 
+  doc, 
+  setDoc, 
+  updateDoc,
+  writeBatch,
+  serverTimestamp, 
+  query, 
+  collection, 
+  orderBy, 
+  where 
+} from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { useAffiliate } from "@/context/affiliate-context";
 import { cn } from "@/lib/utils";
@@ -163,33 +181,91 @@ export default function AffiliateDashboard() {
 
   const handleApply = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user?.uid) return;
+    if (!user?.uid || !db) return;
 
     if (!isValidPincode(formData.pincode)) {
-      toast({ title: "Invalid Pincode", description: "Please enter a valid 6-digit Indian pincode", variant: "destructive" });
+      toast({ 
+        title: "Invalid Pincode", 
+        description: "Please enter a valid 6-digit Indian pincode", 
+        variant: "destructive" 
+      });
       return;
     }
     
     setIsApplying(true);
+    
     try {
+      const batch = writeBatch(db);
+
+      // 1. Prepare Affiliate Profile
+      const profileRef = doc(db, 'affiliateProfiles', user.uid);
       const profileData = {
         userId: user.uid,
         ...formData,
         totalEarnings: 0,
         withdrawableAmount: 0,
+        paidEarnings: 0,
+        approved: false,
         createdAt: serverTimestamp(),
-        approved: false
+        updatedAt: serverTimestamp()
       };
-      await setDoc(doc(db, 'affiliateProfiles', user.uid), profileData);
+      batch.set(profileRef, profileData, { merge: true });
 
-      const appData = { userId: user.uid, status: "submitted", createdAt: serverTimestamp() };
-      await setDoc(doc(db, 'affiliateApplications', user.uid), appData);
-      
-      toast({ title: "Application Sent!", description: "We'll review your bank details and profile shortly." });
-    } catch (err) {
-      toast({ title: "Submission Failed", variant: "destructive" });
-    } finally {
+      // 2. Prepare Affiliate Application
+      const appRef = doc(db, 'affiliateApplications', user.uid);
+      const appData = { 
+        userId: user.uid, 
+        status: "pending", 
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+      batch.set(appRef, appData, { merge: true });
+
+      // 3. Update User Document
+      const userRef = doc(db, 'users', user.uid);
+      batch.update(userRef, {
+        role: "affiliate",
+        affiliateApproved: false,
+        updatedAt: serverTimestamp()
+      });
+
+      // Execute non-blocking batch commit
+      batch.commit()
+        .then(() => {
+          toast({ 
+            title: "Application Sent!", 
+            description: "We'll review your bank details and profile shortly." 
+          });
+          setIsApplying(false);
+        })
+        .catch(async (error) => {
+          console.error("Affiliate application submission error:", error);
+          setIsApplying(false);
+          
+          // Construct rich error for the listener
+          const permissionError = new FirestorePermissionError({
+            path: `affiliateApplications/${user.uid}`,
+            operation: 'write',
+            requestResourceData: appData
+          });
+          
+          errorEmitter.emit('permission-error', permissionError);
+          
+          toast({ 
+            title: "Submission Failed", 
+            description: error.message || "Could not save application data.",
+            variant: "destructive" 
+          });
+        });
+
+    } catch (err: any) {
+      console.error("Setup error:", err);
       setIsApplying(false);
+      toast({ 
+        title: "Setup Error", 
+        description: "Failed to prepare application data.",
+        variant: "destructive" 
+      });
     }
   };
 
@@ -235,8 +311,7 @@ export default function AffiliateDashboard() {
 
   // RENDERING LOGIC BASED ON STATUS
   if (!isApproved) {
-    const isPending = !!application && application.status !== 'rejected';
-    const isPinValid = formData.pincode.length === 6 && isValidPincode(formData.pincode);
+    const isPending = profile?.role === 'affiliate' && profile?.affiliateApproved === false;
 
     return (
       <div className="min-h-screen flex flex-col">
@@ -353,7 +428,7 @@ export default function AffiliateDashboard() {
                           <div className="space-y-2">
                             <div className="flex justify-between items-center">
                               <Label>Pincode</Label>
-                              {isPinValid && <CheckCircle2 className="h-3 w-3 text-emerald-500" />}
+                              {isValidPincode(formData.pincode) && <CheckCircle2 className="h-3 w-3 text-emerald-500" />}
                             </div>
                             <Input 
                               required 
@@ -364,7 +439,7 @@ export default function AffiliateDashboard() {
                               maxLength={6}
                               inputMode="numeric"
                             />
-                            {formData.pincode.length > 0 && !isPinValid && (
+                            {formData.pincode.length > 0 && !isValidPincode(formData.pincode) && (
                               <p className="text-[10px] text-destructive font-bold">Enter a valid 6-digit Indian pincode</p>
                             )}
                           </div>
