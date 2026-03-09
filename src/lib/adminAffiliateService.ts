@@ -17,13 +17,37 @@ import { db } from "@/lib/firebase";
 
 /**
  * Approves a user's affiliate status.
+ * Updates both the user document and the application status atomically.
  */
 export async function approveAffiliate(userId: string) {
+  const batch = writeBatch(db);
+  
+  // 1. Update user profile
   const userRef = doc(db, "users", userId);
-  return await updateDoc(userRef, {
+  batch.update(userRef, {
     role: "affiliate",
     affiliateApproved: true,
     approvedAt: serverTimestamp()
+  });
+
+  // 2. Update application status to approved so it leaves the pending list
+  const appRef = doc(db, "affiliateApplications", userId);
+  batch.update(appRef, {
+    status: "approved",
+    approvedAt: serverTimestamp()
+  });
+
+  return await batch.commit();
+}
+
+/**
+ * Rejects an affiliate application.
+ */
+export async function rejectAffiliate(userId: string) {
+  const appRef = doc(db, "affiliateApplications", userId);
+  return await updateDoc(appRef, {
+    status: "rejected",
+    rejectedAt: serverTimestamp()
   });
 }
 

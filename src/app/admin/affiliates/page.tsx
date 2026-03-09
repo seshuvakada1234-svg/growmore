@@ -24,6 +24,7 @@ import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 import {
   approveAffiliate,
+  rejectAffiliate,
   getAffiliateProfile,
   removeAffiliate
 } from "@/lib/adminAffiliateService";
@@ -94,6 +95,26 @@ export default function AdminAffiliates() {
       toast({
         title: "Error",
         description: "Failed to approve affiliate",
+        variant: "destructive"
+      });
+    } finally {
+      setIsProcessing(null);
+    }
+  };
+
+  const handleReject = async (userId: string) => {
+    if (!confirm("Reject this affiliate application?")) return;
+    setIsProcessing(userId);
+    try {
+      await rejectAffiliate(userId);
+      toast({
+        title: "Application Rejected",
+        description: "The request has been marked as rejected"
+      });
+    } catch (e) {
+      toast({
+        title: "Error",
+        description: "Failed to reject application",
         variant: "destructive"
       });
     } finally {
@@ -206,6 +227,16 @@ export default function AdminAffiliates() {
                           onClick={() => viewDetails(app.userId)}
                         >
                           Details
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleReject(app.userId)}
+                          disabled={isProcessing === app.userId}
+                          className="text-red-600 border-red-200 hover:bg-red-50"
+                        >
+                          {isProcessing === app.userId && <Loader2 className="animate-spin h-3 w-3 mr-1" />}
+                          Reject
                         </Button>
                         <Button
                           size="sm"
