@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+// SYSTEM PROMPT moved to be part of the request context for maximum compatibility
 const SYSTEM_PROMPT = `
 You are Flora, an expert plant assistant for Monterra, a premium Indian plant store.
 
@@ -23,35 +24,43 @@ export async function POST(req: Request) {
       );
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    // 1. Try environment variable
+    // 2. Fallback to provided hardcoded key for reliability in specific cloud environments
+    const apiKey = process.env.GEMINI_API_KEY || 'AIzaSyAhhug4WRHrPJr5TM7T5hNQglD8U0WErx8';
 
     if (!apiKey) {
-      console.error("Missing GEMINI_API_KEY environment variable");
-      return NextResponse.json(
-        { error: "API key not configured" },
-        { status: 500 }
-      );
+      console.error("No API Key found in env or fallback");
+      return NextResponse.json({
+        reply: "Flora's roots are a bit dry today (API key missing). Please try again later! 🌿"
+      });
     }
 
-    // Initialize the Gemini SDK
     const genAI = new GoogleGenerativeAI(apiKey);
     
-    // Configure the model with system instructions
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash",
-      systemInstruction: SYSTEM_PROMPT
-    });
+    // Using a more standard initialization method
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    const result = await model.generateContent(message);
+    // Combine system prompt with user message for better reliability across all Gemini versions
+    const prompt = `${SYSTEM_PROMPT}\n\nUser Question: ${message}`;
+
+    const result = await model.generateContent(prompt);
     const response = await result.response;
-    const reply = response.text() || "I'm having trouble finding the right words 🌿";
+    const text = response.text();
 
-    return NextResponse.json({ reply });
+    if (!text) {
+      throw new Error("Empty response from Gemini");
+    }
 
-  } catch (error) {
-    console.error("Chat API Error:", error);
+    return NextResponse.json({ reply: text });
 
-    // Return a friendly fallback instead of a crash
+  } catch (error: any) {
+    console.error("VERBOSE CHAT API ERROR:", error);
+    
+    // Check for specific error types to provide better feedback in logs
+    if (error.message?.includes('403')) {
+      console.error("Permission denied: Check if the API key is active and has Gemini API enabled.");
+    }
+
     return NextResponse.json({
       reply: "Flora is taking a little nap in the sun ☀️ Please try asking me again in a moment! 🌿"
     });
