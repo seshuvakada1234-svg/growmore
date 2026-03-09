@@ -37,31 +37,20 @@ service cloud.firestore {
       allow get: if isSignedIn();
       allow list: if isAdmin();
       allow create: if isOwner(userId);
-      allow update: if isAdmin() || (isOwner(userId) && 
-        (
-          // Allow updating non-sensitive fields
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'affiliateApproved']) ||
-          // OR allow promoting self to affiliate (pending approval)
-          (
-            request.resource.data.get('role', 'user') == "affiliate" && 
-            request.resource.data.get('affiliateApproved', false) == false
-          )
-        )
-      );
+      allow update: if isAdmin() || isOwner(userId);
 
       // Subcollections for addresses and wishlist
       match /addresses/{addressId} {
-        allow read, write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+        allow read, write: if isOwner(userId) || isAdmin();
       }
       match /wishlist/{productId} {
-        allow read, write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+        allow read, write: if isOwner(userId) || isAdmin();
       }
     }
 
     // --- Affiliate Applications ---
     match /affiliateApplications/{userId} {
       allow read: if isAdmin() || isOwner(userId);
-      // Allow users to create or update their own application to a pending/submitted state
       allow create, update: if isOwner(userId) && 
         (request.resource.data.status == "pending" || request.resource.data.status == "submitted");
       allow delete: if isAdmin();
@@ -72,14 +61,15 @@ service cloud.firestore {
       allow read: if isOwner(userId) || isAdmin();
       allow create, update: if isOwner(userId) && 
         (
-          // Allow general updates if sensitive fields aren't touched
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['totalEarnings', 'withdrawableAmount', 'approved', 'paidEarnings']) ||
-          // OR allow initial creation/reset with 0 stats
+          // Allow creation with initial zero stats
           (
             request.resource.data.get('totalEarnings', 0) == 0 &&
             request.resource.data.get('withdrawableAmount', 0) == 0 &&
+            request.resource.data.get('paidEarnings', 0) == 0 &&
             request.resource.data.get('approved', false) == false
-          )
+          ) ||
+          // OR allow updates that don't touch sensitive financial fields
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['totalEarnings', 'withdrawableAmount', 'approved', 'paidEarnings'])
         );
       
       // Subcollection for specific profiles
