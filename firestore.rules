@@ -39,10 +39,12 @@ service cloud.firestore {
       allow create: if isOwner(userId);
       allow update: if isAdmin() || (isOwner(userId) && 
         (
+          // Allow updating non-sensitive fields
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'affiliateApproved']) ||
+          // OR allow promoting self to affiliate (pending approval)
           (
             request.resource.data.role == "affiliate" && 
-            request.resource.data.affiliateApproved == false
+            request.resource.data.get('affiliateApproved', false) == false
           )
         )
       );
@@ -59,20 +61,24 @@ service cloud.firestore {
     // --- Affiliate Applications ---
     match /affiliateApplications/{userId} {
       allow read: if isAdmin() || isOwner(userId);
-      allow create, update: if isOwner(userId) && (request.resource.data.status == "pending" || request.resource.data.status == "submitted");
+      // Allow users to create or update their own application to a pending/submitted state
+      allow create, update: if isOwner(userId) && 
+        (request.resource.data.status == "pending" || request.resource.data.status == "submitted");
       allow delete: if isAdmin();
     }
 
-    // --- Affiliate Profiles & Bank Details ---
+    // --- Affiliate Profiles ---
     match /affiliateProfiles/{userId} {
       allow read: if isOwner(userId) || isAdmin();
       allow create, update: if isOwner(userId) && 
         (
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['totalEarnings', 'withdrawableAmount', 'approved', 'role']) ||
+          // Allow general updates if sensitive fields aren't touched
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['totalEarnings', 'withdrawableAmount', 'approved', 'paidEarnings']) ||
+          // OR allow initial creation/reset with 0 stats
           (
-            request.resource.data.totalEarnings == 0 &&
-            request.resource.data.withdrawableAmount == 0 &&
-            request.resource.data.approved == false
+            request.resource.data.get('totalEarnings', 0) == 0 &&
+            request.resource.data.get('withdrawableAmount', 0) == 0 &&
+            request.resource.data.get('approved', false) == false
           )
         );
       
