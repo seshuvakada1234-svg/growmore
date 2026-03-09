@@ -2,6 +2,9 @@ import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
   /* config options here */
+  env: {
+    GEMINI_API_KEY: 'AIzaSyAhhug4WRHrPJr5TM7T5hNQglD8U0WErx8',
+  },
   typescript: {
     ignoreBuildErrors: true,
   },

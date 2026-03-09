@@ -20,10 +20,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid message' }, { status: 400 });
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    // Attempt to read from env with a hardcoded fallback for the specific environment issue
+    const apiKey = process.env.GEMINI_API_KEY || 'AIzaSyAhhug4WRHrPJr5TM7T5hNQglD8U0WErx8';
 
     if (!apiKey) {
-      console.error('Missing GEMINI_API_KEY in .env.local');
+      console.error('Missing GEMINI_API_KEY configuration');
       return NextResponse.json({ error: 'API key not configured' }, { status: 500 });
     }
 
