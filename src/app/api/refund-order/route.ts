@@ -14,53 +14,32 @@ export async function POST(req: NextRequest) {
     const { orderId } = body;
 
     if (!orderId) {
-      return NextResponse.json(
-        { error: "Missing orderId" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Missing orderId" }, { status: 400 });
     }
 
     const orderRef = adminDb.collection("orders").doc(orderId);
     const orderSnap = await orderRef.get();
 
     if (!orderSnap.exists) {
-      return NextResponse.json(
-        { error: "Order not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
     const order = orderSnap.data();
 
-    // 🛑 Guard 1: Only cancelled orders can be refunded
+    // 🛑 Prevent duplicate refunds
+    if (order?.refundStatus === "processed") {
+      return NextResponse.json({ message: "Refund already processed" }, { status: 200 });
+    }
+
+    // 🛑 Guard: Only cancelled orders can be refunded via this flow
     if (order?.status !== "Cancelled") {
-      return NextResponse.json(
-        { error: "Order is not cancelled" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Order must be cancelled first" }, { status: 400 });
     }
 
-    // 🛑 Guard 2: Only online payments
+    // 🛑 Guard: Only online payments via Razorpay
     if (order?.paymentMethod !== "online" || !order?.razorpayPaymentId) {
-      return NextResponse.json(
-        { error: "This order was not paid online" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Order not eligible for Razorpay refund" }, { status: 400 });
     }
-
-    // 🛑 Guard 3: Prevent duplicate refunds
-    if (order?.refundStatus === "success" || order?.refundStatus === "initiated") {
-      return NextResponse.json(
-        { error: "Refund already processed" },
-        { status: 400 }
-      );
-    }
-
-    // Mark refund initiated
-    await orderRef.update({
-      refundStatus: "initiated",
-      refundInitiatedAt: FieldValue.serverTimestamp(),
-    });
 
     // 💳 Call Razorpay refund API
     const refund = await razorpay.payments.refund(order.razorpayPaymentId, {
@@ -68,16 +47,16 @@ export async function POST(req: NextRequest) {
       speed: "optimum",
       notes: {
         orderId: orderId,
-        reason: order.cancelReason || "Order cancelled by customer",
+        reason: order.cancelReason || "Admin approved refund",
       },
     });
 
-    // Save refund result
+    // ✅ Update Firestore with 'processed' status
     await orderRef.update({
-      refundStatus: "success",
+      refundStatus: "processed",
       refundId: refund.id,
-      refundAmount: order.totalAmount,
-      refundCompletedAt: FieldValue.serverTimestamp(),
+      refundedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
 
     return NextResponse.json({
@@ -87,15 +66,9 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error("Refund error:", error);
-
+    console.error("Refund API Error:", error);
     return NextResponse.json(
-      {
-        error:
-          error?.error?.description ||
-          error?.message ||
-          "Refund failed",
-      },
+      { error: error?.message || "Refund failed" },
       { status: 500 }
     );
   }

@@ -51,6 +51,11 @@ type PaymentMethod = "cod" | "upi" | "card";
 
 const fmt = (n: number) => `₹${n.toLocaleString("en-IN")}`;
 
+const generateOrderId = (method: string) => {
+  const prefix = method === "cod" ? "GS-COD" : "GS-ONL";
+  return `${prefix}-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+};
+
 export default function CheckoutPage() {
   const router = useRouter();
   const { user } = useUser();
@@ -134,7 +139,7 @@ export default function CheckoutPage() {
     }
   };
 
-  const saveOrderToFirestore = async (orderId: string, razorpayPaymentId: string | null = null) => {
+  const saveOrderToFirestore = async (orderId: string, razorpayPaymentId: string | null = null, razorpayOrderId: string | null = null) => {
     if (!user) return;
 
     const affiliateRefId = localStorage.getItem("monterra_referrer");
@@ -154,10 +159,12 @@ export default function CheckoutPage() {
         state: formData.state,
         pincode: formData.pincode,
       },
-      paymentMethod,
-      razorpayPaymentId,
+      paymentMethod: razorpayPaymentId ? "online" : "cod",
+      paymentStatus: razorpayPaymentId ? "paid" : "pending",
+      razorpayPaymentId: razorpayPaymentId || null,
+      razorpayOrderId: razorpayOrderId || null,
       totalAmount: total,
-      status: paymentMethod === 'cod' ? "Pending" : "Paid",
+      status: razorpayPaymentId ? "Approved" : "Pending",
       affiliateId: finalReferrerId,
       items: cartItems.map((i) => ({
         productId: i.id,
@@ -169,6 +176,7 @@ export default function CheckoutPage() {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       rejectedSelfReferral: isSelfReferral,
+      refundStatus: null,
     };
 
     try {
@@ -244,6 +252,7 @@ export default function CheckoutPage() {
           return;
         }
 
+        const firestoreOrderId = generateOrderId("upi");
         const options = {
           key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
           amount: razorpayOrder.amount,
@@ -259,13 +268,14 @@ export default function CheckoutPage() {
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
+                firestoreOrderId,
               }),
             });
 
             const verifyData = await verifyRes.json();
 
             if (verifyData.success) {
-              await saveOrderToFirestore(response.razorpay_order_id, response.razorpay_payment_id);
+              await saveOrderToFirestore(firestoreOrderId, response.razorpay_payment_id, response.razorpay_order_id);
               toast({ title: "Payment Successful 🌿", description: "Your order has been recorded" });
             } else {
               toast({ title: "Payment Verification Failed", variant: "destructive" });

@@ -58,7 +58,6 @@ export default function OrdersPage() {
     }
   }, [user, isUserLoading, router]);
 
-  // Allow cancel for Pending, Approved, OR Paid within 24 hours
   const canCancel = (order: any) => {
     if (order.status === "Cancelled") return false;
     const cancellableStatuses = ["Pending", "Approved", "Paid"];
@@ -74,7 +73,10 @@ export default function OrdersPage() {
 
     setIsSubmittingCancel(true);
     const orderRef = doc(db, "orders", cancellingOrder.id);
-    const cancelData = {
+    
+    // Updated cancellation logic: instead of auto-refunding, set refundStatus to 'pending'
+    // for the administrator to approve in the admin panel.
+    const cancelData: any = {
       status: "Cancelled",
       cancelled: true,
       cancelReason,
@@ -83,38 +85,19 @@ export default function OrdersPage() {
       updatedAt: serverTimestamp(),
     };
 
+    if (cancellingOrder.paymentMethod === "online" && cancellingOrder.razorpayPaymentId) {
+      cancelData.refundStatus = "pending";
+    }
+
     try {
-      // Step 1: Update Firestore
       await updateDoc(orderRef, cancelData);
-
-      // Step 2: Trigger Razorpay refund if online payment
-      if (cancellingOrder.paymentMethod === "online" && cancellingOrder.razorpayPaymentId) {
-        const res = await fetch("/api/refund-order", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ orderId: cancellingOrder.id }),
-        });
-        const data = await res.json();
-
-        if (!res.ok) {
-          console.error("Refund error:", data.error);
-          toast({
-            title: "Order Cancelled",
-            description: "Order cancelled, but refund initiation failed. Please contact support.",
-            variant: "destructive",
-          });
-        } else {
-          toast({
-            title: "Order Cancelled & Refund Initiated",
-            description: `₹${(cancellingOrder.totalAmount || cancellingOrder.total || 0).toLocaleString()} will be refunded to your original payment method within 5–7 business days.`,
-          });
-        }
-      } else {
-        toast({
-          title: "Order Cancelled",
-          description: "Your order has been successfully cancelled.",
-        });
-      }
+      
+      toast({
+        title: "Order Cancelled",
+        description: cancellingOrder.paymentMethod === "online" 
+          ? "Our team will review and process your refund shortly."
+          : "Your order has been successfully cancelled.",
+      });
 
       setCancellingOrder(null);
       setCancelReason("");
@@ -133,19 +116,19 @@ export default function OrdersPage() {
 
   const getRefundBadge = (order: any) => {
     if (order.status !== "Cancelled" || order.paymentMethod !== "online") return null;
-    if (order.refundStatus === "success") {
+    if (order.refundStatus === "processed") {
       return (
         <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full mt-2">
           <CheckCircle2 className="h-3.5 w-3.5" />
-          Refund of ₹{(order.refundAmount || 0).toLocaleString()} initiated · 5–7 business days
+          Refund processed · Credit in 5–7 business days
         </div>
       );
     }
-    if (order.refundStatus === "initiated") {
+    if (order.refundStatus === "pending") {
       return (
         <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full mt-2">
           <Clock className="h-3.5 w-3.5 animate-pulse" />
-          Refund processing...
+          Refund pending approval
         </div>
       );
     }
@@ -157,12 +140,7 @@ export default function OrdersPage() {
         </div>
       );
     }
-    return (
-      <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground bg-muted px-3 py-1.5 rounded-full mt-2">
-        <RefreshCw className="h-3.5 w-3.5" />
-        Refund pending
-      </div>
-    );
+    return null;
   };
 
   if (isUserLoading || isOrdersLoading) {
@@ -289,7 +267,6 @@ export default function OrdersPage() {
                           Track Order
                         </button>
                       </Link>
-                      {/* ✅ Order Details — navigates to /orders/[id] */}
                       <Link href={`/orders/${order.id}`} className="w-full sm:w-auto">
                         <button className="w-full text-sm font-bold px-8 py-2.5 rounded-full bg-primary text-white hover:bg-primary/90 transition-all shadow-md">
                           Order Details
@@ -314,7 +291,7 @@ export default function OrdersPage() {
             </DialogTitle>
             <DialogDescription>
               {cancellingOrder?.paymentMethod === "online"
-                ? "Your payment will be refunded to your original payment method within 5–7 business days."
+                ? "Your refund request will be sent to our team for approval."
                 : "We're sorry to see you go. Please let us know why you're cancelling."}
             </DialogDescription>
           </DialogHeader>
@@ -348,12 +325,11 @@ export default function OrdersPage() {
               </div>
             )}
 
-            {/* Refund notice for online payments */}
             {cancellingOrder?.paymentMethod === "online" && (
               <div className="flex items-start gap-3 bg-blue-50 rounded-2xl p-4">
                 <RefreshCw className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
                 <p className="text-xs text-blue-700 font-medium leading-relaxed">
-                  Since you paid online, ₹{(cancellingOrder?.totalAmount || cancellingOrder?.total || 0).toLocaleString()} will be automatically refunded to your original payment method.
+                  Since you paid online, your refund request will be sent to our team for approval once you confirm.
                 </p>
               </div>
             )}

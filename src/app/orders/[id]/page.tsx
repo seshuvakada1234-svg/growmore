@@ -76,7 +76,10 @@ export default function OrderDetailPage() {
     setIsSubmittingCancel(true);
 
     const orderRef = doc(db, "orders", orderId);
-    const cancelData = {
+    
+    // Updated cancellation logic: instead of auto-refunding, set refundStatus to 'pending'
+    // for the administrator to approve in the admin panel.
+    const cancelData: any = {
       status: "Cancelled",
       cancelled: true,
       cancelReason,
@@ -85,31 +88,19 @@ export default function OrderDetailPage() {
       updatedAt: serverTimestamp(),
     };
 
+    if (order.paymentMethod === "online" && order.razorpayPaymentId) {
+      cancelData.refundStatus = "pending";
+    }
+
     try {
       await updateDoc(orderRef, cancelData);
-
-      if (order.paymentMethod === "online" && order.razorpayPaymentId) {
-        const res = await fetch("/api/refund-order", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ orderId }),
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          toast({
-            title: "Order Cancelled",
-            description: "Order cancelled, but refund initiation failed. Please contact support.",
-            variant: "destructive",
-          });
-        } else {
-          toast({
-            title: "Order Cancelled & Refund Initiated",
-            description: `₹${(order.totalAmount || order.total || 0).toLocaleString()} will be refunded within 5–7 business days.`,
-          });
-        }
-      } else {
-        toast({ title: "Order Cancelled", description: "Your order has been successfully cancelled." });
-      }
+      
+      toast({ 
+        title: "Order Cancelled", 
+        description: order.paymentMethod === "online" 
+          ? "Our team will review and process your refund shortly." 
+          : "Your order has been successfully cancelled." 
+      });
 
       setShowCancelModal(false);
       setCancelReason("");
@@ -126,10 +117,10 @@ export default function OrderDetailPage() {
     if (order?.status !== "Cancelled" || order?.paymentMethod !== "online") return null;
     return (
       <div className={`flex items-start gap-3 rounded-2xl p-4 mt-4 ${
-        order.refundStatus === "success" ? "bg-emerald-50" :
+        order.refundStatus === "processed" ? "bg-emerald-50" :
         order.refundStatus === "failed" ? "bg-red-50" : "bg-amber-50"
       }`}>
-        {order.refundStatus === "success"
+        {order.refundStatus === "processed"
           ? <CheckCircle2 className="h-5 w-5 text-emerald-500 mt-0.5 flex-shrink-0" />
           : order.refundStatus === "failed"
           ? <AlertTriangle className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
@@ -137,21 +128,21 @@ export default function OrderDetailPage() {
         }
         <div>
           <p className={`text-sm font-bold ${
-            order.refundStatus === "success" ? "text-emerald-700" :
+            order.refundStatus === "processed" ? "text-emerald-700" :
             order.refundStatus === "failed" ? "text-red-600" : "text-amber-700"
           }`}>
-            {order.refundStatus === "success"
-              ? `Refund of ₹${(order.refundAmount || 0).toLocaleString()} Initiated`
+            {order.refundStatus === "processed"
+              ? `Refund Processed`
               : order.refundStatus === "failed"
               ? "Refund Failed"
-              : "Refund Processing..."}
+              : "Refund Pending Review"}
           </p>
           <p className="text-xs mt-0.5 text-muted-foreground">
-            {order.refundStatus === "success"
+            {order.refundStatus === "processed"
               ? `Refund ID: ${order.refundId} · Credited to your original payment method within 5–7 business days`
               : order.refundStatus === "failed"
               ? order.refundError || "Please contact support"
-              : "Your refund is being processed"}
+              : "An administrator will approve your refund request shortly."}
           </p>
         </div>
       </div>
@@ -349,11 +340,10 @@ export default function OrderDetailPage() {
                 <div className="text-sm text-foreground leading-relaxed">
                   <p className="font-bold text-base">{order.shippingAddress.name || order.shippingAddress.fullName}</p>
                   <p className="text-muted-foreground mt-1">
-                    {order.shippingAddress.addressLine1 || order.shippingAddress.line1}
-                    {order.shippingAddress.addressLine2 && `, ${order.shippingAddress.addressLine2}`}
+                    {order.shippingAddress.fullAddress || order.shippingAddress.address}
                   </p>
                   <p className="text-muted-foreground">
-                    {order.shippingAddress.city}, {order.shippingAddress.state} — {order.shippingAddress.pincode || order.shippingAddress.zip}
+                    {order.shippingAddress.city}, {order.shippingAddress.state} — {order.shippingAddress.pincode}
                   </p>
                   {order.shippingAddress.phone && (
                     <p className="text-muted-foreground mt-1">📞 {order.shippingAddress.phone}</p>
@@ -382,12 +372,6 @@ export default function OrderDetailPage() {
                     {order.paymentStatus === "paid" ? "✓ Paid" : order.paymentStatus || "Pending"}
                   </span>
                 </div>
-                {order.razorpayPaymentId && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Payment ID</span>
-                    <span className="font-mono text-xs text-muted-foreground">{order.razorpayPaymentId}</span>
-                  </div>
-                )}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Order Date</span>
                   <span className="font-bold flex items-center gap-1">
@@ -414,7 +398,7 @@ export default function OrderDetailPage() {
             </DialogTitle>
             <DialogDescription>
               {order.paymentMethod === "online"
-                ? "Your payment will be refunded to your original payment method within 5–7 business days."
+                ? "Your refund request will be sent to our team for approval."
                 : "Please let us know why you're cancelling."}
             </DialogDescription>
           </DialogHeader>
@@ -452,7 +436,7 @@ export default function OrderDetailPage() {
               <div className="flex items-start gap-3 bg-blue-50 rounded-2xl p-4">
                 <RefreshCw className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
                 <p className="text-xs text-blue-700 font-medium leading-relaxed">
-                  ₹{(order.totalAmount || order.total || 0).toLocaleString()} will be automatically refunded to your original payment method.
+                  Upon approval, ₹{(order.totalAmount || order.total || 0).toLocaleString()} will be automatically refunded to your original payment method.
                 </p>
               </div>
             )}

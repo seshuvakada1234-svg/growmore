@@ -31,7 +31,9 @@ import {
   CreditCard,
   Package,
   AlertTriangle,
-  Clock
+  Clock,
+  RefreshCcw,
+  CheckCircle2
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -58,6 +60,7 @@ export default function AdminOrders() {
   const { user } = useUser();
   const [searchTerm, setSearchQuery] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [isRefunding, setIsRefunding] = useState<string | null>(null);
 
   // Fetch role to gate queries
   const userProfileRef = useMemoFirebase(() => !user?.uid ? null : doc(db, 'users', user.uid), [db, user?.uid]);
@@ -93,6 +96,36 @@ export default function AdminOrders() {
       });
       errorEmitter.emit('permission-error', permissionError);
     });
+  };
+
+  const handleApproveRefund = async (orderId: string) => {
+    setIsRefunding(orderId);
+    try {
+      const res = await fetch('/api/refund-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId }),
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        toast({
+          title: "Refund Processed",
+          description: `Razorpay Refund ID: ${data.refundId || 'N/A'}`,
+        });
+      } else {
+        throw new Error(data.error || "Failed to process refund");
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast({
+        title: "Refund Failed",
+        description: err.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsRefunding(null);
+    }
   };
 
   const filteredOrders = orders?.filter(order => 
@@ -140,9 +173,8 @@ export default function AdminOrders() {
                 <TableRow>
                   <TableHead className="p-6 font-bold text-xs uppercase tracking-wider">Order ID</TableHead>
                   <TableHead className="p-6 font-bold text-xs uppercase tracking-wider">Customer</TableHead>
-                  <TableHead className="p-6 font-bold text-xs uppercase tracking-wider">Date</TableHead>
-                  <TableHead className="p-6 font-bold text-xs uppercase tracking-wider">Total</TableHead>
                   <TableHead className="p-6 font-bold text-xs uppercase tracking-wider">Status</TableHead>
+                  <TableHead className="p-6 font-bold text-xs uppercase tracking-wider">Refund</TableHead>
                   <TableHead className="p-6 font-bold text-xs uppercase tracking-wider text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -164,27 +196,44 @@ export default function AdminOrders() {
                       </div>
                     </TableCell>
                     <TableCell className="p-6">
-                      <div className="flex items-center gap-2 text-sm">
-                        <Calendar className="h-4 w-4 text-muted-foreground" />
-                        {order.createdAt?.seconds 
-                          ? format(new Date(order.createdAt.seconds * 1000), "MMM d, yyyy")
-                          : 'Recent'}
-                      </div>
-                    </TableCell>
-                    <TableCell className="p-6 font-extrabold text-primary">
-                      ₹{order.totalAmount || order.total || 0}
+                      <StatusChip status={order.status as OrderStatus} />
                     </TableCell>
                     <TableCell className="p-6">
-                      <StatusChip status={order.status as OrderStatus} />
+                      {order.status === "Cancelled" && order.paymentMethod === "online" ? (
+                        <div className="flex flex-col gap-1">
+                          {order.refundStatus === "processed" ? (
+                            <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-none flex items-center gap-1 w-fit">
+                              <CheckCircle2 className="h-3 w-3" /> Processed
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-orange-600 border-orange-200 bg-orange-50/50 flex items-center gap-1 w-fit">
+                              <Clock className="h-3 w-3" /> Pending
+                            </Badge>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">N/A</span>
+                      )}
                     </TableCell>
                     <TableCell className="p-6 text-right">
                       <div className="flex items-center justify-end gap-3">
+                        {order.status === "Cancelled" && order.refundStatus === "pending" && (
+                          <Button 
+                            size="sm" 
+                            className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-9 px-4 rounded-xl flex gap-2 items-center"
+                            onClick={() => handleApproveRefund(order.id)}
+                            disabled={isRefunding === order.id}
+                          >
+                            {isRefunding === order.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
+                            Approve Refund
+                          </Button>
+                        )}
                         <Select 
                           defaultValue={order.status} 
                           onValueChange={(val) => handleStatusUpdate(order.id, val as OrderStatus)}
                         >
                           <SelectTrigger className="w-[130px] rounded-lg h-9 text-xs font-bold bg-white shadow-sm border-muted">
-                            <SelectValue placeholder="Update Status" />
+                            <SelectValue placeholder="Status" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="Pending">Pending</SelectItem>
@@ -208,7 +257,7 @@ export default function AdminOrders() {
                 ))}
                 {filteredOrders?.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className="p-20 text-center text-muted-foreground">
+                    <TableCell colSpan={5} className="p-20 text-center text-muted-foreground">
                       No orders found matching your search.
                     </TableCell>
                   </TableRow>
@@ -279,21 +328,12 @@ export default function AdminOrders() {
                       <p className="font-bold text-red-700">{selectedOrder.cancelReason || "Not specified"}</p>
                     </div>
                     <div>
-                      <p className="text-[10px] text-red-400 uppercase font-black tracking-wider mb-1">Cancelled On</p>
-                      <div className="flex items-center gap-1 font-bold text-red-700">
-                        <Clock className="h-3.5 w-3.5" />
-                        {selectedOrder.cancelledAt?.seconds 
-                          ? format(new Date(selectedOrder.cancelledAt.seconds * 1000), "iii, d MMM ''yy - h:mma")
-                          : "Recently"}
-                      </div>
+                      <p className="text-[10px] text-red-400 uppercase font-black tracking-wider mb-1">Status</p>
+                      <p className="font-bold text-red-700">
+                        {selectedOrder.paymentMethod === 'cod' ? 'No Refund Needed' : `Refund ${selectedOrder.refundStatus || 'Pending'}`}
+                      </p>
                     </div>
                   </div>
-                  {selectedOrder.cancelFeedback && (
-                    <div className="pt-2 border-t border-red-100">
-                      <p className="text-[10px] text-red-400 uppercase font-black tracking-wider mb-1">Customer Feedback</p>
-                      <p className="text-sm text-red-700 italic">"{selectedOrder.cancelFeedback}"</p>
-                    </div>
-                  )}
                 </div>
               )}
 
