@@ -146,7 +146,7 @@ export async function POST(req: Request) {
 
     const apiKey = process.env.RESEND_API_KEY;
     const adminEmail = process.env.ADMIN_EMAIL || 'seshuvakada1234@gmail.com';
-    const adminWhatsapp = process.env.ADMIN_WHATSAPP || '919999999999';
+    const adminWhatsapp = process.env.ADMIN_WHATSAPP || '919666270282';
 
     if (!apiKey) {
       console.error('Missing RESEND_API_KEY');
@@ -159,8 +159,7 @@ export async function POST(req: Request) {
     };
 
     // Send both emails in parallel
-    const [customerRes, adminRes] = await Promise.all([
-      // Email to customer
+    await Promise.all([
       fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
@@ -174,7 +173,6 @@ export async function POST(req: Request) {
           html: customerEmailHtml(orderData)
         })
       }),
-      // Email to admin
       fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
@@ -189,6 +187,17 @@ export async function POST(req: Request) {
         })
       })
     ]);
+
+    // ── Send WhatsApp notifications via Twilio ──
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    await fetch(`${appUrl}/api/send-whatsapp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        orderId, customerName, customerPhone,
+        items, total, paymentMethod, status,
+      }),
+    });
 
     // Build WhatsApp links to return to frontend
     const customerWaLink = `https://wa.me/${adminWhatsapp}?text=${encodeURIComponent(
