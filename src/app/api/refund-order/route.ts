@@ -1,7 +1,7 @@
+// src/app/api/refund-order/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import Razorpay from "razorpay";
-import { adminDb } from "@/firebase/admin";
-import { FieldValue } from "firebase-admin/firestore";
+import { adminDb, adminAuth } from "@/lib/firebase-admin";
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID!,
@@ -10,13 +10,26 @@ const razorpay = new Razorpay({
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { orderId } = body;
-
-    if (!orderId) {
-      return NextResponse.json({ error: "Missing orderId" }, { status: 400 });
+    // ── 1. Admin auth check ──────────────────────────────────────────────────
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const token = authHeader.split("Bearer ")[1];
+    const decoded = await adminAuth.verifyIdToken(token);
+    const isAdmin = decoded.admin === true;
+    if (!isAdmin) {
+      return NextResponse.json({ error: "Forbidden: Admins only" }, { status: 403 });
+    }
+
+    // ── 2. Parse body ────────────────────────────────────────────────────────
+    const { orderId } = await req.json();
+    if (!orderId) {
+      return NextResponse.json({ error: "orderId is required" }, { status: 400 });
+    }
+
+    // ── 3. Fetch order from Firestore ────────────────────────────────────────
     const orderRef = adminDb.collection("orders").doc(orderId);
     const orderSnap = await orderRef.get();
 
@@ -24,52 +37,53 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    const order = orderSnap.data();
+    const order = orderSnap.data()!;
 
-    // 🛑 Prevent duplicate refunds
-    if (order?.refundStatus === "processed") {
-      return NextResponse.json({ message: "Refund already processed" }, { status: 200 });
+    // ── 4. Must be a cancelled order ─────────────────────────────────────────
+    if (order.status !== "Cancelled") {
+      return NextResponse.json(
+        { error: "Refund can only be issued for cancelled orders" },
+        { status: 400 }
+      );
     }
 
-    // 🛑 Guard: Only cancelled orders can be refunded via this flow
-    if (order?.status !== "Cancelled") {
-      return NextResponse.json({ error: "Order must be cancelled first" }, { status: 400 });
+    // ── 5. Prevent duplicate refunds ─────────────────────────────────────────
+    if (order.refundStatus === "processed") {
+      return NextResponse.json(
+        { error: "Refund already processed" },
+        { status: 400 }
+      );
     }
 
-    // 🛑 Guard: Only online payments via Razorpay
-    if (order?.paymentMethod !== "online" || !order?.razorpayPaymentId) {
-      return NextResponse.json({ error: "Order not eligible for Razorpay refund" }, { status: 400 });
+    // ── 6. Allow refunds only for Razorpay payments ──────────────────────────
+    if (!order.razorpayPaymentId) {
+      return NextResponse.json(
+        { error: "No Razorpay payment found for this order" },
+        { status: 400 }
+      );
     }
 
-    // 💳 Call Razorpay refund API
+    // ── 7. Call Razorpay refund API ──────────────────────────────────────────
     const refund = await razorpay.payments.refund(order.razorpayPaymentId, {
-      amount: Math.round(order.totalAmount * 100), // convert ₹ → paise
-      speed: "optimum",
-      notes: {
-        orderId: orderId,
-        reason: order.cancelReason || "Admin approved refund",
-      },
+      speed: "normal",
     });
 
-    // ✅ Update Firestore with 'processed' status
+    // ── 8. Update Firestore after successful refund ──────────────────────────
     await orderRef.update({
       refundStatus: "processed",
       refundId: refund.id,
-      refundedAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
+      refundedAt: new Date(),
+      updatedAt: new Date(),
     });
 
-    return NextResponse.json({
-      success: true,
-      refundId: refund.id,
-      amount: order.totalAmount,
-    });
-
-  } catch (error: any) {
-    console.error("Refund API Error:", error);
     return NextResponse.json(
-      { error: error?.message || "Refund failed" },
-      { status: 500 }
+      { success: true, refundId: refund.id },
+      { status: 200 }
     );
+  } catch (error: any) {
+    console.error("[refund-order] Error:", error);
+    const message =
+      error?.error?.description ?? error?.message ?? "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
