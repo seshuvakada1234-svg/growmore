@@ -1,52 +1,46 @@
-
 "use client";
 
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { StatusChip } from "@/components/shared/StatusChip";
-import { Package, Calendar, ArrowUpRight, Loader2, Search, XCircle, AlertTriangle } from "lucide-react";
+import {
+  Package, Calendar, ArrowUpRight, Loader2, Search,
+  XCircle, AlertTriangle, RefreshCw, CheckCircle2, Clock,
+} from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { collection, query, where, orderBy, doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import {
+  collection, query, where, orderBy,
+  doc, updateDoc, serverTimestamp,
+} from "firebase/firestore";
 import { format, differenceInHours } from "date-fns";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
+  Dialog, DialogContent, DialogHeader,
+  DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem,
+  SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
-import { errorEmitter } from "@/firebase/error-emitter";
-import { FirestorePermissionError } from "@/firebase/errors";
 
 export default function OrdersPage() {
   const { user, isUserLoading } = useUser();
   const db = useFirestore();
   const router = useRouter();
 
-  // State for cancellation modal
   const [cancellingOrder, setCancellingOrder] = useState<any>(null);
   const [cancelReason, setCancelReason] = useState<string>("");
   const [cancelFeedback, setCancelFeedback] = useState<string>("");
   const [isSubmittingCancel, setIsSubmittingCancel] = useState(false);
 
-  // Fetch real orders from Firestore for the current user
   const ordersQuery = useMemoFirebase(() => {
     if (!db || !user?.uid) return null;
     return query(
@@ -60,21 +54,19 @@ export default function OrdersPage() {
 
   useEffect(() => {
     if (!isUserLoading && !user) {
-      router.push('/login?redirect=/orders');
+      router.push("/login?redirect=/orders");
     }
   }, [user, isUserLoading, router]);
 
+  // Allow cancel for Pending, Approved, OR Paid within 24 hours
   const canCancel = (order: any) => {
     if (order.status === "Cancelled") return false;
-    
-    // Rule 1: Correct Status
-    const isCorrectStatus = ["Pending", "Approved"].includes(order.status);
-    if (!isCorrectStatus) return false;
-
-    // Rule 2: Within 24 hours
-    const createdAt = order.createdAt?.seconds ? new Date(order.createdAt.seconds * 1000) : new Date();
-    const hoursElapsed = differenceInHours(new Date(), createdAt);
-    return hoursElapsed <= 24;
+    const cancellableStatuses = ["Pending", "Approved", "Paid"];
+    if (!cancellableStatuses.includes(order.status)) return false;
+    const createdAt = order.createdAt?.seconds
+      ? new Date(order.createdAt.seconds * 1000)
+      : new Date();
+    return differenceInHours(new Date(), createdAt) <= 24;
   };
 
   const handleConfirmCancel = async () => {
@@ -88,28 +80,89 @@ export default function OrdersPage() {
       cancelReason,
       cancelFeedback: cancelReason === "Other" ? cancelFeedback : "",
       cancelledAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
+      updatedAt: serverTimestamp(),
     };
 
     try {
+      // Step 1: Update Firestore
       await updateDoc(orderRef, cancelData);
-      toast({
-        title: "Order Cancelled",
-        description: "Your order has been successfully cancelled.",
-      });
+
+      // Step 2: Trigger Razorpay refund if online payment
+      if (cancellingOrder.paymentMethod === "online" && cancellingOrder.razorpayPaymentId) {
+        const res = await fetch("/api/refund-order", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderId: cancellingOrder.id }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          console.error("Refund error:", data.error);
+          toast({
+            title: "Order Cancelled",
+            description: "Order cancelled, but refund initiation failed. Please contact support.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Order Cancelled & Refund Initiated",
+            description: `₹${(cancellingOrder.totalAmount || cancellingOrder.total || 0).toLocaleString()} will be refunded to your original payment method within 5–7 business days.`,
+          });
+        }
+      } else {
+        toast({
+          title: "Order Cancelled",
+          description: "Your order has been successfully cancelled.",
+        });
+      }
+
       setCancellingOrder(null);
       setCancelReason("");
       setCancelFeedback("");
     } catch (error) {
-      const permissionError = new FirestorePermissionError({
-        path: orderRef.path,
-        operation: 'update',
-        requestResourceData: cancelData
+      console.error("Cancel error:", error);
+      toast({
+        title: "Failed to cancel order",
+        description: "Something went wrong. Please try again.",
+        variant: "destructive",
       });
-      errorEmitter.emit('permission-error', permissionError);
     } finally {
       setIsSubmittingCancel(false);
     }
+  };
+
+  const getRefundBadge = (order: any) => {
+    if (order.status !== "Cancelled" || order.paymentMethod !== "online") return null;
+    if (order.refundStatus === "success") {
+      return (
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full mt-2">
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          Refund of ₹{(order.refundAmount || 0).toLocaleString()} initiated · 5–7 business days
+        </div>
+      );
+    }
+    if (order.refundStatus === "initiated") {
+      return (
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full mt-2">
+          <Clock className="h-3.5 w-3.5 animate-pulse" />
+          Refund processing...
+        </div>
+      );
+    }
+    if (order.refundStatus === "failed") {
+      return (
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-red-500 bg-red-50 px-3 py-1.5 rounded-full mt-2">
+          <AlertTriangle className="h-3.5 w-3.5" />
+          Refund failed — please contact support
+        </div>
+      );
+    }
+    return (
+      <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground bg-muted px-3 py-1.5 rounded-full mt-2">
+        <RefreshCw className="h-3.5 w-3.5" />
+        Refund pending
+      </div>
+    );
   };
 
   if (isUserLoading || isOrdersLoading) {
@@ -138,8 +191,8 @@ export default function OrdersPage() {
             </div>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <input 
-                placeholder="Search orders..." 
+              <input
+                placeholder="Search orders..."
                 className="pl-10 h-10 w-full md:w-64 rounded-full border-none bg-white shadow-sm text-sm focus:ring-2 focus:ring-primary outline-none"
               />
             </div>
@@ -159,44 +212,57 @@ export default function OrdersPage() {
           ) : (
             <div className="space-y-6">
               {orders.map((order: any) => (
-                <Card key={order.id} className="rounded-3xl border-none shadow-sm overflow-hidden bg-white hover:shadow-md transition-all group">
+                <Card
+                  key={order.id}
+                  className="rounded-3xl border-none shadow-sm overflow-hidden bg-white hover:shadow-md transition-all group"
+                >
                   <CardHeader className="bg-accent/30 border-b flex flex-row items-center justify-between p-6">
                     <div className="flex flex-wrap gap-x-8 gap-y-2">
                       <div>
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-black mb-0.5">Order ID</p>
-                        <p className="font-bold text-primary text-xs sm:text-sm font-mono">{order.id.substring(0, 12)}...</p>
+                        <p className="font-bold text-primary text-xs sm:text-sm font-mono">
+                          {order.id.substring(0, 12)}...
+                        </p>
                       </div>
                       <div className="hidden sm:block">
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-black mb-0.5">Date</p>
                         <div className="flex items-center gap-1 font-bold text-primary text-sm">
-                          <Calendar className="h-3.5 w-3.5" /> 
-                          {order.createdAt?.seconds 
-                            ? format(new Date(order.createdAt.seconds * 1000), "MMM d, yyyy") 
+                          <Calendar className="h-3.5 w-3.5" />
+                          {order.createdAt?.seconds
+                            ? format(new Date(order.createdAt.seconds * 1000), "MMM d, yyyy")
                             : "Recent"}
                         </div>
                       </div>
                       <div>
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-black mb-0.5">Total</p>
-                        <p className="font-bold text-primary text-sm">₹{(order.totalAmount || order.total || 0).toLocaleString()}</p>
+                        <p className="font-bold text-primary text-sm">
+                          ₹{(order.totalAmount || order.total || 0).toLocaleString()}
+                        </p>
                       </div>
                     </div>
-                    <StatusChip status={order.status || "Pending"} />
+                    <div className="flex flex-col items-end gap-1">
+                      <StatusChip status={order.status || "Pending"} />
+                      {getRefundBadge(order)}
+                    </div>
                   </CardHeader>
+
                   <CardContent className="p-6">
                     <div className="flex flex-col gap-6">
                       {(order.items || []).map((item: any, idx: number) => (
                         <div key={idx} className="flex gap-4 items-center">
                           <div className="relative h-16 w-16 sm:h-20 sm:w-20 rounded-2xl overflow-hidden bg-muted flex-shrink-0 border">
-                            <Image 
-                              src={item.imageUrl || "https://picsum.photos/seed/plant/200/200"} 
-                              alt={item.name} 
-                              fill 
-                              className="object-cover" 
+                            <Image
+                              src={item.imageUrl || "https://picsum.photos/seed/plant/200/200"}
+                              alt={item.name}
+                              fill
+                              className="object-cover"
                             />
                           </div>
                           <div className="flex-grow min-w-0">
                             <h4 className="font-headline font-bold text-base sm:text-lg truncate">{item.name}</h4>
-                            <p className="text-xs sm:text-sm text-muted-foreground">Qty: {item.qty || item.quantity || 1} • ₹{item.price}</p>
+                            <p className="text-xs sm:text-sm text-muted-foreground">
+                              Qty: {item.qty || item.quantity || 1} • ₹{item.price}
+                            </p>
                           </div>
                           <div className="text-right hidden sm:block">
                             <Link href={`/plants/${item.productId || item.id}`}>
@@ -208,10 +274,10 @@ export default function OrdersPage() {
                         </div>
                       ))}
                     </div>
-                    
+
                     <div className="mt-8 pt-6 border-t flex flex-col sm:flex-row justify-end items-center gap-3">
                       {canCancel(order) && (
-                        <button 
+                        <button
                           onClick={() => setCancellingOrder(order)}
                           className="w-full sm:w-auto text-sm font-bold px-8 py-2.5 rounded-full text-destructive hover:bg-destructive/5 transition-all flex items-center justify-center gap-2"
                         >
@@ -223,9 +289,12 @@ export default function OrdersPage() {
                           Track Order
                         </button>
                       </Link>
-                      <button className="w-full sm:w-auto text-sm font-bold px-8 py-2.5 rounded-full bg-primary text-white hover:bg-primary/90 transition-all shadow-md">
-                        Order Details
-                      </button>
+                      {/* ✅ Order Details — navigates to /orders/[id] */}
+                      <Link href={`/orders/${order.id}`} className="w-full sm:w-auto">
+                        <button className="w-full text-sm font-bold px-8 py-2.5 rounded-full bg-primary text-white hover:bg-primary/90 transition-all shadow-md">
+                          Order Details
+                        </button>
+                      </Link>
                     </div>
                   </CardContent>
                 </Card>
@@ -244,7 +313,9 @@ export default function OrdersPage() {
               Cancel Order?
             </DialogTitle>
             <DialogDescription>
-              We're sorry to see you go. Please let us know why you're cancelling.
+              {cancellingOrder?.paymentMethod === "online"
+                ? "Your payment will be refunded to your original payment method within 5–7 business days."
+                : "We're sorry to see you go. Please let us know why you're cancelling."}
             </DialogDescription>
           </DialogHeader>
 
@@ -268,7 +339,7 @@ export default function OrdersPage() {
             {cancelReason === "Other" && (
               <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
                 <Label className="font-bold">Additional feedback</Label>
-                <Textarea 
+                <Textarea
                   placeholder="Please tell us more..."
                   value={cancelFeedback}
                   onChange={(e) => setCancelFeedback(e.target.value)}
@@ -276,23 +347,41 @@ export default function OrdersPage() {
                 />
               </div>
             )}
+
+            {/* Refund notice for online payments */}
+            {cancellingOrder?.paymentMethod === "online" && (
+              <div className="flex items-start gap-3 bg-blue-50 rounded-2xl p-4">
+                <RefreshCw className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-blue-700 font-medium leading-relaxed">
+                  Since you paid online, ₹{(cancellingOrder?.totalAmount || cancellingOrder?.total || 0).toLocaleString()} will be automatically refunded to your original payment method.
+                </p>
+              </div>
+            )}
           </div>
 
           <DialogFooter className="flex flex-col sm:flex-row gap-2">
-            <Button 
-              variant="ghost" 
+            <Button
+              variant="ghost"
               onClick={() => setCancellingOrder(null)}
               className="rounded-full flex-1"
             >
               Keep Order
             </Button>
-            <Button 
-              variant="destructive" 
-              disabled={!cancelReason || (cancelReason === "Other" && !cancelFeedback) || isSubmittingCancel}
+            <Button
+              variant="destructive"
+              disabled={
+                !cancelReason ||
+                (cancelReason === "Other" && !cancelFeedback) ||
+                isSubmittingCancel
+              }
               onClick={handleConfirmCancel}
               className="rounded-full flex-1 font-bold h-11"
             >
-              {isSubmittingCancel ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm Cancellation"}
+              {isSubmittingCancel ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Confirm Cancellation"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
