@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
@@ -88,11 +88,22 @@ export default function CheckoutPage() {
   
   const { data: addresses, isLoading: isAddressesLoading } = useCollection(addressQuery);
 
-  // 3. Sync profile
+  // 3. Auto-select first address or "new"
+  useEffect(() => {
+    if (!isAddressesLoading && addresses) {
+      if (addresses.length > 0 && !selectedAddressId) {
+        setSelectedAddress(addresses[0].id);
+      } else if (addresses.length === 0) {
+        setSelectedAddress("new");
+      }
+    }
+  }, [addresses, isAddressesLoading, selectedAddressId]);
+
+  // 4. Sync profile
   const profileRef = useMemoFirebase(() => !user?.uid ? null : doc(db, 'users', user.uid), [db, user?.uid]);
   const { data: profile } = useDoc(profileRef);
 
-  // 4. Calculations
+  // 5. Calculations
   const subtotal = cartItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
   const shipping = subtotal > 1500 ? 0 : 150;
   const total = subtotal + shipping;
@@ -102,6 +113,7 @@ export default function CheckoutPage() {
 
     // Validation
     let shippingAddress: any = null;
+    
     if (selectedAddressId === "new" || !addresses?.length) {
       const { fullName, phone, house, area, city, state, pincode } = manualAddress;
       if (!fullName || !phone || !house || !area || !city || !state || !pincode) {
@@ -173,7 +185,7 @@ export default function CheckoutPage() {
 
   if (isUserLoading || (user && isAddressesLoading)) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-neutral/30">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
       </div>
     );
@@ -233,7 +245,7 @@ export default function CheckoutPage() {
                     </RadioGroup>
                   ) : null}
 
-                  {(!addresses?.length || selectedAddressId === "new") && (
+                  {(selectedAddressId === "new" || (!isAddressesLoading && !addresses?.length)) && (
                     <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2">
                       <div className="md:col-span-2 space-y-2">
                         <Label>Full Name</Label>
