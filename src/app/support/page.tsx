@@ -3,7 +3,7 @@
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Loader2, Package, Truck, RefreshCcw, MessageCircle, Leaf } from "lucide-react";
+import { Send, Loader2, Package, Truck, RefreshCcw, MessageCircle } from "lucide-react";
 
 type Message = {
   role: "user" | "assistant";
@@ -11,44 +11,41 @@ type Message = {
 };
 
 const QUICK_QUESTIONS = [
-  { icon: <Package className="h-4 w-4" />, text: "Where is my order?" },
-  { icon: <Truck className="h-4 w-4" />, text: "How long does delivery take?" },
-  { icon: <RefreshCcw className="h-4 w-4" />, text: "How do I return an item?" },
-  { icon: <MessageCircle className="h-4 w-4" />, text: "My order hasn't arrived yet" },
+  { icon: <Package className="h-3.5 w-3.5" />, text: "Where is my order?" },
+  { icon: <Truck className="h-3.5 w-3.5" />, text: "How long does delivery take?" },
+  { icon: <RefreshCcw className="h-3.5 w-3.5" />, text: "How do I return an item?" },
+  { icon: <MessageCircle className="h-3.5 w-3.5" />, text: "Order hasn't arrived yet" },
 ];
 
 const SYSTEM_PROMPT = `You are a friendly and knowledgeable customer support agent for Monterra, a premium online plant shop based in India. You are warm, helpful, and concise.
 
 You help customers with:
-1. **Order tracking & status** - Explain that orders can be tracked via the order confirmation email or by visiting /orders page when logged in. COD orders are "Pending" until delivery. Online paid orders are "Approved" immediately.
-2. **Delivery questions** - Standard delivery takes 3-7 business days across India. Free delivery on orders above ₹999. Shipping charge is ₹150 for orders below ₹999. We deliver to all Indian states and UTs.
-3. **Returns & refunds** - Monterra offers a 15-day plant health guarantee. If the plant arrives damaged or unhealthy, customers can raise a return request by contacting support with photos. Refunds are processed within 5-7 business days after the return is approved.
+1. Order tracking & status - Orders tracked via confirmation email or /orders page. COD orders are "Pending" until delivery. Online paid orders are "Approved" immediately.
+2. Delivery questions - Standard delivery 3-7 business days across India. Free delivery above ₹999. Shipping ₹150 below ₹999. All Indian states and UTs covered.
+3. Returns & refunds - 15-day plant health guarantee. Damaged/unhealthy plant? Raise return with photos. Refunds in 5-7 business days after approval.
 
 General info:
-- Store name: Monterra
-- Support hours: 9 AM – 6 PM IST, Monday to Saturday
-- For urgent issues, customers can WhatsApp us
-- We sell indoor plants, outdoor plants, succulents, and air-purifying plants
+- Store: Monterra
+- Support hours: 9 AM – 6 PM IST, Mon–Sat
+- Email: support@monterra.in
 
-Keep responses short and friendly. Use bullet points for clarity when listing steps. Always end with "Is there anything else I can help you with? 🌿" if the conversation feels complete.
-
-If asked about something outside your scope, politely say you can help with orders, delivery, and returns, and suggest they email support@monterra.in for other queries.`;
+Keep responses short and friendly. Use bullet points for steps. End with "Is there anything else I can help you with? 🌿" when conversation feels complete. For out-of-scope questions, suggest support@monterra.in.`;
 
 export default function SupportPage() {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
-      content: "Hi there! 👋 I'm Monterra's support assistant. I can help you with **order tracking**, **delivery questions**, and **returns & refunds**.\n\nWhat can I help you with today? 🌿",
+      content: "👋 Welcome to Monterra Support. I'm your AI assistant — here to help with order tracking, delivery, and returns.\n\nHow can I help you today?",
     },
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, isLoading]);
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return;
@@ -57,16 +54,9 @@ export default function SupportPage() {
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
     setInput("");
-
-    // Reset textarea height
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-    }
-
     setIsLoading(true);
 
     try {
-      // Groq API — free, fast, llama-3.3-70b model
       const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -78,176 +68,176 @@ export default function SupportPage() {
           max_tokens: 1000,
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
-            ...updatedMessages.map((m) => ({
-              role: m.role,
-              content: m.content,
-            })),
+            ...updatedMessages.map((m) => ({ role: m.role, content: m.content })),
           ],
         }),
       });
 
       const data = await response.json();
       const reply = data.choices?.[0]?.message?.content || "Sorry, I couldn't process that. Please try again.";
-
       setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
     } catch {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: "Sorry, I'm having trouble connecting right now. Please try again in a moment. 🌿",
-        },
-      ]);
+      setMessages((prev) => [...prev, {
+        role: "assistant",
+        content: "Sorry, I'm having trouble connecting right now. Please try again in a moment. 🌿",
+      }]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage(input);
-    }
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") { e.preventDefault(); sendMessage(input); }
   };
 
-  // Render markdown-lite: bold, bullet points, line breaks
   const renderMessage = (content: string) => {
-    const lines = content.split("\n");
-    return lines.map((line, i) => {
+    return content.split("\n").map((line, i) => {
       const parts = line.split(/\*\*(.*?)\*\*/g);
       const rendered = parts.map((part, j) =>
-        j % 2 === 1 ? <strong key={j}>{part}</strong> : part
+        j % 2 === 1 ? <strong key={j} className="font-semibold">{part}</strong> : part
       );
-      const isBullet = line.trim().startsWith("- ") || line.trim().startsWith("• ");
-      return isBullet ? (
-        <li key={i} className="ml-4 list-disc">{rendered.slice(1)}</li>
-      ) : (
-        <p key={i} className={line.trim() === "" ? "h-2" : ""}>{rendered}</p>
-      );
+      const isBullet = line.trim().startsWith("- ") || line.trim().startsWith("• ") || line.trim().startsWith("* ");
+      if (isBullet) return <li key={i} className="ml-3 list-disc text-[13px] leading-relaxed">{rendered.slice(1)}</li>;
+      if (line.trim() === "") return <div key={i} className="h-1.5" />;
+      return <p key={i} className="text-[13px] leading-relaxed">{rendered}</p>;
     });
   };
 
+  const formatTime = () => {
+    const now = new Date();
+    return now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
+  };
+
   return (
-    <div className="min-h-screen flex flex-col bg-[#FAFAF7]">
+    <div className="min-h-screen flex flex-col bg-[#F0F2F5]">
       <Header />
 
-      <main className="flex-grow container mx-auto px-4 max-w-3xl py-8 md:py-12">
+      <main className="flex-grow flex flex-col">
+        <div className="flex-grow flex flex-col max-w-2xl w-full mx-auto px-0 sm:px-4 sm:py-6">
 
-        {/* Page Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[#1B5E20] text-white mb-4">
-            <Leaf className="h-7 w-7" />
-          </div>
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-[#1A2E1A] font-headline">Plant Support</h1>
-          <p className="text-muted-foreground mt-2 text-sm">Ask me about your orders, delivery & returns</p>
-          <div className="flex items-center justify-center gap-1.5 mt-3">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-xs font-semibold text-emerald-700">AI Support · Available 24/7</span>
-          </div>
-        </div>
+          {/* Chat Card */}
+          <div className="flex-grow flex flex-col bg-white sm:rounded-2xl sm:shadow-lg overflow-hidden"
+            style={{ minHeight: "calc(100vh - 140px)" }}>
 
-        {/* Chat Container */}
-        <div
-          className="bg-white rounded-3xl shadow-sm border border-[#E8E8E8] overflow-hidden flex flex-col"
-          style={{ height: "60vh", minHeight: "420px" }}
-        >
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-4 py-5 space-y-4">
-            {messages.map((msg, idx) => (
-              <div key={idx} className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
-                {/* Avatar */}
-                <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-white
-                  ${msg.role === "assistant" ? "bg-[#1B5E20]" : "bg-[#388E3C]"}`}>
-                  {msg.role === "assistant" ? <Bot className="h-4 w-4" /> : <User className="h-4 w-4" />}
+            {/* Chat Header */}
+            <div className="bg-[#1B5E20] px-4 py-3.5 flex items-center gap-3 flex-shrink-0">
+              <div className="relative">
+                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-xl">
+                  🌿
                 </div>
-
-                {/* Bubble */}
-                <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed space-y-1
-                  ${msg.role === "assistant"
-                    ? "bg-[#F1F8E9] text-[#1A2E1A] rounded-tl-sm"
-                    : "bg-[#1B5E20] text-white rounded-tr-sm"}`}>
-                  {renderMessage(msg.content)}
-                </div>
+                <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-400 rounded-full border-2 border-[#1B5E20]" />
               </div>
-            ))}
-
-            {/* Typing indicator */}
-            {isLoading && (
-              <div className="flex gap-3">
-                <div className="w-8 h-8 rounded-full bg-[#1B5E20] flex items-center justify-center">
-                  <Bot className="h-4 w-4 text-white" />
-                </div>
-                <div className="bg-[#F1F8E9] rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-1.5">
-                  <span className="w-2 h-2 bg-[#388E3C] rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                  <span className="w-2 h-2 bg-[#388E3C] rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                  <span className="w-2 h-2 bg-[#388E3C] rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-                </div>
+              <div>
+                <p className="text-white font-bold text-sm leading-tight">Support Bot</p>
+                <p className="text-emerald-300 text-xs font-medium">Online · Monterra Plant Shop</p>
               </div>
-            )}
-            <div ref={bottomRef} />
-          </div>
+            </div>
 
-          {/* Input */}
-          <div className="border-t border-[#F0F0F0] px-4 py-3 bg-white">
-            <div className="flex items-end gap-2">
-              <textarea
-                ref={textareaRef}
-                rows={1}
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 bg-[#F0F2F5]">
+
+              {messages.map((msg, idx) => (
+                <div key={idx} className={`flex items-end gap-2 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
+
+                  {/* Bot avatar */}
+                  {msg.role === "assistant" && (
+                    <div className="w-7 h-7 rounded-full bg-[#1B5E20] flex items-center justify-center text-xs flex-shrink-0 mb-0.5">
+                      🌿
+                    </div>
+                  )}
+
+                  <div className={`flex flex-col gap-0.5 max-w-[78%] ${msg.role === "user" ? "items-end" : "items-start"}`}>
+                    {/* Sender label */}
+                    <span className="text-[10px] text-gray-400 font-medium px-1">
+                      {msg.role === "assistant" ? "Support Bot" : "Customer"}
+                    </span>
+
+                    {/* Bubble */}
+                    <div className={`px-3.5 py-2.5 rounded-2xl space-y-0.5 shadow-sm
+                      ${msg.role === "assistant"
+                        ? "bg-white text-[#1a1a1a] rounded-tl-sm"
+                        : "bg-[#1B5E20] text-white rounded-tr-sm"}`}>
+                      <ul className="space-y-0.5">
+                        {renderMessage(msg.content)}
+                      </ul>
+                    </div>
+
+                    {/* Timestamp */}
+                    <span className="text-[10px] text-gray-400 px-1">{formatTime()}</span>
+                  </div>
+                </div>
+              ))}
+
+              {/* Typing indicator */}
+              {isLoading && (
+                <div className="flex items-end gap-2">
+                  <div className="w-7 h-7 rounded-full bg-[#1B5E20] flex items-center justify-center text-xs flex-shrink-0">
+                    🌿
+                  </div>
+                  <div className="flex flex-col gap-0.5 items-start">
+                    <span className="text-[10px] text-gray-400 font-medium px-1">Support Bot</span>
+                    <div className="bg-white rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm flex items-center gap-1.5">
+                      {[0, 1, 2].map((i) => (
+                        <span key={i} className="w-2 h-2 bg-gray-300 rounded-full inline-block"
+                          style={{ animation: `bounce 1.2s ease-in-out ${i * 0.2}s infinite` }} />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Quick questions — show only at start */}
+              {messages.length === 1 && !isLoading && (
+                <div className="flex flex-col gap-2 pt-2">
+                  <p className="text-[11px] text-gray-400 font-semibold text-center uppercase tracking-wide">Common Questions</p>
+                  {QUICK_QUESTIONS.map((q, i) => (
+                    <button key={i} onClick={() => sendMessage(q.text)}
+                      className="flex items-center gap-2.5 bg-white hover:bg-[#F1F8E9] border border-gray-200 hover:border-[#A5D6A7] text-[#1A2E1A] text-[13px] font-medium px-4 py-3 rounded-2xl text-left transition-all shadow-sm active:scale-95">
+                      <span className="text-[#2E7D32]">{q.icon}</span>
+                      {q.text}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div ref={bottomRef} />
+            </div>
+
+            {/* Input Bar */}
+            <div className="bg-white border-t border-gray-100 px-3 py-3 flex items-center gap-2 flex-shrink-0">
+              <input
+                ref={inputRef}
+                type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Type your question..."
                 disabled={isLoading}
-                className="flex-1 resize-none rounded-2xl border border-[#E8E8E8] px-4 py-3 text-sm focus:outline-none focus:border-[#388E3C] bg-[#FAFAF7] placeholder:text-muted-foreground disabled:opacity-50 max-h-32"
-                style={{ lineHeight: "1.5" }}
-                onInput={(e) => {
-                  const t = e.currentTarget;
-                  t.style.height = "auto";
-                  t.style.height = Math.min(t.scrollHeight, 128) + "px";
-                }}
+                className="flex-1 bg-[#F0F2F5] rounded-full px-4 py-2.5 text-sm text-[#1a1a1a] placeholder:text-gray-400 outline-none border-none disabled:opacity-50"
               />
               <button
                 onClick={() => sendMessage(input)}
                 disabled={!input.trim() || isLoading}
-                className="w-11 h-11 rounded-2xl bg-[#1B5E20] text-white flex items-center justify-center flex-shrink-0 disabled:opacity-40 hover:bg-[#2E7D32] transition-colors"
+                className="w-10 h-10 rounded-full bg-[#1B5E20] flex items-center justify-center flex-shrink-0 disabled:opacity-40 hover:bg-[#2E7D32] active:scale-95 transition-all"
               >
                 {isLoading
-                  ? <Loader2 className="h-4 w-4 animate-spin" />
-                  : <Send className="h-4 w-4" />}
+                  ? <Loader2 className="h-4 w-4 text-white animate-spin" />
+                  : <Send className="h-4 w-4 text-white" />}
               </button>
             </div>
+
           </div>
         </div>
-
-        {/* Quick Questions */}
-        <div className="mt-5">
-          <p className="text-xs text-muted-foreground font-semibold mb-3 text-center">COMMON QUESTIONS</p>
-          <div className="grid grid-cols-2 gap-2">
-            {QUICK_QUESTIONS.map((q, i) => (
-              <button
-                key={i}
-                onClick={() => sendMessage(q.text)}
-                disabled={isLoading}
-                className="flex items-center gap-2 px-4 py-3 rounded-2xl border border-[#E8E8E8] bg-white text-sm font-medium text-[#1A2E1A] hover:border-[#388E3C] hover:bg-[#F1F8E9] transition-all text-left disabled:opacity-40"
-              >
-                <span className="text-[#388E3C]">{q.icon}</span>
-                {q.text}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Footer note */}
-        <p className="text-center text-xs text-muted-foreground mt-6">
-          Need more help? Email us at{" "}
-          <a href="mailto:support@monterra.in" className="text-[#388E3C] font-semibold hover:underline">
-            support@monterra.in
-          </a>
-        </p>
-
       </main>
 
       <Footer />
+
+      <style>{`
+        @keyframes bounce {
+          0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+          30% { transform: translateY(-5px); opacity: 1; }
+        }
+      `}</style>
     </div>
   );
 }

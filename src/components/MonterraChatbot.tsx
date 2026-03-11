@@ -44,7 +44,6 @@ export default function MonterraChatbot() {
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Detect mobile
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 640);
     check();
@@ -148,11 +147,19 @@ export default function MonterraChatbot() {
   // ── Responsive sizes ──
   const chatWidth  = isMobile ? "calc(100vw - 1.5rem)" : "390px";
   const chatHeight = isMobile ? "75vh" : "580px";
-  const chatBottom = isMobile ? "5rem" : "5.5rem";
   const chatRight  = isMobile ? "0.75rem" : "1.25rem";
   const fontSize   = isMobile ? "0.78rem" : "0.82rem";
   const headerPad  = isMobile ? "0.75rem 1rem" : "1rem 1.25rem";
-  const bubbleSize = isMobile ? 52 : 58;
+
+  // ✅ Bubble: 32px on mobile, 58px on desktop
+  const bubbleSize = isMobile ? 32 : 58;
+
+  // ✅ On mobile: sit above bottom nav bar (bottom nav ~56px + gap)
+  // On desktop: keep at 1rem from bottom
+  const bubbleBottom = isMobile ? "4.5rem" : "1rem";
+
+  // ✅ Chat window bottom: just above the bubble
+  const chatBottom = isMobile ? `calc(4.5rem + ${bubbleSize}px + 0.5rem)` : "5.5rem";
 
   return (
     <>
@@ -350,15 +357,43 @@ export default function MonterraChatbot() {
         </div>
       )}
 
-      {/* Floating Bubble */}
+      {/* ✅ Floating Bubble — 32px on mobile, sits above bottom nav */}
       <button
         onClick={() => { setOpen((v) => !v); setHasNewMessage(false); }}
-        style={{ position: "fixed", bottom: "1rem", right: "1rem", zIndex: 50, width: bubbleSize, height: bubbleSize, borderRadius: "50%", background: open ? "#e8f5e9" : "linear-gradient(135deg, #1a5c2a 0%, #2d8a4e 100%)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 8px 32px rgba(26,92,42,0.35)", transition: "all 0.3s cubic-bezier(0.34,1.56,0.64,1)" }}
+        style={{
+          position: "fixed",
+          bottom: bubbleBottom,   // ✅ 4.5rem on mobile (above nav), 1rem on desktop
+          right: "1rem",
+          zIndex: 50,
+          width: bubbleSize,       // ✅ 32px mobile, 58px desktop
+          height: bubbleSize,
+          borderRadius: "50%",
+          background: open ? "#e8f5e9" : "linear-gradient(135deg, #1a5c2a 0%, #2d8a4e 100%)",
+          border: "none",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          boxShadow: "0 8px 32px rgba(26,92,42,0.35)",
+          transition: "all 0.3s cubic-bezier(0.34,1.56,0.64,1)"
+        }}
         aria-label="Open Flora"
       >
-        {open ? <X size={isMobile ? 18 : 22} color="#1a5c2a" /> : <span style={{ fontSize: isMobile ? "1.25rem" : "1.5rem", lineHeight: 1 }}>🌿</span>}
+        {open
+          ? <X size={isMobile ? 12 : 22} color="#1a5c2a" />
+          : <span style={{ fontSize: isMobile ? "0.85rem" : "1.5rem", lineHeight: 1 }}>🌿</span>
+        }
         {hasNewMessage && !open && (
-          <span style={{ position: "absolute", top: 3, right: 3, width: 10, height: 10, borderRadius: "50%", background: "#ef4444", border: "2px solid #fff", animation: "floraPulse 1.5s ease-in-out infinite" }} />
+          <span style={{
+            position: "absolute",
+            top: 2, right: 2,
+            width: isMobile ? 7 : 10,
+            height: isMobile ? 7 : 10,
+            borderRadius: "50%",
+            background: "#ef4444",
+            border: "2px solid #fff",
+            animation: "floraPulse 1.5s ease-in-out infinite"
+          }} />
         )}
       </button>
 

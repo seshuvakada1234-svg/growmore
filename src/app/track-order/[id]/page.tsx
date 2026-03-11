@@ -75,15 +75,12 @@ export default function TrackOrderPage() {
 
   const isCancelled = order.status === "Cancelled";
 
-  // Normalize payment method — handles "COD", "cod", "Cod", "ONLINE", "online" etc.
-  // Falls back to order ID detection (e.g. "GS-COD-XXXX") if paymentMethod field is missing.
   const paymentMethod = (
     order?.paymentMethod ??
     (id?.toString().toUpperCase().includes("COD") ? "cod" : "online")
   ).toLowerCase();
   const isCOD = paymentMethod === "cod";
 
-  // Fallback tracking steps if they don't exist in the document
   const defaultSteps = [
     { 
       status: "Order Confirmed", 
@@ -171,7 +168,6 @@ export default function TrackOrderPage() {
 
                     <div className="space-y-2">
                       <h2 className="text-2xl font-headline font-extrabold text-red-700">This order was cancelled</h2>
-                      {/* ✅ COD vs Online refund message */}
                       {isCOD ? (
                         <div className="flex items-center justify-center gap-2 text-gray-600 bg-gray-100 rounded-2xl px-4 py-3 max-w-sm mx-auto">
                           <Banknote className="h-4 w-4 flex-shrink-0" />
@@ -226,7 +222,6 @@ export default function TrackOrderPage() {
                       
                       return (
                         <div key={index} className="flex gap-6">
-                          {/* Vertical Progress Component */}
                           <div className="flex flex-col items-center">
                             <div className={cn(
                               "w-6 h-6 rounded-full flex items-center justify-center shrink-0 z-10 transition-colors",
@@ -242,7 +237,6 @@ export default function TrackOrderPage() {
                             )}
                           </div>
 
-                          {/* Text Content */}
                           <div className="pb-8">
                             <h3 className={cn(
                               "font-headline font-bold text-lg leading-tight",
@@ -287,16 +281,23 @@ export default function TrackOrderPage() {
                 </div>
               </Card>
 
-              {/* Support Card */}
+              {/* ✅ Support Card — now links to /support page */}
               <Card className="rounded-[2rem] border-none shadow-sm bg-primary text-white p-6 relative overflow-hidden">
                 <div className="relative z-10">
                   <h4 className="font-headline font-bold text-lg mb-2">Need Help?</h4>
-                  <p className="text-xs text-white/70 mb-4">Our plant experts are available 24/7 to assist with your {isCancelled ? (isCOD ? "cancellation" : "refund") : "delivery"}.</p>
-                  <Button variant="outline" className="w-full rounded-xl bg-white/10 border-white/20 text-white hover:bg-white/20 transition-all font-bold gap-2">
-                    Contact Support <ExternalLink className="h-3 w-3" />
-                  </Button>
+                  <p className="text-xs text-white/70 mb-4">
+                    Our plant experts are available 24/7 to assist with your{" "}
+                    {isCancelled ? (isCOD ? "cancellation" : "refund") : "delivery"}.
+                  </p>
+                  <Link href="/support">
+                    <Button
+                      variant="outline"
+                      className="w-full rounded-xl bg-white/10 border-white/20 text-white hover:bg-white/20 transition-all font-bold gap-2"
+                    >
+                      Contact Support <ExternalLink className="h-3 w-3" />
+                    </Button>
+                  </Link>
                 </div>
-                {/* Decorative background icon */}
                 <AlertTriangle className="absolute -bottom-4 -right-4 h-24 w-24 text-white/5 rotate-12" />
               </Card>
             </div>
