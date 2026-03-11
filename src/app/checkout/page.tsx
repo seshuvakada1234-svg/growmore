@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
@@ -56,13 +57,13 @@ const generateOrderId = (method: PaymentMethod) => {
   return `${prefix}-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
 };
 
-export default function CheckoutPage() {
+// ✅ Inner component that uses useSearchParams
+function CheckoutContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useUser();
   const db = useFirestore();
 
-  // ✅ Read mode ONCE on mount using ref — avoids re-render clearing sessionStorage too early
   const isBuyNow = useRef(searchParams.get("mode") === "buynow").current;
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -81,7 +82,6 @@ export default function CheckoutPage() {
     pincode: "",
   });
 
-  // ✅ Fix empty cart: read storage once on mount, clear buynow only after order placed
   useEffect(() => {
     try {
       const raw = isBuyNow
@@ -100,7 +100,7 @@ export default function CheckoutPage() {
     } catch {
       setCartItems([]);
     }
-  }, []); // run only once on mount
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -112,7 +112,6 @@ export default function CheckoutPage() {
     }
   }, [user]);
 
-  // ✅ Pincode → auto-fill City & State via India Post API
   useEffect(() => {
     const pincode = formData.pincode;
     if (pincode.length !== 6) return;
@@ -131,7 +130,7 @@ export default function CheckoutPage() {
           }));
         }
       } catch {
-        // fail silently — user can type manually
+        // fail silently
       } finally {
         setIsPincodeLoading(false);
       }
@@ -140,7 +139,6 @@ export default function CheckoutPage() {
     return () => clearTimeout(timer);
   }, [formData.pincode]);
 
-  // ✅ Free delivery threshold: ₹999
   const subtotal = cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
   const shipping = subtotal > 999 ? 0 : 150;
   const discount = subtotal > 3000 ? 200 : 0;
@@ -239,7 +237,6 @@ export default function CheckoutPage() {
 
       const notifications = await sendOrderNotifications(orderId);
 
-      // ✅ Clear storage only AFTER order is saved
       if (isBuyNow) {
         sessionStorage.removeItem("buynow_cart");
       } else {
@@ -376,263 +373,212 @@ export default function CheckoutPage() {
   const backLabel = isBuyNow ? "Back to Product" : "Back to Cart";
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#FAFAF7]">
-      <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
-      <Header />
+    <form onSubmit={handlePlaceOrder} className="flex-grow flex flex-col">
+      <main className="flex-grow pb-28 sm:pb-12">
+        <div className="container mx-auto px-4 max-w-6xl py-8 md:py-10">
 
-      <form onSubmit={handlePlaceOrder} className="flex-grow flex flex-col">
-        <main className="flex-grow pb-28 sm:pb-12">
-          <div className="container mx-auto px-4 max-w-6xl py-8 md:py-10">
+          <Link href={backHref} className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-primary transition-colors mb-5">
+            <ChevronLeft className="h-4 w-4" /> {backLabel}
+          </Link>
 
-            <Link href={backHref} className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-primary transition-colors mb-5">
-              <ChevronLeft className="h-4 w-4" /> {backLabel}
-            </Link>
+          <h1 className="text-3xl sm:text-4xl font-extrabold text-[#1A2E1A] mb-4 font-headline">Checkout</h1>
 
-            <h1 className="text-3xl sm:text-4xl font-extrabold text-[#1A2E1A] mb-4 font-headline">Checkout</h1>
+          <div className="flex items-center gap-4 sm:gap-8 flex-wrap mb-7">
+            {[
+              { icon: <Truck className="h-3.5 w-3.5" />, text: "Free delivery above ₹999" },
+              { icon: <ShieldCheck className="h-3.5 w-3.5" />, text: "100% secure payments" },
+            ].map((t) => (
+              <div key={t.text} className="flex items-center gap-1.5 text-xs font-semibold text-[#388E3C]">
+                {t.icon} {t.text}
+              </div>
+            ))}
+          </div>
 
-            {/* ✅ Removed "Easy 7-day returns", updated to ₹999 */}
-            <div className="flex items-center gap-4 sm:gap-8 flex-wrap mb-7">
-              {[
-                { icon: <Truck className="h-3.5 w-3.5" />, text: "Free delivery above ₹999" },
-                { icon: <ShieldCheck className="h-3.5 w-3.5" />, text: "100% secure payments" },
-              ].map((t) => (
-                <div key={t.text} className="flex items-center gap-1.5 text-xs font-semibold text-[#388E3C]">
-                  {t.icon} {t.text}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div className="lg:col-span-7 space-y-5">
+              <Card className="rounded-2xl shadow-sm bg-white border border-[#E8E8E8] overflow-hidden">
+                <div className="px-6 py-5 border-b border-[#F5F5F5]">
+                  <h2 className="text-xl font-bold font-headline text-[#1A2E1A] flex items-center gap-2">
+                    <MapPin className="h-5 w-5 text-primary" /> Shipping Information
+                  </h2>
                 </div>
-              ))}
+                <div className="p-6 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2 space-y-1.5">
+                      <Label className="text-sm font-medium">Full Name</Label>
+                      <Input required placeholder="Ravi Kumar" value={formData.fullName}
+                        onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                        className="rounded-2xl border-[#E8E8E8] h-12" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-sm font-medium">Phone Number</Label>
+                      <Input required type="tel" pattern="[0-9]{10}" maxLength={10} placeholder="98765 43210"
+                        value={formData.phone}
+                        onChange={(e) => setFormData({ ...formData, phone: e.target.value.replace(/\D/g, "") })}
+                        className="rounded-2xl border-[#E8E8E8] h-12" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-sm font-medium">Alternate Phone <span className="text-muted-foreground font-normal text-xs">(optional)</span></Label>
+                      <Input type="tel" pattern="[0-9]{10}" maxLength={10} placeholder="91234 56789"
+                        value={formData.phone2}
+                        onChange={(e) => setFormData({ ...formData, phone2: e.target.value.replace(/\D/g, "") })}
+                        className="rounded-2xl border-[#E8E8E8] h-12" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-sm font-medium">Pincode</Label>
+                      <div className="relative">
+                        <Input required pattern="[0-9]{6}" maxLength={6} placeholder="560001"
+                          value={formData.pincode}
+                          onChange={(e) => setFormData({ ...formData, pincode: e.target.value.replace(/\D/g, "") })}
+                          className="rounded-2xl border-[#E8E8E8] h-12 pr-10" />
+                        {isPincodeLoading && <Loader2 className="absolute right-3 top-3.5 h-4 w-4 animate-spin text-muted-foreground" />}
+                      </div>
+                    </div>
+                    <div className="md:col-span-2 space-y-1.5">
+                      <Label className="text-sm font-medium">House / Street / Area</Label>
+                      <Input required placeholder="Flat 4B, Green Valley Apartments, MG Road"
+                        value={formData.address}
+                        onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                        className="rounded-2xl border-[#E8E8E8] h-12" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-sm font-medium flex items-center gap-1">
+                        City {isPincodeLoading && <span className="text-[10px] text-muted-foreground font-normal">Detecting...</span>}
+                      </Label>
+                      <Input required placeholder="Bengaluru" value={formData.city}
+                        onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                        className="rounded-2xl border-[#E8E8E8] h-12" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-sm font-medium flex items-center gap-1">
+                        State {isPincodeLoading && <span className="text-[10px] text-muted-foreground font-normal">Detecting...</span>}
+                      </Label>
+                      <Select value={formData.state} onValueChange={(v) => setFormData({ ...formData, state: v })}>
+                        <SelectTrigger className="rounded-2xl border-[#E8E8E8] h-12">
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[280px]">
+                          {INDIAN_STATES_AND_UTS.map((s) => (
+                            <SelectItem key={s} value={s}>{s}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <input type="hidden" value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="rounded-2xl shadow-sm bg-white border border-[#E8E8E8] overflow-hidden">
+                <div className="px-6 py-5 border-b border-[#F5F5F5]">
+                  <h2 className="text-xl font-bold font-headline text-[#1A2E1A] flex items-center gap-2">
+                    <CreditCard className="h-5 w-5 text-primary" /> Payment Method
+                  </h2>
+                </div>
+                <div className="p-6 space-y-3">
+                  <PayOption id="cod" icon={<Banknote className="h-5 w-5" />} label="Cash on Delivery" desc="Pay when your order arrives" badge="Popular" badgeCls="bg-emerald-100 text-emerald-700" />
+                  <PayOption id="upi" icon={<Smartphone className="h-5 w-5" />} label="UPI" desc="GPay, PhonePe, Paytm & more" badge="Secure" badgeCls="bg-blue-100 text-blue-700" />
+                  <PayOption id="card" icon={<CreditCard className="h-5 w-5" />} label="Credit / Debit Card" desc="Visa, Mastercard, RuPay" />
+                  <p className="text-center text-[10px] text-muted-foreground flex items-center justify-center gap-1 pt-1">
+                    <Lock className="h-3 w-3" /> Your payment info is 100% secure & encrypted
+                  </p>
+                </div>
+              </Card>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-              {/* LEFT COLUMN */}
-              <div className="lg:col-span-7 space-y-5">
-
+            <div className="lg:col-span-5">
+              <div className="sticky top-20">
                 <Card className="rounded-2xl shadow-sm bg-white border border-[#E8E8E8] overflow-hidden">
                   <div className="px-6 py-5 border-b border-[#F5F5F5]">
                     <h2 className="text-xl font-bold font-headline text-[#1A2E1A] flex items-center gap-2">
-                      <MapPin className="h-5 w-5 text-primary" /> Shipping Information
+                      <ShoppingBag className="h-5 w-5 text-primary" />
+                      Summary
+                      <span className="text-xs font-bold bg-primary text-white px-2 py-0.5 rounded-full ml-1">
+                        {cartItems.reduce((a, i) => a + i.quantity, 0)}
+                      </span>
                     </h2>
                   </div>
-                  <div className="p-6 space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-                      <div className="md:col-span-2 space-y-1.5">
-                        <Label className="text-sm font-medium">Full Name</Label>
-                        <Input
-                          required placeholder="Ravi Kumar"
-                          value={formData.fullName}
-                          onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                          className="rounded-2xl border-[#E8E8E8] h-12"
-                        />
-                      </div>
-
-                      {/* ✅ Phone 1 */}
-                      <div className="space-y-1.5">
-                        <Label className="text-sm font-medium">Phone Number</Label>
-                        <Input
-                          required type="tel" pattern="[0-9]{10}" maxLength={10}
-                          placeholder="98765 43210"
-                          value={formData.phone}
-                          onChange={(e) => setFormData({ ...formData, phone: e.target.value.replace(/\D/g, "") })}
-                          className="rounded-2xl border-[#E8E8E8] h-12"
-                        />
-                      </div>
-
-                      {/* ✅ Phone 2 (optional) */}
-                      <div className="space-y-1.5">
-                        <Label className="text-sm font-medium">
-                          Alternate Phone <span className="text-muted-foreground font-normal text-xs">(optional)</span>
-                        </Label>
-                        <Input
-                          type="tel" pattern="[0-9]{10}" maxLength={10}
-                          placeholder="91234 56789"
-                          value={formData.phone2}
-                          onChange={(e) => setFormData({ ...formData, phone2: e.target.value.replace(/\D/g, "") })}
-                          className="rounded-2xl border-[#E8E8E8] h-12"
-                        />
-                      </div>
-
-                      {/* ✅ Pincode with spinner while detecting */}
-                      <div className="space-y-1.5">
-                        <Label className="text-sm font-medium">Pincode</Label>
-                        <div className="relative">
-                          <Input
-                            required pattern="[0-9]{6}" maxLength={6} placeholder="560001"
-                            value={formData.pincode}
-                            onChange={(e) => setFormData({ ...formData, pincode: e.target.value.replace(/\D/g, "") })}
-                            className="rounded-2xl border-[#E8E8E8] h-12 pr-10"
-                          />
-                          {isPincodeLoading && (
-                            <Loader2 className="absolute right-3 top-3.5 h-4 w-4 animate-spin text-muted-foreground" />
-                          )}
+                  <div className="divide-y divide-[#F8F8F8] max-h-56 overflow-y-auto">
+                    {cartItems.map((item, idx) => (
+                      <div key={idx} className="flex items-center gap-3 px-5 py-3.5">
+                        <div className="relative w-14 h-14 rounded-xl overflow-hidden bg-[#F1F8E9] flex-shrink-0 border border-[#F0F0F0]">
+                          <Image src={item.imageUrl} alt={item.name} fill className="object-cover" />
+                          <span className="absolute -top-1 -right-1 w-5 h-5 bg-primary text-white text-[9px] font-black rounded-full flex items-center justify-center">
+                            {item.quantity}
+                          </span>
                         </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-xs text-[#1A2E1A] line-clamp-2 leading-tight">{item.name}</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">{item.category}</p>
+                          <p className="text-xs font-bold text-primary mt-0.5">{fmt(item.price)}</p>
+                        </div>
+                        <p className="font-bold text-sm text-[#1A2E1A] flex-shrink-0">{fmt(item.price * item.quantity)}</p>
                       </div>
-
-                      <div className="md:col-span-2 space-y-1.5">
-                        <Label className="text-sm font-medium">House / Street / Area</Label>
-                        <Input
-                          required placeholder="Flat 4B, Green Valley Apartments, MG Road"
-                          value={formData.address}
-                          onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                          className="rounded-2xl border-[#E8E8E8] h-12"
-                        />
-                      </div>
-
-                      {/* ✅ City — auto-filled from pincode */}
-                      <div className="space-y-1.5">
-                        <Label className="text-sm font-medium flex items-center gap-1">
-                          City
-                          {isPincodeLoading && <span className="text-[10px] text-muted-foreground font-normal">Detecting...</span>}
-                        </Label>
-                        <Input
-                          required placeholder="Bengaluru"
-                          value={formData.city}
-                          onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                          className="rounded-2xl border-[#E8E8E8] h-12"
-                        />
-                      </div>
-
-                      {/* ✅ State — auto-filled from pincode */}
-                      <div className="space-y-1.5">
-                        <Label className="text-sm font-medium flex items-center gap-1">
-                          State
-                          {isPincodeLoading && <span className="text-[10px] text-muted-foreground font-normal">Detecting...</span>}
-                        </Label>
-                        <Select
-                          value={formData.state}
-                          onValueChange={(v) => setFormData({ ...formData, state: v })}
-                        >
-                          <SelectTrigger className="rounded-2xl border-[#E8E8E8] h-12">
-                            <SelectValue placeholder="Select" />
-                          </SelectTrigger>
-                          <SelectContent className="max-h-[280px]">
-                            {INDIAN_STATES_AND_UTS.map((s) => (
-                              <SelectItem key={s} value={s}>{s}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <input type="hidden" value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
-
+                    ))}
+                  </div>
+                  <div className="px-5 py-4 border-t border-[#F5F5F5] space-y-3">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Subtotal</span>
+                      <span className="font-semibold">{fmt(subtotal)}</span>
                     </div>
-                  </div>
-                </Card>
-
-                <Card className="rounded-2xl shadow-sm bg-white border border-[#E8E8E8] overflow-hidden">
-                  <div className="px-6 py-5 border-b border-[#F5F5F5]">
-                    <h2 className="text-xl font-bold font-headline text-[#1A2E1A] flex items-center gap-2">
-                      <CreditCard className="h-5 w-5 text-primary" /> Payment Method
-                    </h2>
-                  </div>
-                  <div className="p-6 space-y-3">
-                    <PayOption id="cod" icon={<Banknote className="h-5 w-5" />} label="Cash on Delivery" desc="Pay when your order arrives" badge="Popular" badgeCls="bg-emerald-100 text-emerald-700" />
-                    <PayOption id="upi" icon={<Smartphone className="h-5 w-5" />} label="UPI" desc="GPay, PhonePe, Paytm & more" badge="Secure" badgeCls="bg-blue-100 text-blue-700" />
-                    <PayOption id="card" icon={<CreditCard className="h-5 w-5" />} label="Credit / Debit Card" desc="Visa, Mastercard, RuPay" />
-                    <p className="text-center text-[10px] text-muted-foreground flex items-center justify-center gap-1 pt-1">
-                      <Lock className="h-3 w-3" /> Your payment info is 100% secure & encrypted
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground flex items-center gap-1"><Truck className="h-3.5 w-3.5" /> Shipping</span>
+                      {shipping === 0 ? <span className="font-bold text-emerald-600">FREE</span> : <span className="font-semibold">{fmt(shipping)}</span>}
+                    </div>
+                    {shipping > 0 && (
+                      <p className="text-[10px] text-amber-700 bg-amber-50 px-3 py-2 rounded-xl">
+                        🚚 Add {fmt(999 - subtotal)} more for free delivery
+                      </p>
+                    )}
+                    {discount > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-emerald-600 font-semibold">Discount</span>
+                        <span className="font-bold text-emerald-600">−{fmt(discount)}</span>
+                      </div>
+                    )}
+                    <Separator />
+                    <div className="flex justify-between items-center">
+                      <span className="font-headline font-bold text-lg text-[#1A2E1A]">Total</span>
+                      <span className="font-headline font-extrabold text-2xl text-primary">{fmt(total)}</span>
+                    </div>
+                    <Button type="submit" disabled={isSubmitting} className="w-full h-14 rounded-2xl text-base font-semibold mt-2 gap-2">
+                      {isSubmitting ? <><Loader2 className="h-5 w-5 animate-spin" /> Processing...</> : <><PackageCheck className="h-5 w-5" /> Complete Order</>}
+                    </Button>
+                    <p className="text-center text-[10px] text-muted-foreground flex items-center justify-center gap-1">
+                      <ShieldCheck className="h-3 w-3" /> Secure checkout powered by Monterra
                     </p>
                   </div>
                 </Card>
-
               </div>
-
-              {/* RIGHT COLUMN */}
-              <div className="lg:col-span-5">
-                <div className="sticky top-20">
-                  <Card className="rounded-2xl shadow-sm bg-white border border-[#E8E8E8] overflow-hidden">
-                    <div className="px-6 py-5 border-b border-[#F5F5F5]">
-                      <h2 className="text-xl font-bold font-headline text-[#1A2E1A] flex items-center gap-2">
-                        <ShoppingBag className="h-5 w-5 text-primary" />
-                        Summary
-                        <span className="text-xs font-bold bg-primary text-white px-2 py-0.5 rounded-full ml-1">
-                          {cartItems.reduce((a, i) => a + i.quantity, 0)}
-                        </span>
-                      </h2>
-                    </div>
-
-                    <div className="divide-y divide-[#F8F8F8] max-h-56 overflow-y-auto">
-                      {cartItems.map((item, idx) => (
-                        <div key={idx} className="flex items-center gap-3 px-5 py-3.5">
-                          <div className="relative w-14 h-14 rounded-xl overflow-hidden bg-[#F1F8E9] flex-shrink-0 border border-[#F0F0F0]">
-                            <Image src={item.imageUrl} alt={item.name} fill className="object-cover" />
-                            <span className="absolute -top-1 -right-1 w-5 h-5 bg-primary text-white text-[9px] font-black rounded-full flex items-center justify-center">
-                              {item.quantity}
-                            </span>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-xs text-[#1A2E1A] line-clamp-2 leading-tight">{item.name}</p>
-                            <p className="text-[10px] text-muted-foreground mt-0.5">{item.category}</p>
-                            <p className="text-xs font-bold text-primary mt-0.5">{fmt(item.price)}</p>
-                          </div>
-                          <p className="font-bold text-sm text-[#1A2E1A] flex-shrink-0">{fmt(item.price * item.quantity)}</p>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="px-5 py-4 border-t border-[#F5F5F5] space-y-3">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Subtotal</span>
-                        <span className="font-semibold">{fmt(subtotal)}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground flex items-center gap-1">
-                          <Truck className="h-3.5 w-3.5" /> Shipping
-                        </span>
-                        {shipping === 0
-                          ? <span className="font-bold text-emerald-600">FREE</span>
-                          : <span className="font-semibold">{fmt(shipping)}</span>}
-                      </div>
-                      {/* ✅ Updated threshold to ₹999 */}
-                      {shipping > 0 && (
-                        <p className="text-[10px] text-amber-700 bg-amber-50 px-3 py-2 rounded-xl">
-                          🚚 Add {fmt(999 - subtotal)} more for free delivery
-                        </p>
-                      )}
-                      {discount > 0 && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-emerald-600 font-semibold">Discount</span>
-                          <span className="font-bold text-emerald-600">−{fmt(discount)}</span>
-                        </div>
-                      )}
-                      <Separator />
-                      <div className="flex justify-between items-center">
-                        <span className="font-headline font-bold text-lg text-[#1A2E1A]">Total</span>
-                        <span className="font-headline font-extrabold text-2xl text-primary">{fmt(total)}</span>
-                      </div>
-
-                      <Button type="submit" disabled={isSubmitting} className="w-full h-14 rounded-2xl text-base font-semibold mt-2 gap-2">
-                        {isSubmitting
-                          ? <><Loader2 className="h-5 w-5 animate-spin" /> Processing...</>
-                          : <><PackageCheck className="h-5 w-5" /> Complete Order</>}
-                      </Button>
-
-                      <p className="text-center text-[10px] text-muted-foreground flex items-center justify-center gap-1">
-                        <ShieldCheck className="h-3 w-3" /> Secure checkout powered by Monterra
-                      </p>
-                    </div>
-                  </Card>
-                </div>
-              </div>
-
             </div>
           </div>
-        </main>
-
-        {/* Mobile sticky bottom button */}
-        <div
-          className="sm:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-[#E8E8E8] px-4 py-3 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]"
-          style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}
-        >
-          <Button type="submit" disabled={isSubmitting} className="w-full h-14 rounded-2xl text-base font-semibold gap-2">
-            {isSubmitting
-              ? <><Loader2 className="h-5 w-5 animate-spin" /> Processing...</>
-              : `Complete Order · ${fmt(total)}`}
-          </Button>
         </div>
-      </form>
+      </main>
 
+      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-[#E8E8E8] px-4 py-3 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]"
+        style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}>
+        <Button type="submit" disabled={isSubmitting} className="w-full h-14 rounded-2xl text-base font-semibold gap-2">
+          {isSubmitting ? <><Loader2 className="h-5 w-5 animate-spin" /> Processing...</> : `Complete Order · ${fmt(total)}`}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+// ✅ Outer page wraps CheckoutContent in Suspense — fixes useSearchParams build error
+export default function CheckoutPage() {
+  return (
+    <div className="min-h-screen flex flex-col bg-[#FAFAF7]">
+      <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
+      <Header />
+      <Suspense fallback={
+        <div className="flex-grow flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      }>
+        <CheckoutContent />
+      </Suspense>
       <Footer />
     </div>
   );
