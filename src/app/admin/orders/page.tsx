@@ -74,6 +74,12 @@ export default function AdminOrders() {
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [isRefunding, setIsRefunding] = useState<string | null>(null);
 
+  // ── Optimistic local overrides for refund status ───────────────────────────
+  // Keyed by orderId → patched fields. Merged over Firestore data in render.
+  const [refundOverrides, setRefundOverrides] = useState<
+    Record<string, { refundStatus: string; refundId?: string }>
+  >({});
+
   const userProfileRef = useMemoFirebase(
     () => (!user?.uid ? null : doc(db, "users", user.uid)),
     [db, user?.uid]
@@ -118,14 +124,15 @@ export default function AdminOrders() {
     setIsRefunding(orderId);
     try {
       const auth = getAuth();
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) throw new Error("Not authenticated");
+      const userEmail = auth.currentUser?.email ?? "";
+
+      if (!userEmail) throw new Error("Not authenticated");
 
       const res = await fetch("/api/refund-order", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          "x-admin-email": userEmail,
         },
         body: JSON.stringify({ orderId }),
       });
@@ -137,8 +144,15 @@ export default function AdminOrders() {
           title: "✅ Refund Processed",
           description: `Razorpay Refund ID: ${data.refundId || "N/A"}`,
         });
-        // Auto-refresh table so refund button disappears
-        window.location.reload();
+
+        // ✅ Optimistic update — patch local state instantly, no page reload
+        const patch = { refundStatus: "processed", refundId: data.refundId };
+        setRefundOverrides((prev) => ({ ...prev, [orderId]: patch }));
+
+        // Also patch the open detail modal if it's showing this order
+        if (selectedOrder?.id === orderId) {
+          setSelectedOrder((prev: any) => ({ ...prev, ...patch }));
+        }
       } else {
         throw new Error(data.error || "Failed to process refund");
       }
@@ -173,10 +187,13 @@ export default function AdminOrders() {
 
   // ── Refund badge helper ────────────────────────────────────────────────────
   const renderRefundBadge = (order: any) => {
-    if (order.status !== "Cancelled" || order.paymentMethod !== "online") {
+    // Merge optimistic override on top of Firestore data
+    const merged = { ...order, ...(refundOverrides[order.id] ?? {}) };
+
+    if (merged.status !== "Cancelled" || merged.paymentMethod !== "online") {
       return <span className="text-xs text-muted-foreground">N/A</span>;
     }
-    if (order.refundStatus === "processed") {
+    if (merged.refundStatus === "processed") {
       return (
         <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-none flex items-center gap-1 w-fit">
           <CheckCircle2 className="h-3 w-3" /> Processed
@@ -254,11 +271,13 @@ export default function AdminOrders() {
               </TableHeader>
               <TableBody>
                 {filteredOrders?.map((order) => {
-                  // Handles older orders missing refundStatus field
+                  // Merge optimistic override for this row
+                  const merged = { ...order, ...(refundOverrides[order.id] ?? {}) };
+
                   const canRefund =
-                    order.status === "Cancelled" &&
-                    order.paymentMethod === "online" &&
-                    (order.refundStatus === "pending" || !order.refundStatus);
+                    merged.status === "Cancelled" &&
+                    merged.paymentMethod === "online" &&
+                    (merged.refundStatus === "pending" || !merged.refundStatus);
 
                   return (
                     <TableRow
@@ -320,9 +339,9 @@ export default function AdminOrders() {
                           )}
 
                           {/* Refund done indicator */}
-                          {order.status === "Cancelled" &&
-                            order.paymentMethod === "online" &&
-                            order.refundStatus === "processed" && (
+                          {merged.status === "Cancelled" &&
+                            merged.paymentMethod === "online" &&
+                            merged.refundStatus === "processed" && (
                               <span className="flex items-center gap-1 text-emerald-600 text-xs font-bold">
                                 <BadgeCheck className="h-4 w-4" /> Refund Done
                               </span>

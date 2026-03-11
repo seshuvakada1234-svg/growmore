@@ -17,16 +17,16 @@ import {
 import {
   ShoppingBag, ChevronLeft, Loader2, Truck,
   ShieldCheck, CreditCard, Banknote, Smartphone,
-  MapPin, PackageCheck, Lock, RefreshCcw,
+  MapPin, PackageCheck, Lock,
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import Script from "next/script";
 import { toast } from "@/hooks/use-toast";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useUser, useFirestore } from "@/firebase";
 import { doc, setDoc, serverTimestamp, getDoc } from "firebase/firestore";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { PRODUCTS } from "@/lib/mock-data";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
@@ -51,23 +51,29 @@ type PaymentMethod = "cod" | "upi" | "card";
 
 const fmt = (n: number) => `₹${n.toLocaleString("en-IN")}`;
 
-const generateOrderId = (method: string) => {
+const generateOrderId = (method: PaymentMethod) => {
   const prefix = method === "cod" ? "GS-COD" : "GS-ONL";
   return `${prefix}-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
 };
 
 export default function CheckoutPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useUser();
   const db = useFirestore();
+
+  // ✅ Read mode ONCE on mount using ref — avoids re-render clearing sessionStorage too early
+  const isBuyNow = useRef(searchParams.get("mode") === "buynow").current;
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [cartItems, setCartItems] = useState<any[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cod");
+  const [isPincodeLoading, setIsPincodeLoading] = useState(false);
 
   const [formData, setFormData] = useState({
     fullName: "",
     phone: "",
+    phone2: "",
     email: "",
     address: "",
     city: "",
@@ -75,20 +81,26 @@ export default function CheckoutPage() {
     pincode: "",
   });
 
+  // ✅ Fix empty cart: read storage once on mount, clear buynow only after order placed
   useEffect(() => {
     try {
-      const stored = JSON.parse(localStorage.getItem("plantshop_cart") || "[]");
+      const raw = isBuyNow
+        ? sessionStorage.getItem("buynow_cart")
+        : localStorage.getItem("plantshop_cart");
+
+      const stored = JSON.parse(raw || "[]");
       const enriched = stored
         .map((item: any) => {
           const product = PRODUCTS.find((p) => p.id === (item.id || item.productId));
           return product ? { ...product, quantity: item.quantity } : null;
         })
         .filter(Boolean);
+
       setCartItems(enriched);
     } catch {
       setCartItems([]);
     }
-  }, []);
+  }, []); // run only once on mount
 
   useEffect(() => {
     if (user) {
@@ -100,8 +112,37 @@ export default function CheckoutPage() {
     }
   }, [user]);
 
+  // ✅ Pincode → auto-fill City & State via India Post API
+  useEffect(() => {
+    const pincode = formData.pincode;
+    if (pincode.length !== 6) return;
+
+    const timer = setTimeout(async () => {
+      setIsPincodeLoading(true);
+      try {
+        const res = await fetch(`https://api.postalpincode.in/pincode/${pincode}`);
+        const data = await res.json();
+        if (data[0]?.Status === "Success") {
+          const po = data[0].PostOffice[0];
+          setFormData((prev) => ({
+            ...prev,
+            city: po.District || prev.city,
+            state: po.State || prev.state,
+          }));
+        }
+      } catch {
+        // fail silently — user can type manually
+      } finally {
+        setIsPincodeLoading(false);
+      }
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [formData.pincode]);
+
+  // ✅ Free delivery threshold: ₹999
   const subtotal = cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
-  const shipping = subtotal > 1500 ? 0 : 150;
+  const shipping = subtotal > 999 ? 0 : 150;
   const discount = subtotal > 3000 ? 200 : 0;
   const total = subtotal + shipping - discount;
 
@@ -115,14 +156,11 @@ export default function CheckoutPage() {
           customerName: formData.fullName,
           customerEmail: formData.email,
           customerPhone: formData.phone,
-          items: cartItems.map((i) => ({
-            name: i.name,
-            qty: i.quantity,
-            price: i.price,
-          })),
+          customerPhone2: formData.phone2 || null,
+          items: cartItems.map((i) => ({ name: i.name, qty: i.quantity, price: i.price })),
           total,
           paymentMethod,
-          status: paymentMethod === 'cod' ? 'Pending' : 'Paid',
+          status: paymentMethod === 'cod' ? 'Pending' : 'Approved',
           shippingAddress: {
             fullAddress: formData.address,
             city: formData.city,
@@ -131,15 +169,18 @@ export default function CheckoutPage() {
           },
         }),
       });
-      const data = await res.json();
-      return data;
+      return await res.json();
     } catch (err) {
       console.error('Notification error:', err);
       return null;
     }
   };
 
-  const saveOrderToFirestore = async (orderId: string, razorpayPaymentId: string | null = null, razorpayOrderId: string | null = null) => {
+  const saveOrderToFirestore = async (
+    orderId: string,
+    razorpayPaymentId: string | null = null,
+    razorpayOrderId: string | null = null,
+  ) => {
     if (!user) return;
 
     const affiliateRefId = localStorage.getItem("monterra_referrer");
@@ -153,6 +194,7 @@ export default function CheckoutPage() {
       customerName: formData.fullName,
       customerEmail: formData.email,
       customerPhone: formData.phone,
+      customerPhone2: formData.phone2 || null,
       shippingAddress: {
         fullAddress: formData.address,
         city: formData.city,
@@ -188,18 +230,22 @@ export default function CheckoutPage() {
           const rate = productSnap.exists() ? productSnap.data().affiliateCommission || 5 : 5;
           await saveCommissionRecord({
             productId: item.slug,
-            orderId: orderId,
+            orderId,
             orderValue: item.price * item.quantity,
-            commissionRate: rate
+            commissionRate: rate,
           });
         }
       }
 
-      // Send email + WhatsApp notifications
       const notifications = await sendOrderNotifications(orderId);
 
-      localStorage.removeItem("plantshop_cart");
-      window.dispatchEvent(new Event("cart-updated"));
+      // ✅ Clear storage only AFTER order is saved
+      if (isBuyNow) {
+        sessionStorage.removeItem("buynow_cart");
+      } else {
+        localStorage.removeItem("plantshop_cart");
+        window.dispatchEvent(new Event("cart-updated"));
+      }
 
       const waParam = notifications?.customerWaLink
         ? `&wa=${encodeURIComponent(notifications.customerWaLink)}`
@@ -234,16 +280,17 @@ export default function CheckoutPage() {
 
     try {
       if (paymentMethod === 'cod') {
-        const orderId = `GS-COD-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+        const orderId = generateOrderId("cod");
         await saveOrderToFirestore(orderId);
         toast({ title: "Order Placed Successfully 🌿" });
       } else {
+        const firestoreOrderId = generateOrderId("upi");
+
         const res = await fetch('/api/create-order', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ amount: total, currency: 'INR' }),
         });
-
         const razorpayOrder = await res.json();
 
         if (!window.Razorpay) {
@@ -252,7 +299,6 @@ export default function CheckoutPage() {
           return;
         }
 
-        const firestoreOrderId = generateOrderId("upi");
         const options = {
           key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
           amount: razorpayOrder.amount,
@@ -271,7 +317,6 @@ export default function CheckoutPage() {
                 firestoreOrderId,
               }),
             });
-
             const verifyData = await verifyRes.json();
 
             if (verifyData.success) {
@@ -282,17 +327,9 @@ export default function CheckoutPage() {
               setIsSubmitting(false);
             }
           },
-          prefill: {
-            name: formData.fullName,
-            email: formData.email,
-            contact: formData.phone,
-          },
+          prefill: { name: formData.fullName, email: formData.email, contact: formData.phone },
           theme: { color: "#1B5E20" },
-          modal: {
-            ondismiss: function() {
-              setIsSubmitting(false);
-            }
-          }
+          modal: { ondismiss: () => setIsSubmitting(false) },
         };
 
         const rzp = new window.Razorpay(options);
@@ -305,9 +342,7 @@ export default function CheckoutPage() {
     }
   };
 
-  const PayOption = ({
-    id, icon, label, desc, badge, badgeCls,
-  }: {
+  const PayOption = ({ id, icon, label, desc, badge, badgeCls }: {
     id: PaymentMethod; icon: React.ReactNode; label: string;
     desc: string; badge?: string; badgeCls?: string;
   }) => (
@@ -315,9 +350,7 @@ export default function CheckoutPage() {
       type="button"
       onClick={() => setPaymentMethod(id)}
       className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl border transition-all text-left
-        ${paymentMethod === id
-          ? "border-[#388E3C] bg-[#F1F8E9]"
-          : "border-[#E8E8E8] hover:border-[#D8EDD5]"}`}
+        ${paymentMethod === id ? "border-[#388E3C] bg-[#F1F8E9]" : "border-[#E8E8E8] hover:border-[#D8EDD5]"}`}
     >
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors
         ${paymentMethod === id ? "bg-[#388E3C] text-white" : "bg-[#F1F8E9] text-[#388E3C]"}`}>
@@ -325,13 +358,9 @@ export default function CheckoutPage() {
       </div>
       <div className="flex-1">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className={`font-semibold text-sm ${paymentMethod === id ? "text-[#388E3C]" : "text-[#1A2E1A]"}`}>
-            {label}
-          </span>
+          <span className={`font-semibold text-sm ${paymentMethod === id ? "text-[#388E3C]" : "text-[#1A2E1A]"}`}>{label}</span>
           {badge && (
-            <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide ${badgeCls}`}>
-              {badge}
-            </span>
+            <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide ${badgeCls}`}>{badge}</span>
           )}
         </div>
         <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
@@ -343,6 +372,9 @@ export default function CheckoutPage() {
     </button>
   );
 
+  const backHref = isBuyNow ? "/plants" : "/cart";
+  const backLabel = isBuyNow ? "Back to Product" : "Back to Cart";
+
   return (
     <div className="min-h-screen flex flex-col bg-[#FAFAF7]">
       <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
@@ -352,22 +384,17 @@ export default function CheckoutPage() {
         <main className="flex-grow pb-28 sm:pb-12">
           <div className="container mx-auto px-4 max-w-6xl py-8 md:py-10">
 
-            <Link
-              href="/cart"
-              className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-primary transition-colors mb-5"
-            >
-              <ChevronLeft className="h-4 w-4" /> Back to Cart
+            <Link href={backHref} className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-primary transition-colors mb-5">
+              <ChevronLeft className="h-4 w-4" /> {backLabel}
             </Link>
 
-            <h1 className="text-3xl sm:text-4xl font-extrabold text-[#1A2E1A] mb-4 font-headline">
-              Checkout
-            </h1>
+            <h1 className="text-3xl sm:text-4xl font-extrabold text-[#1A2E1A] mb-4 font-headline">Checkout</h1>
 
+            {/* ✅ Removed "Easy 7-day returns", updated to ₹999 */}
             <div className="flex items-center gap-4 sm:gap-8 flex-wrap mb-7">
               {[
-                { icon: <Truck className="h-3.5 w-3.5" />, text: "Free delivery above ₹1500" },
+                { icon: <Truck className="h-3.5 w-3.5" />, text: "Free delivery above ₹999" },
                 { icon: <ShieldCheck className="h-3.5 w-3.5" />, text: "100% secure payments" },
-                { icon: <RefreshCcw className="h-3.5 w-3.5" />, text: "Easy 7-day returns" },
               ].map((t) => (
                 <div key={t.text} className="flex items-center gap-1.5 text-xs font-semibold text-[#388E3C]">
                   {t.icon} {t.text}
@@ -383,26 +410,23 @@ export default function CheckoutPage() {
                 <Card className="rounded-2xl shadow-sm bg-white border border-[#E8E8E8] overflow-hidden">
                   <div className="px-6 py-5 border-b border-[#F5F5F5]">
                     <h2 className="text-xl font-bold font-headline text-[#1A2E1A] flex items-center gap-2">
-                      <MapPin className="h-5 w-5 text-primary" />
-                      Shipping Information
+                      <MapPin className="h-5 w-5 text-primary" /> Shipping Information
                     </h2>
                   </div>
                   <div className="p-6 space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-                      {/* Full Name - full width */}
                       <div className="md:col-span-2 space-y-1.5">
                         <Label className="text-sm font-medium">Full Name</Label>
                         <Input
-                          required
-                          placeholder="Ravi Kumar"
+                          required placeholder="Ravi Kumar"
                           value={formData.fullName}
                           onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
                           className="rounded-2xl border-[#E8E8E8] h-12"
                         />
                       </div>
 
-                      {/* Phone Number | Pincode */}
+                      {/* ✅ Phone 1 */}
                       <div className="space-y-1.5">
                         <Label className="text-sm font-medium">Phone Number</Label>
                         <Input
@@ -414,17 +438,36 @@ export default function CheckoutPage() {
                         />
                       </div>
 
+                      {/* ✅ Phone 2 (optional) */}
                       <div className="space-y-1.5">
-                        <Label className="text-sm font-medium">Pincode</Label>
+                        <Label className="text-sm font-medium">
+                          Alternate Phone <span className="text-muted-foreground font-normal text-xs">(optional)</span>
+                        </Label>
                         <Input
-                          required pattern="[0-9]{6}" maxLength={6} placeholder="560001"
-                          value={formData.pincode}
-                          onChange={(e) => setFormData({ ...formData, pincode: e.target.value.replace(/\D/g, "") })}
+                          type="tel" pattern="[0-9]{10}" maxLength={10}
+                          placeholder="91234 56789"
+                          value={formData.phone2}
+                          onChange={(e) => setFormData({ ...formData, phone2: e.target.value.replace(/\D/g, "") })}
                           className="rounded-2xl border-[#E8E8E8] h-12"
                         />
                       </div>
 
-                      {/* House / Street / Area - full width */}
+                      {/* ✅ Pincode with spinner while detecting */}
+                      <div className="space-y-1.5">
+                        <Label className="text-sm font-medium">Pincode</Label>
+                        <div className="relative">
+                          <Input
+                            required pattern="[0-9]{6}" maxLength={6} placeholder="560001"
+                            value={formData.pincode}
+                            onChange={(e) => setFormData({ ...formData, pincode: e.target.value.replace(/\D/g, "") })}
+                            className="rounded-2xl border-[#E8E8E8] h-12 pr-10"
+                          />
+                          {isPincodeLoading && (
+                            <Loader2 className="absolute right-3 top-3.5 h-4 w-4 animate-spin text-muted-foreground" />
+                          )}
+                        </div>
+                      </div>
+
                       <div className="md:col-span-2 space-y-1.5">
                         <Label className="text-sm font-medium">House / Street / Area</Label>
                         <Input
@@ -435,9 +478,12 @@ export default function CheckoutPage() {
                         />
                       </div>
 
-                      {/* City | State */}
+                      {/* ✅ City — auto-filled from pincode */}
                       <div className="space-y-1.5">
-                        <Label className="text-sm font-medium">City</Label>
+                        <Label className="text-sm font-medium flex items-center gap-1">
+                          City
+                          {isPincodeLoading && <span className="text-[10px] text-muted-foreground font-normal">Detecting...</span>}
+                        </Label>
                         <Input
                           required placeholder="Bengaluru"
                           value={formData.city}
@@ -446,8 +492,12 @@ export default function CheckoutPage() {
                         />
                       </div>
 
+                      {/* ✅ State — auto-filled from pincode */}
                       <div className="space-y-1.5">
-                        <Label className="text-sm font-medium">State</Label>
+                        <Label className="text-sm font-medium flex items-center gap-1">
+                          State
+                          {isPincodeLoading && <span className="text-[10px] text-muted-foreground font-normal">Detecting...</span>}
+                        </Label>
                         <Select
                           value={formData.state}
                           onValueChange={(v) => setFormData({ ...formData, state: v })}
@@ -463,12 +513,8 @@ export default function CheckoutPage() {
                         </Select>
                       </div>
 
-                      {/* Hidden email field - pre-filled from user account */}
-                      <input
-                        type="hidden"
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      />
+                      <input type="hidden" value={formData.email}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
 
                     </div>
                   </div>
@@ -477,29 +523,13 @@ export default function CheckoutPage() {
                 <Card className="rounded-2xl shadow-sm bg-white border border-[#E8E8E8] overflow-hidden">
                   <div className="px-6 py-5 border-b border-[#F5F5F5]">
                     <h2 className="text-xl font-bold font-headline text-[#1A2E1A] flex items-center gap-2">
-                      <CreditCard className="h-5 w-5 text-primary" />
-                      Payment Method
+                      <CreditCard className="h-5 w-5 text-primary" /> Payment Method
                     </h2>
                   </div>
                   <div className="p-6 space-y-3">
-
-                    <PayOption
-                      id="cod" icon={<Banknote className="h-5 w-5" />}
-                      label="Cash on Delivery" desc="Pay when your order arrives"
-                      badge="Popular" badgeCls="bg-emerald-100 text-emerald-700"
-                    />
-
-                    <PayOption
-                      id="upi" icon={<Smartphone className="h-5 w-5" />}
-                      label="UPI" desc="GPay, PhonePe, Paytm & more"
-                      badge="Secure" badgeCls="bg-blue-100 text-blue-700"
-                    />
-
-                    <PayOption
-                      id="card" icon={<CreditCard className="h-5 w-5" />}
-                      label="Credit / Debit Card" desc="Visa, Mastercard, RuPay"
-                    />
-
+                    <PayOption id="cod" icon={<Banknote className="h-5 w-5" />} label="Cash on Delivery" desc="Pay when your order arrives" badge="Popular" badgeCls="bg-emerald-100 text-emerald-700" />
+                    <PayOption id="upi" icon={<Smartphone className="h-5 w-5" />} label="UPI" desc="GPay, PhonePe, Paytm & more" badge="Secure" badgeCls="bg-blue-100 text-blue-700" />
+                    <PayOption id="card" icon={<CreditCard className="h-5 w-5" />} label="Credit / Debit Card" desc="Visa, Mastercard, RuPay" />
                     <p className="text-center text-[10px] text-muted-foreground flex items-center justify-center gap-1 pt-1">
                       <Lock className="h-3 w-3" /> Your payment info is 100% secure & encrypted
                     </p>
@@ -508,7 +538,7 @@ export default function CheckoutPage() {
 
               </div>
 
-              {/* RIGHT COLUMN - Order Summary */}
+              {/* RIGHT COLUMN */}
               <div className="lg:col-span-5">
                 <div className="sticky top-20">
                   <Card className="rounded-2xl shadow-sm bg-white border border-[#E8E8E8] overflow-hidden">
@@ -536,9 +566,7 @@ export default function CheckoutPage() {
                             <p className="text-[10px] text-muted-foreground mt-0.5">{item.category}</p>
                             <p className="text-xs font-bold text-primary mt-0.5">{fmt(item.price)}</p>
                           </div>
-                          <p className="font-bold text-sm text-[#1A2E1A] flex-shrink-0">
-                            {fmt(item.price * item.quantity)}
-                          </p>
+                          <p className="font-bold text-sm text-[#1A2E1A] flex-shrink-0">{fmt(item.price * item.quantity)}</p>
                         </div>
                       ))}
                     </div>
@@ -556,9 +584,10 @@ export default function CheckoutPage() {
                           ? <span className="font-bold text-emerald-600">FREE</span>
                           : <span className="font-semibold">{fmt(shipping)}</span>}
                       </div>
+                      {/* ✅ Updated threshold to ₹999 */}
                       {shipping > 0 && (
                         <p className="text-[10px] text-amber-700 bg-amber-50 px-3 py-2 rounded-xl">
-                          🚚 Add {fmt(1500 - subtotal)} more for free delivery
+                          🚚 Add {fmt(999 - subtotal)} more for free delivery
                         </p>
                       )}
                       {discount > 0 && (
@@ -573,11 +602,7 @@ export default function CheckoutPage() {
                         <span className="font-headline font-extrabold text-2xl text-primary">{fmt(total)}</span>
                       </div>
 
-                      <Button
-                        type="submit"
-                        disabled={isSubmitting}
-                        className="w-full h-14 rounded-2xl text-base font-semibold mt-2 gap-2"
-                      >
+                      <Button type="submit" disabled={isSubmitting} className="w-full h-14 rounded-2xl text-base font-semibold mt-2 gap-2">
                         {isSubmitting
                           ? <><Loader2 className="h-5 w-5 animate-spin" /> Processing...</>
                           : <><PackageCheck className="h-5 w-5" /> Complete Order</>}
@@ -600,11 +625,7 @@ export default function CheckoutPage() {
           className="sm:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-[#E8E8E8] px-4 py-3 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]"
           style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}
         >
-          <Button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full h-14 rounded-2xl text-base font-semibold gap-2"
-          >
+          <Button type="submit" disabled={isSubmitting} className="w-full h-14 rounded-2xl text-base font-semibold gap-2">
             {isSubmitting
               ? <><Loader2 className="h-5 w-5 animate-spin" /> Processing...</>
               : `Complete Order · ${fmt(total)}`}

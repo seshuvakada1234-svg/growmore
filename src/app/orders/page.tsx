@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { StatusChip } from "@/components/shared/StatusChip";
 import {
   Package, Calendar, ArrowUpRight, Loader2, Search,
-  XCircle, AlertTriangle, RefreshCw, CheckCircle2, Clock,
+  XCircle, AlertTriangle, RefreshCw, CheckCircle2, Clock, Banknote,
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -58,6 +58,9 @@ export default function OrdersPage() {
     }
   }, [user, isUserLoading, router]);
 
+  // Normalize payment method for a given order object
+  const getPaymentMethod = (order: any) => order?.paymentMethod?.toLowerCase();
+
   const canCancel = (order: any) => {
     if (order.status === "Cancelled") return false;
     const cancellableStatuses = ["Pending", "Approved", "Paid"];
@@ -73,9 +76,10 @@ export default function OrdersPage() {
 
     setIsSubmittingCancel(true);
     const orderRef = doc(db, "orders", cancellingOrder.id);
-    
-    // Updated cancellation logic: instead of auto-refunding, set refundStatus to 'pending'
-    // for the administrator to approve in the admin panel.
+
+    // Normalize at point of use
+    const pm = getPaymentMethod(cancellingOrder);
+
     const cancelData: any = {
       status: "Cancelled",
       cancelled: true,
@@ -85,16 +89,16 @@ export default function OrdersPage() {
       updatedAt: serverTimestamp(),
     };
 
-    if (cancellingOrder.paymentMethod === "online" && cancellingOrder.razorpayPaymentId) {
+    if (pm === "online" && cancellingOrder.razorpayPaymentId) {
       cancelData.refundStatus = "pending";
     }
 
     try {
       await updateDoc(orderRef, cancelData);
-      
+
       toast({
         title: "Order Cancelled",
-        description: cancellingOrder.paymentMethod === "online" 
+        description: pm === "online"
           ? "Our team will review and process your refund shortly."
           : "Your order has been successfully cancelled.",
       });
@@ -115,7 +119,21 @@ export default function OrdersPage() {
   };
 
   const getRefundBadge = (order: any) => {
-    if (order.status !== "Cancelled" || order.paymentMethod !== "online") return null;
+    if (order.status !== "Cancelled") return null;
+
+    const pm = getPaymentMethod(order);
+
+    // COD: no refund needed — show a neutral badge
+    if (pm === "cod") {
+      return (
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 bg-gray-100 px-3 py-1.5 rounded-full mt-2">
+          <Banknote className="h-3.5 w-3.5" />
+          No refund required
+        </div>
+      );
+    }
+
+    // Online: show refund status
     if (order.refundStatus === "processed") {
       return (
         <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full mt-2">
@@ -290,7 +308,7 @@ export default function OrdersPage() {
               Cancel Order?
             </DialogTitle>
             <DialogDescription>
-              {cancellingOrder?.paymentMethod === "online"
+              {getPaymentMethod(cancellingOrder) === "online"
                 ? "Your refund request will be sent to our team for approval."
                 : "We're sorry to see you go. Please let us know why you're cancelling."}
             </DialogDescription>
@@ -325,11 +343,19 @@ export default function OrdersPage() {
               </div>
             )}
 
-            {cancellingOrder?.paymentMethod === "online" && (
+            {/* ✅ COD vs Online info block */}
+            {getPaymentMethod(cancellingOrder) === "online" ? (
               <div className="flex items-start gap-3 bg-blue-50 rounded-2xl p-4">
                 <RefreshCw className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
                 <p className="text-xs text-blue-700 font-medium leading-relaxed">
                   Since you paid online, your refund request will be sent to our team for approval once you confirm.
+                </p>
+              </div>
+            ) : (
+              <div className="flex items-start gap-3 bg-gray-50 rounded-2xl p-4 border border-gray-200">
+                <Banknote className="h-4 w-4 text-gray-500 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-gray-600 font-medium leading-relaxed">
+                  Since this is a Cash on Delivery order, no payment was collected and no refund is required.
                 </p>
               </div>
             )}

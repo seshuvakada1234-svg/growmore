@@ -88,7 +88,7 @@ service cloud.firestore {
       match /payouts/{payoutId} {
         allow read: if isOwner(userId) || isAdmin();
         allow create: if isOwner(userId);
-        allow update: if isAdmin();
+        allow update: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid && resource.data.status != "Cancelled" && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status","cancelled","cancelReason","cancelFeedback","cancelledAt","updatedAt","refundStatus"]));
       }
     }
 

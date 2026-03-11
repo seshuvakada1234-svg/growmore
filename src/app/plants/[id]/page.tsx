@@ -18,9 +18,11 @@ import { cn } from "@/lib/utils";
 import { ShareButton } from "@/components/shared/ShareButton";
 import { calculateEarning } from "@/lib/affiliateEngine";
 import { MonterraUser } from "@/types/affiliate.types";
+import { useRouter } from "next/navigation";
 
 export default function PlantDetailPage() {
   const { id } = useParams();
+  const router = useRouter();
   const product = PRODUCTS.find(p => p.id === id) || PRODUCTS[0];
   const [qty, setQty] = useState(1);
   const { user } = useUser();
@@ -93,6 +95,17 @@ export default function PlantDetailPage() {
       });
     } catch (error) {
       console.error("Failed to add to cart", error);
+    }
+  };
+
+  // ✅ Buy It Now — saves item to sessionStorage and goes directly to checkout
+  const handleBuyItNow = () => {
+    try {
+      const buyNowItem = [{ id: product.id, quantity: qty }];
+      sessionStorage.setItem("buynow_cart", JSON.stringify(buyNowItem));
+      router.push("/checkout?mode=buynow");
+    } catch (error) {
+      console.error("Failed to process Buy It Now", error);
     }
   };
 
@@ -222,11 +235,16 @@ export default function PlantDetailPage() {
                   <ShoppingCart className="h-5 w-5" /> Add to Cart
                 </Button>
               </div>
-              <Link href="/cart" className="block w-full">
-                <Button onClick={handleAddToCart} size="lg" variant="outline" className="w-full h-12 rounded-full border-primary text-primary hover:bg-primary hover:text-white font-bold text-lg">
-                  Buy It Now
-                </Button>
-              </Link>
+
+              {/* ✅ Buy It Now — goes directly to checkout, skips cart */}
+              <Button
+                size="lg"
+                variant="outline"
+                className="w-full h-12 rounded-full border-primary text-primary hover:bg-primary hover:text-white font-bold text-lg"
+                onClick={handleBuyItNow}
+              >
+                Buy It Now
+              </Button>
             </div>
 
             <div className="mt-10 grid grid-cols-2 gap-4 border-t pt-8">
@@ -240,7 +258,7 @@ export default function PlantDetailPage() {
           </div>
         </div>
 
-        {/* Tabs and rest of content... */}
+        {/* Tabs */}
         <div className="max-w-4xl mx-auto">
           <Tabs defaultValue="care" className="w-full">
             <TabsList className="w-full justify-start border-b rounded-none h-14 bg-transparent p-0 gap-8">

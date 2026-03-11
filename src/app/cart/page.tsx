@@ -1,4 +1,3 @@
-
 "use client";
 
 import { Header } from "@/components/layout/Header";
@@ -20,7 +19,6 @@ export default function CartPage() {
     try {
       const savedCart = JSON.parse(localStorage.getItem('plantshop_cart') || '[]');
       
-      // Deduplicate items by ID to prevent key collisions
       const grouped = savedCart.reduce((acc: any, cartItem: any) => {
         const id = cartItem.id || cartItem.productId || cartItem.plantId;
         if (!id) return acc;
@@ -54,7 +52,8 @@ export default function CartPage() {
   }, [loadCart]);
 
   const subtotal = items.reduce((acc, item) => acc + item.price * item.quantity, 0);
-  const shipping = subtotal === 0 ? 0 : subtotal > 1500 ? 0 : 150;
+  // ✅ Updated: free delivery above ₹999
+  const shipping = subtotal === 0 ? 0 : subtotal > 999 ? 0 : 150;
   const total = subtotal + shipping;
 
   const updateQty = (id: string, delta: number) => {
@@ -63,7 +62,6 @@ export default function CartPage() {
     
     if (existingIndex !== -1) {
       const newQty = Math.max(1, (cart[existingIndex].quantity || 1) + delta);
-      // Standardize to 'id'
       cart[existingIndex] = { id, quantity: newQty };
       localStorage.setItem('plantshop_cart', JSON.stringify(cart));
       window.dispatchEvent(new Event('cart-updated'));
@@ -175,9 +173,10 @@ export default function CartPage() {
                         {shipping === 0 ? "FREE" : `₹${shipping}`}
                       </span>
                     </div>
+                    {/* ✅ Updated: ₹999 threshold */}
                     {shipping > 0 && (
                       <p className="text-xs text-muted-foreground bg-accent p-3 rounded-xl border border-primary/10">
-                        Add ₹{1500 - subtotal} more for FREE delivery!
+                        Add ₹{999 - subtotal} more for FREE delivery!
                       </p>
                     )}
                   </div>

@@ -6,7 +6,7 @@ import { StatusChip } from "@/components/shared/StatusChip";
 import {
   ArrowLeft, Package, MapPin, CreditCard, Loader2,
   CheckCircle2, Clock, AlertTriangle, RefreshCw,
-  XCircle, Calendar, Truck,
+  XCircle, Calendar, Truck, Banknote,
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -47,6 +47,9 @@ export default function OrderDetailPage() {
 
   const { data: order, isLoading } = useDoc(orderDocRef);
 
+  // Normalize payment method to lowercase for reliable comparisons ("COD", "cod", "Cod" → "cod")
+  const paymentMethod = order?.paymentMethod?.toLowerCase();
+
   useEffect(() => {
     if (!isUserLoading && !user) {
       router.push("/login?redirect=/orders");
@@ -76,9 +79,7 @@ export default function OrderDetailPage() {
     setIsSubmittingCancel(true);
 
     const orderRef = doc(db, "orders", orderId);
-    
-    // Updated cancellation logic: instead of auto-refunding, set refundStatus to 'pending'
-    // for the administrator to approve in the admin panel.
+
     const cancelData: any = {
       status: "Cancelled",
       cancelled: true,
@@ -88,18 +89,18 @@ export default function OrderDetailPage() {
       updatedAt: serverTimestamp(),
     };
 
-    if (order.paymentMethod === "online" && order.razorpayPaymentId) {
+    if (paymentMethod === "online" && order.razorpayPaymentId) {
       cancelData.refundStatus = "pending";
     }
 
     try {
       await updateDoc(orderRef, cancelData);
-      
-      toast({ 
-        title: "Order Cancelled", 
-        description: order.paymentMethod === "online" 
-          ? "Our team will review and process your refund shortly." 
-          : "Your order has been successfully cancelled." 
+
+      toast({
+        title: "Order Cancelled",
+        description: paymentMethod === "online"
+          ? "Our team will review and process your refund shortly."
+          : "Your order has been successfully cancelled.",
       });
 
       setShowCancelModal(false);
@@ -113,35 +114,53 @@ export default function OrderDetailPage() {
     }
   };
 
+  // ─── Refund section shown inside Cancelled notice ────────────────────────────
   const getRefundSection = () => {
-    if (order?.status !== "Cancelled" || order?.paymentMethod !== "online") return null;
+    if (order?.status !== "Cancelled") return null;
+
+    // COD: no payment was made, show simple info badge
+    if (paymentMethod === "cod") {
+      return (
+        <div className="flex items-start gap-3 rounded-2xl p-4 mt-4 bg-gray-50 border border-gray-200">
+          <Banknote className="h-5 w-5 text-gray-500 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-bold text-gray-700">No Refund Required</p>
+            <p className="text-xs mt-0.5 text-muted-foreground">
+              Since this was a Cash on Delivery order, no payment was collected and no refund is required.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    // Online payment: show refund status
     return (
       <div className={`flex items-start gap-3 rounded-2xl p-4 mt-4 ${
-        order.refundStatus === "processed" ? "bg-emerald-50" :
-        order.refundStatus === "failed" ? "bg-red-50" : "bg-amber-50"
+        order?.refundStatus === "processed" ? "bg-emerald-50" :
+        order?.refundStatus === "failed" ? "bg-red-50" : "bg-amber-50"
       }`}>
-        {order.refundStatus === "processed"
+        {order?.refundStatus === "processed"
           ? <CheckCircle2 className="h-5 w-5 text-emerald-500 mt-0.5 flex-shrink-0" />
-          : order.refundStatus === "failed"
+          : order?.refundStatus === "failed"
           ? <AlertTriangle className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
           : <Clock className="h-5 w-5 text-amber-500 mt-0.5 flex-shrink-0 animate-pulse" />
         }
         <div>
           <p className={`text-sm font-bold ${
-            order.refundStatus === "processed" ? "text-emerald-700" :
-            order.refundStatus === "failed" ? "text-red-600" : "text-amber-700"
+            order?.refundStatus === "processed" ? "text-emerald-700" :
+            order?.refundStatus === "failed" ? "text-red-600" : "text-amber-700"
           }`}>
-            {order.refundStatus === "processed"
-              ? `Refund Processed`
-              : order.refundStatus === "failed"
+            {order?.refundStatus === "processed"
+              ? "Refund Processed"
+              : order?.refundStatus === "failed"
               ? "Refund Failed"
               : "Refund Pending Review"}
           </p>
           <p className="text-xs mt-0.5 text-muted-foreground">
-            {order.refundStatus === "processed"
-              ? `Refund ID: ${order.refundId} · Credited to your original payment method within 5–7 business days`
-              : order.refundStatus === "failed"
-              ? order.refundError || "Please contact support"
+            {order?.refundStatus === "processed"
+              ? `Refund ID: ${order?.refundId} · Your refund (if applicable) will be processed back to your original payment method within 5–7 business days.`
+              : order?.refundStatus === "failed"
+              ? order?.refundError || "Please contact support"
               : "An administrator will approve your refund request shortly."}
           </p>
         </div>
@@ -258,7 +277,7 @@ export default function OrderDetailPage() {
               </div>
             )}
 
-            {/* Cancelled notice */}
+            {/* ── Cancelled notice ─────────────────────────────────────────────── */}
             {order.status === "Cancelled" && (
               <div className="bg-red-50 rounded-3xl p-6 border border-red-100">
                 <div className="flex items-start gap-3">
@@ -273,8 +292,15 @@ export default function OrderDetailPage() {
                         Cancelled on {format(new Date(order.cancelledAt.seconds * 1000), "MMM d, yyyy · h:mm a")}
                       </p>
                     )}
+                    {/* ✅ Refund message based on payment method */}
+                    <p className="text-xs text-red-400 mt-2 italic">
+                      {paymentMethod === "cod"
+                        ? "Since this was a Cash on Delivery order, no payment was collected and no refund is required."
+                        : "Your refund (if applicable) will be processed back to your original payment method within 5–7 business days."}
+                    </p>
                   </div>
                 </div>
+                {/* Detailed refund status block */}
                 {getRefundSection()}
               </div>
             )}
@@ -352,19 +378,23 @@ export default function OrderDetailPage() {
               </div>
             )}
 
-            {/* Payment Info */}
+            {/* ── Payment Info ─────────────────────────────────────────────────── */}
             <div className="bg-white rounded-3xl shadow-sm p-6">
               <h2 className="text-sm font-black uppercase tracking-wider text-muted-foreground mb-4 flex items-center gap-2">
                 <CreditCard className="h-4 w-4" /> Payment
               </h2>
               <div className="space-y-3 text-sm">
-                <div className="flex justify-between">
+
+                {/* Payment Method */}
+                <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Method</span>
                   <span className="font-bold capitalize">
-                    {order.paymentMethod === "online" ? "💳 Online Payment" : "💵 Cash on Delivery"}
+                    {paymentMethod === "online" ? "💳 Online Payment" : "💵 Cash on Delivery"}
                   </span>
                 </div>
-                <div className="flex justify-between">
+
+                {/* Payment Status */}
+                <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Status</span>
                   <span className={`font-bold ${
                     order.paymentStatus === "paid" ? "text-emerald-600" : "text-amber-600"
@@ -372,7 +402,37 @@ export default function OrderDetailPage() {
                     {order.paymentStatus === "paid" ? "✓ Paid" : order.paymentStatus || "Pending"}
                   </span>
                 </div>
-                <div className="flex justify-between">
+
+                {/* ✅ Refund badge — only shown on cancelled orders */}
+                {order.status === "Cancelled" && (
+                  <div className="flex justify-between items-center pt-2 border-t">
+                    <span className="text-muted-foreground">Refund</span>
+                    {paymentMethod === "cod" ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-gray-100 text-gray-600">
+                        <Banknote className="h-3 w-3" /> Not Required
+                      </span>
+                    ) : (
+                      <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full ${
+                        order.refundStatus === "processed"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : order.refundStatus === "failed"
+                          ? "bg-red-100 text-red-700"
+                          : "bg-amber-100 text-amber-700"
+                      }`}>
+                        {order.refundStatus === "processed" ? (
+                          <><CheckCircle2 className="h-3 w-3" /> Processed</>
+                        ) : order.refundStatus === "failed" ? (
+                          <><AlertTriangle className="h-3 w-3" /> Failed</>
+                        ) : (
+                          <><Clock className="h-3 w-3" /> Processing</>
+                        )}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Order Date */}
+                <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Order Date</span>
                   <span className="font-bold flex items-center gap-1">
                     <Calendar className="h-3.5 w-3.5" />
@@ -388,7 +448,7 @@ export default function OrderDetailPage() {
         </div>
       </main>
 
-      {/* Cancellation Modal */}
+      {/* ── Cancellation Modal ──────────────────────────────────────────────────── */}
       <Dialog open={showCancelModal} onOpenChange={(open) => !open && setShowCancelModal(false)}>
         <DialogContent className="rounded-[2rem] max-w-md">
           <DialogHeader>
@@ -397,7 +457,7 @@ export default function OrderDetailPage() {
               Cancel Order?
             </DialogTitle>
             <DialogDescription>
-              {order.paymentMethod === "online"
+              {paymentMethod === "online"
                 ? "Your refund request will be sent to our team for approval."
                 : "Please let us know why you're cancelling."}
             </DialogDescription>
@@ -432,11 +492,19 @@ export default function OrderDetailPage() {
               </div>
             )}
 
-            {order.paymentMethod === "online" && (
+            {/* ✅ Modal info block — COD vs Online */}
+            {paymentMethod === "online" ? (
               <div className="flex items-start gap-3 bg-blue-50 rounded-2xl p-4">
                 <RefreshCw className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
                 <p className="text-xs text-blue-700 font-medium leading-relaxed">
                   Upon approval, ₹{(order.totalAmount || order.total || 0).toLocaleString()} will be automatically refunded to your original payment method.
+                </p>
+              </div>
+            ) : (
+              <div className="flex items-start gap-3 bg-gray-50 rounded-2xl p-4 border border-gray-200">
+                <Banknote className="h-4 w-4 text-gray-500 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-gray-600 font-medium leading-relaxed">
+                  Since this is a Cash on Delivery order, no payment was collected and no refund is required.
                 </p>
               </div>
             )}
