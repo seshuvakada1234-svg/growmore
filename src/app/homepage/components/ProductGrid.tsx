@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState } from 'react';
@@ -84,7 +85,7 @@ function PlantCard({ plant }: { plant: Product }) {
 
   return (
     <div
-      className="group bg-white rounded-xl sm:rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer border border-border/50 flex flex-col"
+      className="group bg-white rounded-xl sm:rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer border border-border/50 flex flex-col h-full"
       onClick={() => router.push(`/plants/${plant.id}`)}
     >
       {/* Image */}
@@ -98,28 +99,28 @@ function PlantCard({ plant }: { plant: Product }) {
         />
 
         {/* Badges top-left */}
-        <div className="absolute top-2 left-2 sm:top-3 sm:left-3 flex flex-col gap-1 z-10">
+        <div className="absolute top-1.5 left-1.5 sm:top-3 sm:left-3 flex flex-col gap-1 z-10">
           {plant.isBestseller && (
-            <span className="text-[9px] sm:text-[10px] bg-[#FF6F00] text-white font-black px-1.5 sm:px-2 py-0.5 sm:py-1 rounded shadow-sm uppercase tracking-wider">BESTSELLER</span>
+            <span className="text-[8px] sm:text-[10px] bg-[#FF6F00] text-white font-black px-1 sm:px-2 py-0.5 rounded shadow-sm uppercase tracking-wider">BESTSELLER</span>
           )}
           {plant.isNew && (
-            <span className="text-[9px] sm:text-[10px] bg-primary text-white font-black px-1.5 sm:px-2 py-0.5 sm:py-1 rounded shadow-sm uppercase tracking-wider">NEW</span>
+            <span className="text-[8px] sm:text-[10px] bg-primary text-white font-black px-1 sm:px-2 py-0.5 rounded shadow-sm uppercase tracking-wider">NEW</span>
           )}
           {discount > 0 && (
-            <span className="text-[9px] sm:text-[10px] bg-destructive text-white font-black px-1.5 sm:px-2 py-0.5 sm:py-1 rounded shadow-sm uppercase tracking-wider">{discount}% OFF</span>
+            <span className="text-[8px] sm:text-[10px] bg-destructive text-white font-black px-1 sm:px-2 py-0.5 rounded shadow-sm uppercase tracking-wider">{discount}% OFF</span>
           )}
         </div>
 
         {/* Action buttons top-right */}
-        <div className="absolute top-2 right-2 sm:top-3 sm:right-3 z-10 flex flex-col gap-1 sm:gap-2">
+        <div className="absolute top-1.5 right-1.5 sm:top-3 sm:right-3 z-10 flex flex-col gap-1 sm:gap-2">
           <button
-            className="p-1.5 sm:p-2 rounded-full transition-all bg-white/70 hover:bg-white backdrop-blur-sm shadow-sm"
+            className="p-1 sm:p-2 rounded-full transition-all bg-white/70 hover:bg-white backdrop-blur-sm shadow-sm"
             onClick={toggleWishlist}
             aria-label="Add to wishlist"
           >
             <Heart
               className={cn(
-                "h-3.5 w-3.5 sm:h-4 sm:w-4 transition-all duration-300",
+                "h-3 w-3 sm:h-4 sm:w-4 transition-all duration-300",
                 isWishlisted ? "fill-red-500 text-red-500" : "text-muted-foreground",
                 isAnimating && "scale-125"
               )}
@@ -127,52 +128,52 @@ function PlantCard({ plant }: { plant: Product }) {
           </button>
           <ShareButton
             product={plant}
-            className="p-1.5 sm:p-2 h-auto w-auto rounded-full bg-white/70 hover:bg-white backdrop-blur-sm text-muted-foreground shadow-sm"
+            className="p-1 sm:p-2 h-auto w-auto rounded-full bg-white/70 hover:bg-white backdrop-blur-sm text-muted-foreground shadow-sm"
             variant="ghost"
           />
         </div>
 
         {/* Quick Add — hover on desktop, always on mobile */}
-        <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-3 sm:translate-y-full sm:group-hover:translate-y-0 transition-transform duration-300 z-10">
+        <div className="absolute bottom-0 left-0 right-0 p-1.5 sm:p-3 sm:translate-y-full sm:group-hover:translate-y-0 transition-transform duration-300 z-10">
           <button
             onClick={addToCart}
-            className={`w-full py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold uppercase tracking-widest transition-all shadow-lg ${addedToCart ? 'bg-primary text-white' : 'bg-white/95 text-primary hover:bg-primary hover:text-white'}`}
+            className={`w-full py-1.5 sm:py-2.5 rounded-lg sm:rounded-xl text-[8px] sm:text-xs font-bold uppercase tracking-widest transition-all shadow-lg ${addedToCart ? 'bg-primary text-white' : 'bg-white/95 text-primary hover:bg-primary hover:text-white'}`}
           >
-            {addedToCart ? '✓ Added' : '+ Quick Add'}
+            {addedToCart ? '✓ Added' : '+ Add'}
           </button>
         </div>
       </div>
 
       {/* Content */}
-      <div className="p-2.5 sm:p-4 flex flex-col flex-1">
-        <h3 className="font-headline font-bold text-[#1A2E1A] text-xs sm:text-sm leading-tight line-clamp-2 group-hover:text-primary transition-colors mb-0.5 sm:mb-1">
+      <div className="p-2 sm:p-4 flex flex-col flex-1">
+        <h3 className="font-headline font-bold text-[#1A2E1A] text-[11px] sm:text-sm leading-tight line-clamp-2 group-hover:text-primary transition-colors mb-0.5 sm:mb-1">
           {plant.name}
         </h3>
-        <p className="text-[10px] sm:text-xs text-muted-foreground mb-2 sm:mb-3">{plant.category}</p>
+        <p className="text-[9px] sm:text-xs text-muted-foreground mb-1.5 sm:mb-3">{plant.category}</p>
 
         {/* Rating + Price */}
-        <div className="flex items-center justify-between mb-2 sm:mb-3">
-          <div className="flex items-center gap-1">
-            <div className="flex items-center gap-0.5 bg-primary text-white text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded">
+        <div className="flex items-center justify-between mb-1.5 sm:mb-3">
+          <div className="flex items-center gap-0.5">
+            <div className="flex items-center gap-0.5 bg-primary text-white text-[8px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.5 rounded">
               <span>{plant.rating}</span>
               <Star className="h-2 w-2 sm:h-2.5 sm:w-2.5 fill-current" />
             </div>
-            <span className="text-[9px] sm:text-[10px] text-muted-foreground">({plant.reviewCount})</span>
+            <span className="text-[8px] sm:text-[10px] text-muted-foreground hidden xs:inline">({plant.reviewCount})</span>
           </div>
           <div className="flex items-center gap-1 sm:gap-2">
-            <span className="font-bold text-primary text-sm sm:text-base">{formatPrice(plant.price)}</span>
+            <span className="font-bold text-primary text-xs sm:text-base">{formatPrice(plant.price)}</span>
             {plant.oldPrice && (
-              <span className="text-[10px] sm:text-xs text-muted-foreground line-through">{formatPrice(plant.oldPrice)}</span>
+              <span className="text-[8px] sm:text-xs text-muted-foreground line-through hidden xs:inline">{formatPrice(plant.oldPrice)}</span>
             )}
           </div>
         </div>
 
         {/* Care + Delivery */}
-        <div className="flex items-center justify-between mt-auto pt-2 sm:pt-3 border-t border-dashed border-border">
-          <div className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold ${careLevelColor}`}>
+        <div className="flex items-center justify-between mt-auto pt-1.5 sm:pt-3 border-t border-dashed border-border">
+          <div className={`px-1 sm:px-2 py-0.5 rounded-full text-[8px] sm:text-[10px] font-bold ${careLevelColor}`}>
             {careLevelLabel}
           </div>
-          <p className="text-[9px] sm:text-[10px] text-muted-foreground font-semibold">
+          <p className="text-[8px] sm:text-[10px] text-muted-foreground font-semibold">
             {plant.price >= 499 ? '🚚 Free' : '🚚 ₹49'}
           </p>
         </div>

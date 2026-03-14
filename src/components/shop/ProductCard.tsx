@@ -1,3 +1,4 @@
+
 "use client";
 
 import Image from "next/image";
@@ -112,7 +113,7 @@ export function ProductCard({ product }: ProductCardProps) {
 
           {/* Category Badge — top left */}
           <div className="absolute top-1.5 left-1.5 sm:top-3 sm:left-3">
-            <Badge variant="secondary" className="bg-white/90 backdrop-blur-sm text-primary font-bold text-[9px] sm:text-xs px-1.5 py-0.5">
+            <Badge variant="secondary" className="bg-white/90 backdrop-blur-sm text-primary font-bold text-[8px] sm:text-xs px-1 sm:px-1.5 py-0.5">
               {product.category}
             </Badge>
           </div>
@@ -120,17 +121,17 @@ export function ProductCard({ product }: ProductCardProps) {
           {/* Discount Badge — top right area, below action buttons */}
           {discountPercent && (
             <div className="absolute top-1.5 right-1.5 sm:top-3 sm:right-3">
-              <Badge variant="destructive" className="font-bold text-[9px] sm:text-xs px-1.5 py-0.5">
-                {discountPercent}% OFF
+              <Badge variant="destructive" className="font-bold text-[8px] sm:text-xs px-1 sm:px-1.5 py-0.5">
+                {discountPercent}%
               </Badge>
             </div>
           )}
 
-          {/* Action Buttons — shown on hover (desktop) / always visible (mobile) */}
+          {/* Action Buttons — always visible on mobile, hover on desktop */}
           <div className="absolute bottom-1.5 right-1.5 sm:bottom-auto sm:top-10 sm:right-3 z-10 flex flex-row sm:flex-col gap-1 sm:gap-1.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
             <button
               onClick={handleToggleWishlist}
-              className="p-1.5 sm:p-2 rounded-full bg-white/90 shadow-sm transition-all hover:bg-white hover:scale-110"
+              className="p-1.5 rounded-full bg-white/90 shadow-sm transition-all hover:bg-white hover:scale-110"
               aria-label="Add to wishlist"
             >
               <Heart
@@ -143,14 +144,14 @@ export function ProductCard({ product }: ProductCardProps) {
             </button>
             <ShareButton
               product={product}
-              className="p-1.5 sm:p-2 h-auto w-auto rounded-full bg-white/90 shadow-sm transition-all hover:bg-white text-primary"
+              className="p-1.5 h-auto w-auto rounded-full bg-white/90 shadow-sm transition-all hover:bg-white text-primary"
               variant="ghost"
             />
           </div>
         </div>
 
         {/* Content */}
-        <CardContent className="p-2.5 sm:p-4 flex-grow flex flex-col gap-1 sm:gap-1.5">
+        <CardContent className="p-2 sm:p-4 flex-grow flex flex-col gap-1 sm:gap-1.5">
           {/* Rating */}
           <div className="flex items-center gap-1 text-yellow-500">
             <Star className="h-3 w-3 sm:h-3.5 sm:w-3.5 fill-current" />
@@ -158,7 +159,7 @@ export function ProductCard({ product }: ProductCardProps) {
           </div>
 
           {/* Name */}
-          <h3 className="font-headline font-bold text-xs sm:text-sm md:text-base leading-tight group-hover:text-primary transition-colors line-clamp-2">
+          <h3 className="font-headline font-bold text-[11px] sm:text-sm md:text-base leading-tight group-hover:text-primary transition-colors line-clamp-2">
             {product.name}
           </h3>
 
@@ -166,25 +167,25 @@ export function ProductCard({ product }: ProductCardProps) {
           <div className="flex items-baseline gap-1 sm:gap-2 mt-auto pt-1">
             <span className="text-primary font-extrabold text-sm sm:text-base md:text-lg">₹{product.price}</span>
             {product.oldPrice && (
-              <span className="text-muted-foreground line-through text-[10px] sm:text-xs">₹{product.oldPrice}</span>
+              <span className="text-muted-foreground line-through text-[9px] sm:text-xs">₹{product.oldPrice}</span>
             )}
           </div>
 
           {/* Delivery & Difficulty badges */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-[9px] sm:text-[10px] text-green-700 font-semibold">🟢 Easy</span>
-            <span className="text-[9px] sm:text-[10px] text-blue-600 font-semibold">🚚 Free</span>
+          <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
+            <span className="text-[8px] sm:text-[10px] text-green-700 font-semibold">🟢 Easy</span>
+            <span className="text-[8px] sm:text-[10px] text-blue-600 font-semibold">🚚 Free</span>
           </div>
         </CardContent>
 
         {/* Add to Cart */}
-        <CardFooter className="p-2.5 sm:p-4 pt-0">
+        <CardFooter className="p-2 sm:p-4 pt-0">
           <Button
-            className="w-full rounded-lg sm:rounded-xl flex items-center justify-center gap-1 sm:gap-2 h-8 sm:h-10 text-[11px] sm:text-sm font-bold"
+            className="w-full rounded-lg sm:rounded-xl flex items-center justify-center gap-1 sm:gap-2 h-8 sm:h-10 text-[10px] sm:text-sm font-bold px-2"
             onClick={handleAddToCart}
           >
             <ShoppingCart className="h-3 w-3 sm:h-4 sm:w-4" />
-            Add to Cart
+            <span className="xs:inline">Add</span>
           </Button>
         </CardFooter>
       </Card>
