@@ -941,15 +941,18 @@ export default function PlantDetailPage() {
       {/* ── Fixed Mobile Bottom Action Bar ── */}
       <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t p-3 flex items-center gap-3 md:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.1)]"
         style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}>
+        
+        <QuantityStepper value={qty} onChange={setQty} size="sm" />
+
         <Button 
           variant="outline" 
-          className="flex-1 h-12 rounded-full border-2 border-primary text-primary font-extrabold text-sm"
+          className="flex-1 h-11 rounded-full border-2 border-primary text-primary font-extrabold text-xs"
           onClick={handleAddToCart}
         >
           Add to Cart
         </Button>
         <Button 
-          className="flex-1 h-12 rounded-full font-extrabold text-sm"
+          className="flex-1 h-11 rounded-full font-extrabold text-xs"
           onClick={handleBuyItNow}
         >
           Buy Now
