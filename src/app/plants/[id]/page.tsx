@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
@@ -724,7 +725,7 @@ export default function PlantDetailPage() {
                   Free delivery on orders over ₹999
                 </div>
 
-                <div className="flex flex-col gap-3">
+                <div className="hidden md:flex flex-col gap-3">
                   {/* Row: Qty + Add to Cart */}
                   <div className="flex items-center gap-3">
                     <QuantityStepper value={qty} onChange={setQty} />
@@ -963,3 +964,4 @@ export default function PlantDetailPage() {
     </div>
   );
 }
+    
