@@ -17,14 +17,16 @@ export const app: FirebaseApp = !getApps().length ? initializeApp(firebaseConfig
  * Force long polling is often required in cloud-based development environments to prevent WebSocket timeouts.
  */
 let firestoreInstance: Firestore;
+
 try {
-  // Try to initialize with specific settings
+  // Use initializeFirestore to apply connectivity optimizations
   firestoreInstance = initializeFirestore(app, {
-    experimentalForceLongPolling: true,
+    experimentalForceLongPolling: true, // Bypasses WebSockets which are often blocked
+    experimentalAutoDetectLongPolling: true, // More robust detection for various network conditions
     ignoreUndefinedProperties: true,
   });
 } catch (e) {
-  // If already initialized (e.g. during HMR), get the existing instance
+  // If already initialized (common during development HMR), retrieve the existing instance
   firestoreInstance = getFirestore(app);
 }
 
