@@ -5,9 +5,8 @@ import { FirebaseClientProvider } from '@/firebase/client-provider';
 import { ReferralTracker } from '@/components/ReferralTracker';
 import { AffiliateProvider } from '@/context/affiliate-context';
 import { Suspense } from 'react';
-import Link from 'next/link';
-import { Home, Leaf, ShoppingCart, User } from 'lucide-react';
 import MonterraChatbot from '@/components/MonterraChatbot';
+import { MobileNav } from '@/components/layout/MobileNav';
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -46,25 +45,7 @@ export default function RootLayout({
               {children}
             </main>
 
-            {/* Mobile Bottom Navigation Bar - Only visible on mobile screens */}
-            <nav className="fixed bottom-0 left-0 w-full bg-white/95 backdrop-blur-md border-t flex justify-around py-3 md:hidden z-50 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
-              <Link href="/" className="flex flex-col items-center gap-1 text-muted-foreground hover:text-primary transition-all">
-                <Home className="h-5 w-5" />
-                <span className="text-[10px] font-bold uppercase tracking-wider">Home</span>
-              </Link>
-              <Link href="/plants" className="flex flex-col items-center gap-1 text-muted-foreground hover:text-primary transition-all">
-                <Leaf className="h-5 w-5" />
-                <span className="text-[10px] font-bold uppercase tracking-wider">Plants</span>
-              </Link>
-              <Link href="/cart" className="flex flex-col items-center gap-1 text-muted-foreground hover:text-primary transition-all">
-                <ShoppingCart className="h-5 w-5" />
-                <span className="text-[10px] font-bold uppercase tracking-wider">Cart</span>
-              </Link>
-              <Link href="/profile" className="flex flex-col items-center gap-1 text-muted-foreground hover:text-primary transition-all">
-                <User className="h-5 w-5" />
-                <span className="text-[10px] font-bold uppercase tracking-wider">Account</span>
-              </Link>
-            </nav>
+            <MobileNav />
 
             <MonterraChatbot />
             <Toaster />
