@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -11,8 +12,7 @@ import {
   useFirestore, 
   useDoc, 
   useCollection, 
-  useMemoFirebase, 
-  useStorage 
+  useMemoFirebase
 } from "@/firebase";
 import { 
   doc, 
@@ -20,7 +20,8 @@ import {
   collection, 
   serverTimestamp 
 } from "firebase/firestore";
-import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { getApp } from "firebase/app";
+import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { 
   Loader2, 
   Save, 
@@ -35,14 +36,14 @@ import { toast } from "@/hooks/use-toast";
 import Image from "next/image";
 import { PRODUCT_CATEGORIES } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
-import { errorEmitter } from "@/firebase/error-emitter";
-import { FirestorePermissionError } from "@/firebase/errors";
 
 export default function HomeEditor() {
   const db = useFirestore();
-  const storage = useStorage();
+  const storage = getStorage(getApp());
+  
   const [isSaving, setIsSaving] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [isUploading, setIsUploading] = useState(false);
 
   // --- HERO DATA ---
   const heroRef = useMemoFirebase(() => doc(db, "home_settings", "hero"), [db]);
@@ -75,8 +76,32 @@ export default function HomeEditor() {
     });
   }, [sectionsData]);
 
-  // --- HANDLERS ---
+  // --- UPLOAD HELPER ---
+  const uploadFile = (fileRef: any, file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      setIsUploading(true);
+      setUploadProgress(0);
+      const uploadTask = uploadBytesResumable(fileRef, file);
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+          setUploadProgress(progress);
+        },
+        (error) => {
+          setIsUploading(false);
+          reject(error);
+        },
+        async () => {
+          const url = await getDownloadURL(uploadTask.snapshot.ref);
+          setIsUploading(false);
+          resolve(url);
+        }
+      );
+    });
+  };
 
+  // --- HANDLERS ---
   const handleSaveHero = async () => {
     setIsSaving(true);
     setUploadProgress(0);
@@ -85,55 +110,28 @@ export default function HomeEditor() {
     try {
       if (heroFile) {
         const fileRef = ref(storage, `home/hero_${Date.now()}`);
-        await new Promise<void>((resolve, reject) => {
-          const uploadTask = uploadBytesResumable(fileRef, heroFile);
-          uploadTask.on('state_changed',
-            (snapshot) => {
-              const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-              setUploadProgress(progress);
-            },
-            (error) => reject(error),
-            async () => {
-              imageUrl = await getDownloadURL(uploadTask.snapshot.ref);
-              resolve();
-            }
-          );
-        });
+        imageUrl = await uploadFile(fileRef, heroFile);
       }
+
+      await setDoc(heroRef, {
+        ...heroForm,
+        imageUrl,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      toast({ title: "✅ Hero Section Updated!" });
+      setHeroFile(null);
     } catch (e: any) {
-      console.error("Storage upload error:", e);
       toast({ 
-        title: "Image Upload Failed", 
-        description: e.message || "Please check your network and permissions.",
+        title: "Upload Failed", 
+        description: e.message,
         variant: "destructive" 
       });
+    } finally {
       setIsSaving(false);
-      return;
+      setUploadProgress(0);
+      setIsUploading(false);
     }
-
-    const updateData = {
-      ...heroForm,
-      imageUrl,
-      updatedAt: serverTimestamp()
-    };
-
-    setDoc(heroRef, updateData, { merge: true })
-      .then(() => {
-        toast({ title: "Hero Section Updated" });
-        setHeroFile(null);
-      })
-      .catch(async (serverError) => {
-        const permissionError = new FirestorePermissionError({
-          path: heroRef.path,
-          operation: 'update',
-          requestResourceData: updateData,
-        });
-        errorEmitter.emit('permission-error', permissionError);
-      })
-      .finally(() => {
-        setIsSaving(false);
-        setUploadProgress(0);
-      });
   };
 
   const handleSaveCat = async (catId: string, formData: any, file: File | null) => {
@@ -144,81 +142,45 @@ export default function HomeEditor() {
     try {
       if (file) {
         const fileRef = ref(storage, `home/categories/${catId}_${Date.now()}`);
-        await new Promise<void>((resolve, reject) => {
-          const uploadTask = uploadBytesResumable(fileRef, file);
-          uploadTask.on('state_changed',
-            (snapshot) => {
-              const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-              setUploadProgress(progress);
-            },
-            (error) => reject(error),
-            async () => {
-              imageUrl = await getDownloadURL(uploadTask.snapshot.ref);
-              resolve();
-            }
-          );
-        });
+        imageUrl = await uploadFile(fileRef, file);
       }
+
+      const catDocRef = doc(db, "home_settings", "categories", "items", catId);
+      await setDoc(catDocRef, {
+        ...formData,
+        imageUrl,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      toast({ title: `✅ ${formData.label} Updated!` });
+      setSelectedCat(null);
+      setCatFile(null);
     } catch (e: any) {
-      console.error("Storage upload error:", e);
       toast({ 
-        title: "Image Upload Failed", 
-        description: e.message || "Please check your network and permissions.",
+        title: "Update Failed", 
+        description: e.message,
         variant: "destructive" 
       });
+    } finally {
       setIsSaving(false);
-      return;
+      setUploadProgress(0);
+      setIsUploading(false);
     }
-
-    const catDocRef = doc(db, "home_settings", "categories", "items", catId);
-    const updateData = {
-      ...formData,
-      imageUrl,
-      updatedAt: serverTimestamp()
-    };
-
-    setDoc(catDocRef, updateData, { merge: true })
-      .then(() => {
-        toast({ title: `${formData.label} Updated` });
-        setSelectedCat(null);
-        setCatFile(null);
-      })
-      .catch(async (serverError) => {
-        const permissionError = new FirestorePermissionError({
-          path: catDocRef.path,
-          operation: 'update',
-          requestResourceData: updateData,
-        });
-        errorEmitter.emit('permission-error', permissionError);
-      })
-      .finally(() => {
-        setIsSaving(false);
-        setUploadProgress(0);
-      });
   };
 
   const handleSaveSections = async () => {
     setIsSaving(true);
-    const updateData = {
-      ...sectionsForm,
-      updatedAt: serverTimestamp()
-    };
-
-    setDoc(sectionsRef, updateData, { merge: true })
-      .then(() => {
-        toast({ title: "Home Sections Updated" });
-      })
-      .catch(async (serverError) => {
-        const permissionError = new FirestorePermissionError({
-          path: sectionsRef.path,
-          operation: 'update',
-          requestResourceData: updateData,
-        });
-        errorEmitter.emit('permission-error', permissionError);
-      })
-      .finally(() => {
-        setIsSaving(false);
-      });
+    try {
+      await setDoc(sectionsRef, {
+        ...sectionsForm,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      toast({ title: "✅ Home Sections Updated!" });
+    } catch (e: any) {
+      toast({ title: "Save Failed", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   if (heroLoading || catsLoading || sectionsLoading) {
@@ -228,6 +190,24 @@ export default function HomeEditor() {
       </div>
     );
   }
+
+  // --- PROGRESS BAR COMPONENT ---
+  const ProgressBar = () => (
+    isUploading ? (
+      <div className="w-full space-y-1">
+        <div className="flex justify-between text-xs font-bold text-primary">
+          <span>Uploading image...</span>
+          <span>{uploadProgress}%</span>
+        </div>
+        <div className="w-full bg-primary/10 rounded-full h-2.5">
+          <div 
+            className="bg-primary h-2.5 rounded-full transition-all duration-300"
+            style={{ width: `${uploadProgress}%` }}
+          />
+        </div>
+      </div>
+    ) : null
+  );
 
   return (
     <div className="space-y-8 pb-20">
@@ -329,12 +309,13 @@ export default function HomeEditor() {
                 </div>
               </div>
 
-              <div className="pt-6 border-t">
+              <div className="pt-6 border-t space-y-4">
+                <ProgressBar />
                 <Button onClick={handleSaveHero} disabled={isSaving} className="rounded-full h-12 px-10 gap-2 font-bold shadow-xl shadow-primary/20">
                   {isSaving ? (
                     <>
                       <Loader2 className="h-5 w-5 animate-spin" />
-                      {uploadProgress > 0 ? `Uploading ${uploadProgress}%` : 'Saving...'}
+                      {isUploading ? `Uploading ${uploadProgress}%` : 'Saving...'}
                     </>
                   ) : (
                     <>
@@ -435,6 +416,9 @@ export default function HomeEditor() {
                         </label>
                       </div>
                     </div>
+
+                    <ProgressBar />
+
                     <Button 
                       className="w-full h-14 rounded-full font-bold text-lg gap-2"
                       disabled={isSaving}
@@ -443,7 +427,7 @@ export default function HomeEditor() {
                       {isSaving ? (
                         <>
                           <Loader2 className="h-5 w-5 animate-spin" />
-                          {uploadProgress > 0 ? `Uploading ${uploadProgress}%` : 'Saving...'}
+                          {isUploading ? `Uploading ${uploadProgress}%` : 'Saving...'}
                         </>
                       ) : (
                         <>
