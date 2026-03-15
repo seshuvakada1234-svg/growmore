@@ -17,7 +17,6 @@ import {
 import { 
   doc, 
   setDoc, 
-  updateDoc, 
   collection, 
   serverTimestamp 
 } from "firebase/firestore";
@@ -36,6 +35,8 @@ import { toast } from "@/hooks/use-toast";
 import Image from "next/image";
 import { PRODUCT_CATEGORIES } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
 
 export default function HomeEditor() {
   const db = useFirestore();
@@ -85,16 +86,28 @@ export default function HomeEditor() {
         imageUrl = await getDownloadURL(result.ref);
       }
 
-      await setDoc(heroRef, {
+      const updateData = {
         ...heroForm,
         imageUrl,
         updatedAt: serverTimestamp()
-      }, { merge: true });
+      };
 
-      toast({ title: "Hero Section Updated" });
-      setHeroFile(null);
+      setDoc(heroRef, updateData, { merge: true })
+        .then(() => {
+          toast({ title: "Hero Section Updated" });
+          setHeroFile(null);
+        })
+        .catch(async (serverError) => {
+          const permissionError = new FirestorePermissionError({
+            path: heroRef.path,
+            operation: 'update',
+            requestResourceData: updateData,
+          });
+          errorEmitter.emit('permission-error', permissionError);
+        });
+
     } catch (e) {
-      toast({ title: "Save Failed", variant: "destructive" });
+      toast({ title: "Upload Failed", variant: "destructive" });
     } finally {
       setIsSaving(false);
     }
@@ -110,17 +123,30 @@ export default function HomeEditor() {
         imageUrl = await getDownloadURL(result.ref);
       }
 
-      await setDoc(doc(db, "home_settings", "categories", "items", catId), {
+      const catDocRef = doc(db, "home_settings", "categories", "items", catId);
+      const updateData = {
         ...formData,
         imageUrl,
         updatedAt: serverTimestamp()
-      }, { merge: true });
+      };
 
-      toast({ title: `${formData.label} Updated` });
-      setSelectedCat(null);
-      setCatFile(null);
+      setDoc(catDocRef, updateData, { merge: true })
+        .then(() => {
+          toast({ title: `${formData.label} Updated` });
+          setSelectedCat(null);
+          setCatFile(null);
+        })
+        .catch(async (serverError) => {
+          const permissionError = new FirestorePermissionError({
+            path: catDocRef.path,
+            operation: 'update',
+            requestResourceData: updateData,
+          });
+          errorEmitter.emit('permission-error', permissionError);
+        });
+
     } catch (e) {
-      toast({ title: "Update Failed", variant: "destructive" });
+      toast({ title: "Upload Failed", variant: "destructive" });
     } finally {
       setIsSaving(false);
     }
@@ -129,11 +155,23 @@ export default function HomeEditor() {
   const handleSaveSections = async () => {
     setIsSaving(true);
     try {
-      await setDoc(sectionsRef, {
+      const updateData = {
         ...sectionsForm,
         updatedAt: serverTimestamp()
-      }, { merge: true });
-      toast({ title: "Home Sections Updated" });
+      };
+
+      setDoc(sectionsRef, updateData, { merge: true })
+        .then(() => {
+          toast({ title: "Home Sections Updated" });
+        })
+        .catch(async (serverError) => {
+          const permissionError = new FirestorePermissionError({
+            path: sectionsRef.path,
+            operation: 'update',
+            requestResourceData: updateData,
+          });
+          errorEmitter.emit('permission-error', permissionError);
+        });
     } catch (e) {
       toast({ title: "Save Failed", variant: "destructive" });
     } finally {

@@ -32,6 +32,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // --- Home Settings ---
+    match /home_settings/{document=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // --- Users ---
     match /users/{userId} {
       allow get: if isSignedIn();
