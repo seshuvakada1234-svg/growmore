@@ -15,11 +15,12 @@ import {
   Loader2,
   ShieldAlert,
   Banknote,
-  BarChart3
+  BarChart3,
+  Edit
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect, useRef } from "react";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/switch";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useUser, useFirestore, useDoc, useMemoFirebase, useAuth } from "@/firebase";
@@ -128,6 +129,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: "Affiliates", href: "/admin/affiliates", icon: Award },
     { name: "Payout Requests", href: "/admin/affiliate-payouts", icon: Banknote },
     { name: "Users", href: "/admin/users", icon: Users },
+    { name: "Home Editor", href: "/admin/home-editor", icon: Edit },
   ];
 
   const SidebarContent = () => (
