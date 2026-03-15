@@ -1,7 +1,16 @@
 
 import { PlaceHolderImages } from "./placeholder-images";
 
-export type Category = "Indoor" | "Outdoor" | "Seeds" | "Bonsai";
+export type Category = 
+  | "indoor" 
+  | "outdoor" 
+  | "air-purifying" 
+  | "flowering" 
+  | "trees" 
+  | "fruit" 
+  | "imported" 
+  | "bonsai" 
+  | "pots";
 
 export interface Product {
   id: string;
@@ -28,18 +37,31 @@ export interface Product {
   height: string;
   benefits: string[];
   potIncluded: boolean;
+  affiliateCommission?: number;
 }
 
 export type Plant = Product; // Alias for compatibility
 
-export const CATEGORIES: Category[] = ["Indoor", "Outdoor", "Seeds", "Bonsai"];
+export const PRODUCT_CATEGORIES = [
+  { label: "Indoor Plants", value: "indoor" },
+  { label: "Outdoor Plants", value: "outdoor" },
+  { label: "Air Purifying", value: "air-purifying" },
+  { label: "Flowering Plants", value: "flowering" },
+  { label: "Trees", value: "trees" },
+  { label: "Fruit Plants", value: "fruit" },
+  { label: "Imported Plants", value: "imported" },
+  { label: "Bonsai Plants", value: "bonsai" },
+  { label: "Pots & Planters", value: "pots" },
+] as const;
+
+export const CATEGORIES: Category[] = PRODUCT_CATEGORIES.map(c => c.value as Category);
 
 export const PRODUCTS: Product[] = [
   {
     id: "1",
     name: "Monstera Deliciosa",
     slug: "monstera-deliciosa",
-    category: "Indoor",
+    category: "indoor",
     price: 1299,
     oldPrice: 1599,
     description: "The Monstera Deliciosa, also known as the Swiss Cheese Plant, is a stunning tropical plant famous for its large, heart-shaped leaves with unique natural holes (fenestrations). It adds an instant jungle vibe to any interior space.",
@@ -62,13 +84,14 @@ export const PRODUCTS: Product[] = [
     weight: '2.5 kg',
     height: '24-30 inches',
     benefits: ['Air Purifying', 'Low Maintenance', 'Statement Piece'],
-    potIncluded: true
+    potIncluded: true,
+    affiliateCommission: 10
   },
   {
     id: "2",
     name: "Snake Plant Zeylanica",
     slug: "snake-plant-zeylanica",
-    category: "Indoor",
+    category: "indoor",
     price: 499,
     oldPrice: 699,
     description: "Snake Plants are architectural marvels that thrive on neglect. They are excellent air purifiers and can tolerate low light conditions, making them perfect for beginners or low-light rooms.",
@@ -90,13 +113,14 @@ export const PRODUCTS: Product[] = [
     weight: '1.2 kg',
     height: '12-18 inches',
     benefits: ['Oxygen Booster', 'Drought Tolerant', 'Sleep Better'],
-    potIncluded: true
+    potIncluded: true,
+    affiliateCommission: 10
   },
   {
     id: "3",
     name: "Fiddle Leaf Fig",
     slug: "fiddle-leaf-fig",
-    category: "Indoor",
+    category: "indoor",
     price: 2499,
     description: "The Fiddle Leaf Fig is the ultimate statement piece for any modern home. Its broad, violin-shaped leaves create a dramatic aesthetic that complements minimalist decor perfectly.",
     careGuide: "Bright indirect light is essential. Water only when top soil is dry. Rotate occasionally.",
@@ -116,7 +140,8 @@ export const PRODUCTS: Product[] = [
     weight: '5 kg',
     height: '4-5 feet',
     benefits: ['Interior Icon', 'Large Leaves', 'Humidity Loving'],
-    potIncluded: true
+    potIncluded: true,
+    affiliateCommission: 10
   }
 ];
 

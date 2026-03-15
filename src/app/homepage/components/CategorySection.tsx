@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useRef } from 'react';
@@ -32,14 +33,6 @@ const CATEGORIES = [
     emoji: '🌳'
   },
   {
-    id: 'tropical',
-    label: 'Tropical Plants',
-    count: '45+ plants',
-    image: PlaceHolderImages.find(img => img.id === 'cat-tropical')?.imageUrl || "https://picsum.photos/seed/tropical/600/800",
-    gradient: 'from-[#4527A0]/80 to-transparent',
-    emoji: '🌴'
-  },
-  {
     id: 'air-purifying',
     label: 'Air Purifying',
     count: '90+ plants',
@@ -48,8 +41,16 @@ const CATEGORIES = [
     emoji: '💨'
   },
   {
-    id: 'gifting',
-    label: 'Gift Plants',
+    id: 'bonsai',
+    label: 'Bonsai Plants',
+    count: '45+ plants',
+    image: "https://picsum.photos/seed/bonsai/600/800",
+    gradient: 'from-[#4527A0]/80 to-transparent',
+    emoji: '🌴'
+  },
+  {
+    id: 'pots',
+    label: 'Pots & Planters',
     count: '30+ sets',
     image: PlaceHolderImages.find(img => img.id === 'cat-gifting')?.imageUrl || "https://picsum.photos/seed/gift/600/800",
     gradient: 'from-[#880E4F]/80 to-transparent',
@@ -93,7 +94,7 @@ export default function CategorySection() {
           </div>
         </div>
 
-        {/* Category Cards — horizontal scroll on all screens */}
+        {/* Category Cards */}
         <div
           ref={scrollRef}
           className="flex gap-3 sm:gap-4 overflow-x-auto pb-3 sm:pb-4"
@@ -102,7 +103,7 @@ export default function CategorySection() {
           {CATEGORIES.map((cat) => (
             <div
               key={cat.id}
-              onClick={() => router.push(`/plants?cat=${cat.label}`)}
+              onClick={() => router.push(`/plants?cat=${cat.id}`)}
               className="flex-shrink-0 rounded-xl sm:rounded-2xl overflow-hidden cursor-pointer group relative shadow-md"
               style={{
                 width: 'clamp(110px, 28vw, 208px)',
