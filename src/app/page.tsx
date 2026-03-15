@@ -47,36 +47,36 @@ export default function Home() {
         />
 
         {/* Benefits Section */}
-        <section className="py-20 bg-primary text-white">
+        <section className="py-12 md:py-20 bg-primary text-white">
           <div className="container mx-auto px-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-12">
-              <div className="flex flex-col items-center text-center gap-4">
-                <div className="h-16 w-16 rounded-2xl bg-white/10 flex items-center justify-center">
-                  <Truck className="h-8 w-8" />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12">
+              <div className="flex flex-col items-center text-center gap-3 md:gap-4">
+                <div className="h-12 w-12 md:h-16 md:w-16 rounded-xl md:rounded-2xl bg-white/10 flex items-center justify-center">
+                  <Truck className="h-6 w-6 md:h-8 md:w-8" />
                 </div>
-                <h4 className="font-headline font-bold text-lg">Safe Delivery</h4>
-                <p className="text-white/70 text-sm">We ensure your plants reach you in perfect condition.</p>
+                <h4 className="font-headline font-bold text-sm md:text-lg">Safe Delivery</h4>
+                <p className="text-white/70 text-[11px] md:text-sm">We ensure your plants reach you in perfect condition.</p>
               </div>
-              <div className="flex flex-col items-center text-center gap-4">
-                <div className="h-16 w-16 rounded-2xl bg-white/10 flex items-center justify-center">
-                  <ShieldCheck className="h-8 w-8" />
+              <div className="flex flex-col items-center text-center gap-3 md:gap-4">
+                <div className="h-12 w-12 md:h-16 md:w-16 rounded-xl md:rounded-2xl bg-white/10 flex items-center justify-center">
+                  <ShieldCheck className="h-6 w-6 md:h-8 md:w-8" />
                 </div>
-                <h4 className="font-headline font-bold text-lg">Quality Guaranteed</h4>
-                <p className="text-white/70 text-sm">Only the healthiest plants make it to your doorstep.</p>
+                <h4 className="font-headline font-bold text-sm md:text-lg">Quality Guaranteed</h4>
+                <p className="text-white/70 text-[11px] md:text-sm">Only the healthiest plants make it to your doorstep.</p>
               </div>
-              <div className="flex flex-col items-center text-center gap-4">
-                <div className="h-16 w-16 rounded-2xl bg-white/10 flex items-center justify-center">
-                  <Flower2 className="h-8 w-8" />
+              <div className="flex flex-col items-center text-center gap-3 md:gap-4">
+                <div className="h-12 w-12 md:h-16 md:w-16 rounded-xl md:rounded-2xl bg-white/10 flex items-center justify-center">
+                  <Flower2 className="h-6 w-6 md:h-8 md:w-8" />
                 </div>
-                <h4 className="font-headline font-bold text-lg">Free Care Guides</h4>
-                <p className="text-white/70 text-sm">Expert advice from Monterra included with every single plant.</p>
+                <h4 className="font-headline font-bold text-sm md:text-lg">Free Care Guides</h4>
+                <p className="text-white/70 text-[11px] md:text-sm">Expert advice from Monterra included with every single plant.</p>
               </div>
-              <div className="flex flex-col items-center text-center gap-4">
-                <div className="h-16 w-16 rounded-2xl bg-white/10 flex items-center justify-center">
-                  <Clock className="h-8 w-8" />
+              <div className="flex flex-col items-center text-center gap-3 md:gap-4">
+                <div className="h-12 w-12 md:h-16 md:w-16 rounded-xl md:rounded-2xl bg-white/10 flex items-center justify-center">
+                  <Clock className="h-6 w-6 md:h-8 md:w-8" />
                 </div>
-                <h4 className="font-headline font-bold text-lg">24/7 Support</h4>
-                <p className="text-white/70 text-sm">Got a question? Monterra plant experts are here to help.</p>
+                <h4 className="font-headline font-bold text-sm md:text-lg">24/7 Support</h4>
+                <p className="text-white/70 text-[11px] md:text-sm">Got a question? Monterra plant experts are here to help.</p>
               </div>
             </div>
           </div>
