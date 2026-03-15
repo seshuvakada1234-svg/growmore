@@ -235,7 +235,27 @@ function CheckoutContent() {
         }
       }
 
+      // Send email + WhatsApp notifications
       const notifications = await sendOrderNotifications(orderId);
+
+      // Trigger n8n webhook for COD verification
+      if (orderData.paymentMethod === 'cod') {
+        try {
+          const userPhone = formData.phone;
+          await fetch('https://seshu111.app.n8n.cloud/webhook/cod-order-webhook', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              order_id: orderId,
+              phone: userPhone.startsWith('+91') ? userPhone : '+91' + userPhone,
+              payment_method: 'COD'
+            })
+          });
+        } catch (err) {
+          console.error('n8n webhook error:', err);
+          // Don't block order if webhook fails
+        }
+      }
 
       if (isBuyNow) {
         sessionStorage.removeItem("buynow_cart");
