@@ -41,7 +41,7 @@ const OFFERS = [
 
 export default function OfferBanner() {
   return (
-    <section className="py-14 bg-accent/30">
+    <section className="hidden md:block py-14 bg-accent/30">
       <div className="max-w-7xl mx-auto px-4 md:px-6">
         <div className="text-center mb-10">
           <div className="text-primary font-bold uppercase tracking-wider text-xs mb-1">Limited Time</div>
