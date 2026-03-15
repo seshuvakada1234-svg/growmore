@@ -20,7 +20,7 @@ import {
   collection, 
   serverTimestamp 
 } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { 
   Loader2, 
   Save, 
@@ -42,6 +42,7 @@ export default function HomeEditor() {
   const db = useFirestore();
   const storage = useStorage();
   const [isSaving, setIsSaving] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
 
   // --- HERO DATA ---
   const heroRef = useMemoFirebase(() => doc(db, "home_settings", "hero"), [db]);
@@ -78,13 +79,26 @@ export default function HomeEditor() {
 
   const handleSaveHero = async () => {
     setIsSaving(true);
+    setUploadProgress(0);
     let imageUrl = heroForm.imageUrl;
 
     try {
       if (heroFile) {
         const fileRef = ref(storage, `home/hero_${Date.now()}`);
-        const result = await uploadBytes(fileRef, heroFile);
-        imageUrl = await getDownloadURL(result.ref);
+        await new Promise<void>((resolve, reject) => {
+          const uploadTask = uploadBytesResumable(fileRef, heroFile);
+          uploadTask.on('state_changed',
+            (snapshot) => {
+              const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+              setUploadProgress(progress);
+            },
+            (error) => reject(error),
+            async () => {
+              imageUrl = await getDownloadURL(uploadTask.snapshot.ref);
+              resolve();
+            }
+          );
+        });
       }
     } catch (e: any) {
       console.error("Storage upload error:", e);
@@ -118,18 +132,32 @@ export default function HomeEditor() {
       })
       .finally(() => {
         setIsSaving(false);
+        setUploadProgress(0);
       });
   };
 
   const handleSaveCat = async (catId: string, formData: any, file: File | null) => {
     setIsSaving(true);
+    setUploadProgress(0);
     let imageUrl = formData.imageUrl;
 
     try {
       if (file) {
         const fileRef = ref(storage, `home/categories/${catId}_${Date.now()}`);
-        const result = await uploadBytes(fileRef, file);
-        imageUrl = await getDownloadURL(result.ref);
+        await new Promise<void>((resolve, reject) => {
+          const uploadTask = uploadBytesResumable(fileRef, file);
+          uploadTask.on('state_changed',
+            (snapshot) => {
+              const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+              setUploadProgress(progress);
+            },
+            (error) => reject(error),
+            async () => {
+              imageUrl = await getDownloadURL(uploadTask.snapshot.ref);
+              resolve();
+            }
+          );
+        });
       }
     } catch (e: any) {
       console.error("Storage upload error:", e);
@@ -165,6 +193,7 @@ export default function HomeEditor() {
       })
       .finally(() => {
         setIsSaving(false);
+        setUploadProgress(0);
       });
   };
 
@@ -302,8 +331,17 @@ export default function HomeEditor() {
 
               <div className="pt-6 border-t">
                 <Button onClick={handleSaveHero} disabled={isSaving} className="rounded-full h-12 px-10 gap-2 font-bold shadow-xl shadow-primary/20">
-                  {isSaving ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
-                  Save Hero Settings
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      {uploadProgress > 0 ? `Uploading ${uploadProgress}%` : 'Saving...'}
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-5 w-5" />
+                      Save Hero Settings
+                    </>
+                  )}
                 </Button>
               </div>
             </CardContent>
@@ -402,8 +440,17 @@ export default function HomeEditor() {
                       disabled={isSaving}
                       onClick={() => handleSaveCat(selectedCat.id, selectedCat, catFile)}
                     >
-                      {isSaving ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
-                      Update Category
+                      {isSaving ? (
+                        <>
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                          {uploadProgress > 0 ? `Uploading ${uploadProgress}%` : 'Saving...'}
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-5 w-5" />
+                          Update Category
+                        </>
+                      )}
                     </Button>
                   </CardContent>
                 </Card>
