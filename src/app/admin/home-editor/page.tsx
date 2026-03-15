@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -36,6 +35,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import Image from "next/image";
 import { PRODUCT_CATEGORIES } from "@/lib/mock-data";
+import { cn } from "@/lib/utils";
 
 export default function HomeEditor() {
   const db = useFirestore();
