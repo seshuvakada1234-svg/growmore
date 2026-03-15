@@ -78,105 +78,118 @@ export default function HomeEditor() {
 
   const handleSaveHero = async () => {
     setIsSaving(true);
+    let imageUrl = heroForm.imageUrl;
+
     try {
-      let imageUrl = heroForm.imageUrl;
       if (heroFile) {
         const fileRef = ref(storage, `home/hero_${Date.now()}`);
         const result = await uploadBytes(fileRef, heroFile);
         imageUrl = await getDownloadURL(result.ref);
       }
-
-      const updateData = {
-        ...heroForm,
-        imageUrl,
-        updatedAt: serverTimestamp()
-      };
-
-      setDoc(heroRef, updateData, { merge: true })
-        .then(() => {
-          toast({ title: "Hero Section Updated" });
-          setHeroFile(null);
-        })
-        .catch(async (serverError) => {
-          const permissionError = new FirestorePermissionError({
-            path: heroRef.path,
-            operation: 'update',
-            requestResourceData: updateData,
-          });
-          errorEmitter.emit('permission-error', permissionError);
-        });
-
-    } catch (e) {
-      toast({ title: "Upload Failed", variant: "destructive" });
-    } finally {
+    } catch (e: any) {
+      console.error("Storage upload error:", e);
+      toast({ 
+        title: "Image Upload Failed", 
+        description: e.message || "Please check your network and permissions.",
+        variant: "destructive" 
+      });
       setIsSaving(false);
+      return;
     }
+
+    const updateData = {
+      ...heroForm,
+      imageUrl,
+      updatedAt: serverTimestamp()
+    };
+
+    setDoc(heroRef, updateData, { merge: true })
+      .then(() => {
+        toast({ title: "Hero Section Updated" });
+        setHeroFile(null);
+      })
+      .catch(async (serverError) => {
+        const permissionError = new FirestorePermissionError({
+          path: heroRef.path,
+          operation: 'update',
+          requestResourceData: updateData,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      })
+      .finally(() => {
+        setIsSaving(false);
+      });
   };
 
   const handleSaveCat = async (catId: string, formData: any, file: File | null) => {
     setIsSaving(true);
+    let imageUrl = formData.imageUrl;
+
     try {
-      let imageUrl = formData.imageUrl;
       if (file) {
         const fileRef = ref(storage, `home/categories/${catId}_${Date.now()}`);
         const result = await uploadBytes(fileRef, file);
         imageUrl = await getDownloadURL(result.ref);
       }
-
-      const catDocRef = doc(db, "home_settings", "categories", "items", catId);
-      const updateData = {
-        ...formData,
-        imageUrl,
-        updatedAt: serverTimestamp()
-      };
-
-      setDoc(catDocRef, updateData, { merge: true })
-        .then(() => {
-          toast({ title: `${formData.label} Updated` });
-          setSelectedCat(null);
-          setCatFile(null);
-        })
-        .catch(async (serverError) => {
-          const permissionError = new FirestorePermissionError({
-            path: catDocRef.path,
-            operation: 'update',
-            requestResourceData: updateData,
-          });
-          errorEmitter.emit('permission-error', permissionError);
-        });
-
-    } catch (e) {
-      toast({ title: "Upload Failed", variant: "destructive" });
-    } finally {
+    } catch (e: any) {
+      console.error("Storage upload error:", e);
+      toast({ 
+        title: "Image Upload Failed", 
+        description: e.message || "Please check your network and permissions.",
+        variant: "destructive" 
+      });
       setIsSaving(false);
+      return;
     }
+
+    const catDocRef = doc(db, "home_settings", "categories", "items", catId);
+    const updateData = {
+      ...formData,
+      imageUrl,
+      updatedAt: serverTimestamp()
+    };
+
+    setDoc(catDocRef, updateData, { merge: true })
+      .then(() => {
+        toast({ title: `${formData.label} Updated` });
+        setSelectedCat(null);
+        setCatFile(null);
+      })
+      .catch(async (serverError) => {
+        const permissionError = new FirestorePermissionError({
+          path: catDocRef.path,
+          operation: 'update',
+          requestResourceData: updateData,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      })
+      .finally(() => {
+        setIsSaving(false);
+      });
   };
 
   const handleSaveSections = async () => {
     setIsSaving(true);
-    try {
-      const updateData = {
-        ...sectionsForm,
-        updatedAt: serverTimestamp()
-      };
+    const updateData = {
+      ...sectionsForm,
+      updatedAt: serverTimestamp()
+    };
 
-      setDoc(sectionsRef, updateData, { merge: true })
-        .then(() => {
-          toast({ title: "Home Sections Updated" });
-        })
-        .catch(async (serverError) => {
-          const permissionError = new FirestorePermissionError({
-            path: sectionsRef.path,
-            operation: 'update',
-            requestResourceData: updateData,
-          });
-          errorEmitter.emit('permission-error', permissionError);
+    setDoc(sectionsRef, updateData, { merge: true })
+      .then(() => {
+        toast({ title: "Home Sections Updated" });
+      })
+      .catch(async (serverError) => {
+        const permissionError = new FirestorePermissionError({
+          path: sectionsRef.path,
+          operation: 'update',
+          requestResourceData: updateData,
         });
-    } catch (e) {
-      toast({ title: "Save Failed", variant: "destructive" });
-    } finally {
-      setIsSaving(false);
-    }
+        errorEmitter.emit('permission-error', permissionError);
+      })
+      .finally(() => {
+        setIsSaving(false);
+      });
   };
 
   if (heroLoading || catsLoading || sectionsLoading) {
