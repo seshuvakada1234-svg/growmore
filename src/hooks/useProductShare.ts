@@ -23,22 +23,21 @@ export function useProductShare({ product, user }: UseProductShareProps) {
   const [shareLink, setShareLink] = useState('');
   const [shareMessage, setShareMessage] = useState('');
   const [copied, setCopied] = useState(false);
-  const [statusMsg, setStatusMsg] = useState('');
 
   const isAffiliate = user?.affiliateApproved === true;
   const potentialEarning = calculateEarning(product.price, product.affiliateCommission);
 
   useEffect(() => {
-    const link = generateShareLink(product.slug, user);
+    const link = generateShareLink(product.slug || product.id, user);
     const msg = generateShareMessage(product, link, user);
     setShareLink(link);
     setShareMessage(msg);
   }, [product, user]);
 
   const handleShare = async (platform: SharePlatform) => {
-    // If affiliate, ensure the link is logged in the system
+    // If affiliate, ensure the link is logged in the system for tracking
     if (isAffiliate && user) {
-      const originalUrl = `https://monterra.com/plants/${product.slug}`;
+      const originalUrl = `${window.location.origin}/plants/${product.slug || product.id}`;
       await saveAffiliateLink(user.uid, originalUrl, shareLink);
     }
 
@@ -46,10 +45,15 @@ export function useProductShare({ product, user }: UseProductShareProps) {
     
     if (result.copied) {
       setCopied(true);
-      toast({ title: "Link Copied!", description: "Paste it anywhere to share." });
+      toast({ 
+        title: "Link Copied!", 
+        description: "Link copied to clipboard!",
+      });
       setTimeout(() => setCopied(false), 2000);
     }
   };
+
+  const handleCopyLink = () => handleShare('copy');
 
   const handleDefaultShare = async () => {
     if (typeof navigator !== 'undefined' && navigator.share) {
@@ -60,12 +64,13 @@ export function useProductShare({ product, user }: UseProductShareProps) {
           url: shareLink,
         });
       } catch (err) {
+        // Fallback to copy if share is cancelled or fails
         if ((err as Error).name !== 'AbortError') {
-          handleShare('whatsapp');
+          handleCopyLink();
         }
       }
     } else {
-      handleShare('whatsapp');
+      handleCopyLink();
     }
   };
 
@@ -75,8 +80,8 @@ export function useProductShare({ product, user }: UseProductShareProps) {
     potentialEarning,
     isAffiliate,
     copied,
-    statusMsg,
     handleShare,
+    handleCopyLink,
     handleDefaultShare
   };
 }

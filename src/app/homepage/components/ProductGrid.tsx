@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState } from 'react';
@@ -10,7 +9,7 @@ import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
 import { doc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { ShareButton } from '@/components/shared/ShareButton';
+import { ShareMenu } from '@/components/shared/ShareButton';
 
 const formatPrice = (price: number) => `₹${price.toLocaleString('en-IN')}`;
 
@@ -126,7 +125,7 @@ function PlantCard({ plant }: { plant: Product }) {
               )}
             />
           </button>
-          <ShareButton
+          <ShareMenu
             product={plant}
             className="p-1 sm:p-2 h-auto w-auto rounded-full bg-white/70 hover:bg-white backdrop-blur-sm text-muted-foreground shadow-sm"
             variant="ghost"

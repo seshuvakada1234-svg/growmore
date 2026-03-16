@@ -12,7 +12,7 @@ import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
 import { doc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
-import { ShareButton } from "@/components/shared/ShareButton";
+import { ShareMenu } from "@/components/shared/ShareButton";
 
 interface ProductCardProps {
   product: Product;
@@ -168,7 +168,7 @@ export function ProductCard({ product }: ProductCardProps) {
                 )}
               />
             </button>
-            <ShareButton
+            <ShareMenu
               product={product}
               className="p-1.5 h-auto w-auto rounded-full bg-white/90 shadow-sm transition-all hover:bg-white text-primary"
               variant="ghost"

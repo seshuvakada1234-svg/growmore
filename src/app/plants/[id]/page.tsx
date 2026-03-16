@@ -18,7 +18,7 @@ import {
   where, limit, getDoc,
 } from "firebase/firestore";
 import { cn } from "@/lib/utils";
-import { ShareButton } from "@/components/shared/ShareButton";
+import { ShareMenu } from "@/components/shared/ShareButton";
 import { calculateEarning } from "@/lib/affiliateEngine";
 import { MonterraUser } from "@/types/affiliate.types";
 import {
@@ -275,7 +275,7 @@ const ImageGallery = memo(function ImageGallery({
               isWishlisted ? "fill-red-500 text-red-500" : "text-primary",
               isAnimating && "scale-125")} />
           </Button>
-          <ShareButton product={product}
+          <ShareMenu product={product}
             className="rounded-full bg-white/85 backdrop-blur-sm shadow-sm hover:bg-white w-9 h-9 md:w-10 md:h-10 touch-manipulation" />
         </div>
       </div>

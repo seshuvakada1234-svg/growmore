@@ -15,9 +15,12 @@ import { MonterraUser, SharePlatform, MonterraProduct } from "@/types/affiliate.
 
 /**
  * 1. Generates a referral link if the user is an approved affiliate.
+ * Now uses the current origin for dynamic link generation.
  */
 export function generateShareLink(productSlug: string, user: MonterraUser | null) {
-  const baseUrl = `https://monterra.com/plants/${productSlug}`;
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://monterra.in';
+  const baseUrl = `${origin}/plants/${productSlug}`;
+  
   if (user?.affiliateApproved) {
     return `${baseUrl}?ref=${user.uid}`;
   }
