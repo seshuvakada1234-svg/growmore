@@ -14,6 +14,7 @@ export const app: FirebaseApp = !getApps().length ? initializeApp(firebaseConfig
 
 /**
  * Initialize Firestore with connectivity settings optimized for proxy/restricted environments.
+ * We force long polling and disable fetch streams to ensure a stable connection in the Studio environment.
  */
 let firestoreInstance: Firestore;
 
@@ -21,9 +22,11 @@ try {
   firestoreInstance = initializeFirestore(app, {
     experimentalForceLongPolling: true,
     experimentalAutoDetectLongPolling: true,
+    useFetchStreams: false, // Disabling fetch streams improves stability in certain proxy environments
     ignoreUndefinedProperties: true,
   });
 } catch (e) {
+  // If initializeFirestore was already called, getFirestore returns the existing instance
   firestoreInstance = getFirestore(app);
 }
 
