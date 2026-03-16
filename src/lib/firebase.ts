@@ -14,23 +14,24 @@ export const app: FirebaseApp = !getApps().length ? initializeApp(firebaseConfig
 
 /**
  * Initialize Firestore with connectivity settings optimized for proxy/restricted environments.
- * Force long polling is often required in cloud-based development environments to prevent WebSocket timeouts.
  */
 let firestoreInstance: Firestore;
 
 try {
-  // Use initializeFirestore to apply connectivity optimizations
   firestoreInstance = initializeFirestore(app, {
-    experimentalForceLongPolling: true, // Bypasses WebSockets which are often blocked
-    experimentalAutoDetectLongPolling: true, // More robust detection for various network conditions
+    experimentalForceLongPolling: true,
+    experimentalAutoDetectLongPolling: true,
     ignoreUndefinedProperties: true,
   });
 } catch (e) {
-  // If already initialized (common during development HMR), retrieve the existing instance
   firestoreInstance = getFirestore(app);
 }
 
 export const db: Firestore = firestoreInstance;
+
+/**
+ * Initialize Storage with the explicit bucket from config.
+ */
 export const storage: FirebaseStorage = getStorage(app);
 
 // Auth instance - initialized once on client

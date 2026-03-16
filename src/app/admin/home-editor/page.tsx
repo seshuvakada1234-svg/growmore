@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -20,8 +19,8 @@ import {
   collection, 
   serverTimestamp 
 } from "firebase/firestore";
-import { getApp } from "firebase/app";
-import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { storage } from "@/lib/firebase";
+import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { 
   Loader2, 
   Save, 
@@ -39,7 +38,6 @@ import { cn } from "@/lib/utils";
 
 export default function HomeEditor() {
   const db = useFirestore();
-  const storage = getStorage(getApp());
   
   const [isSaving, setIsSaving] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
@@ -81,19 +79,28 @@ export default function HomeEditor() {
     return new Promise((resolve, reject) => {
       setIsUploading(true);
       setUploadProgress(0);
-      const uploadTask = uploadBytesResumable(fileRef, file);
+      
+      const metadata = {
+        contentType: file.type,
+      };
+
+      const uploadTask = uploadBytesResumable(fileRef, file, metadata);
+      
       uploadTask.on(
         'state_changed',
         (snapshot) => {
           const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+          console.log('Upload is ' + progress + '% done');
           setUploadProgress(progress);
         },
         (error) => {
+          console.error('Storage Upload Error:', error.code, error.message);
           setIsUploading(false);
           reject(error);
         },
         async () => {
           const url = await getDownloadURL(uploadTask.snapshot.ref);
+          console.log('File available at', url);
           setIsUploading(false);
           resolve(url);
         }
@@ -104,7 +111,6 @@ export default function HomeEditor() {
   // --- HANDLERS ---
   const handleSaveHero = async () => {
     setIsSaving(true);
-    setUploadProgress(0);
     let imageUrl = heroForm.imageUrl;
 
     try {
@@ -122,9 +128,10 @@ export default function HomeEditor() {
       toast({ title: "✅ Hero Section Updated!" });
       setHeroFile(null);
     } catch (e: any) {
+      console.error("Save Hero Error:", e);
       toast({ 
         title: "Upload Failed", 
-        description: e.message,
+        description: e.message || "Could not upload image. Check console for details.",
         variant: "destructive" 
       });
     } finally {
@@ -136,7 +143,6 @@ export default function HomeEditor() {
 
   const handleSaveCat = async (catId: string, formData: any, file: File | null) => {
     setIsSaving(true);
-    setUploadProgress(0);
     let imageUrl = formData.imageUrl;
 
     try {
@@ -156,9 +162,10 @@ export default function HomeEditor() {
       setSelectedCat(null);
       setCatFile(null);
     } catch (e: any) {
+      console.error("Save Category Error:", e);
       toast({ 
         title: "Update Failed", 
-        description: e.message,
+        description: e.message || "Check console for details.",
         variant: "destructive" 
       });
     } finally {
