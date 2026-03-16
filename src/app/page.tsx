@@ -48,6 +48,15 @@ export default function Home() {
 
         <OfferBanner />
 
+        {config.topRated?.enabled && (
+          <ProductGrid 
+            title={config.topRated.title}
+            subtitle="Handpicked For You" 
+            filterKey="featured" 
+            limit={8} 
+          />
+        )}
+
         {config.crowdFavorites?.enabled && (
           <ProductGrid 
             title={config.crowdFavorites.title}
@@ -91,15 +100,6 @@ export default function Home() {
             </div>
           </div>
         </section>
-
-        {config.topRated?.enabled && (
-          <ProductGrid 
-            title={config.topRated.title}
-            subtitle="Handpicked For You" 
-            filterKey="featured" 
-            limit={8} 
-          />
-        )}
 
         <AffiliateBanner />
       </main>
