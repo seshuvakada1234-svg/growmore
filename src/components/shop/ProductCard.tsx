@@ -1,4 +1,3 @@
-
 "use client";
 
 import Image from "next/image";
@@ -17,6 +16,23 @@ import { ShareButton } from "@/components/shared/ShareButton";
 
 interface ProductCardProps {
   product: Product;
+}
+
+// ── Get the best available image URL ────────────────────────────────────────
+function getProductImage(product: Product): string {
+  // New products use images[] array (R2 + ImageKit)
+  const raw = product.images?.[0] || product.imageUrl || "";
+  if (!raw) return "/placeholder.svg";
+
+  // If it's an ImageKit URL → proxy it to hide the URL from browser
+  if (raw.includes("ik.imagekit.io")) {
+    const parts = raw.split("ik.imagekit.io/")[1]?.split("/") ?? [];
+    const key = parts.slice(1).join("/");
+    if (!key) return raw;
+    return `/api/image?file=${encodeURIComponent(key)}&w=600`;
+  }
+
+  return raw;
 }
 
 export function ProductCard({ product }: ProductCardProps) {
@@ -97,19 +113,29 @@ export function ProductCard({ product }: ProductCardProps) {
     ? Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)
     : null;
 
+  const imageUrl = getProductImage(product);
+
   return (
     <Link href={`/plants/${product.id}`}>
       <Card className="group overflow-hidden bg-card border border-gray-100 shadow-sm hover:shadow-md transition-shadow rounded-xl sm:rounded-2xl h-full flex flex-col relative">
 
         {/* Image */}
         <div className="relative overflow-hidden" style={{ aspectRatio: '1 / 1' }}>
-          <Image
-            src={product.imageUrl}
-            alt={product.name}
-            fill
-            className="object-cover transition-transform duration-500 group-hover:scale-105"
-            data-ai-hint="plant image"
-          />
+          {imageUrl ? (
+            <Image
+              src={imageUrl}
+              alt={product.name}
+              fill
+              className="object-cover transition-transform duration-500 group-hover:scale-105"
+              data-ai-hint="plant image"
+              unoptimized
+            />
+          ) : (
+            // Fallback placeholder when no image
+            <div className="absolute inset-0 bg-muted flex items-center justify-center">
+              <span className="text-4xl">🌿</span>
+            </div>
+          )}
 
           {/* Category Badge — top left */}
           <div className="absolute top-1.5 left-1.5 sm:top-3 sm:left-3">
@@ -118,7 +144,7 @@ export function ProductCard({ product }: ProductCardProps) {
             </Badge>
           </div>
 
-          {/* Discount Badge — top right area, below action buttons */}
+          {/* Discount Badge — top right */}
           {discountPercent && (
             <div className="absolute top-1.5 right-1.5 sm:top-3 sm:right-3">
               <Badge variant="destructive" className="font-bold text-[8px] sm:text-xs px-1 sm:px-1.5 py-0.5">
@@ -127,7 +153,7 @@ export function ProductCard({ product }: ProductCardProps) {
             </div>
           )}
 
-          {/* Action Buttons — always visible on mobile, hover on desktop */}
+          {/* Action Buttons */}
           <div className="absolute bottom-1.5 right-1.5 sm:bottom-auto sm:top-10 sm:right-3 z-10 flex flex-row sm:flex-col gap-1 sm:gap-1.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
             <button
               onClick={handleToggleWishlist}

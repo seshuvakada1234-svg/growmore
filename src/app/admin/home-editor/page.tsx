@@ -7,27 +7,25 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
-import { 
-  useFirestore, 
-  useDoc, 
-  useCollection, 
+import {
+  useFirestore,
+  useDoc,
+  useCollection,
   useMemoFirebase
 } from "@/firebase";
-import { 
-  doc, 
-  setDoc, 
-  collection, 
-  serverTimestamp 
+import {
+  doc,
+  setDoc,
+  collection,
+  serverTimestamp
 } from "firebase/firestore";
-import { storage } from "@/lib/firebase";
-import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { 
-  Loader2, 
-  Save, 
-  Image as ImageIcon, 
-  Upload, 
-  LayoutDashboard, 
-  Monitor, 
+import {
+  Loader2,
+  Save,
+  Image as ImageIcon,
+  Upload,
+  LayoutDashboard,
+  Monitor,
   ListTree,
   CheckCircle2
 } from "lucide-react";
@@ -36,9 +34,46 @@ import Image from "next/image";
 import { PRODUCT_CATEGORIES } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 
+// ─── Upload helper (replaces Firebase Storage) ──────────────────────────────
+async function uploadImageToR2(
+  file: File,
+  folder: string,
+  onProgress?: (pct: number) => void
+): Promise<string> {
+  onProgress?.(10);
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("folder", folder);
+
+  onProgress?.(40);
+  const res = await fetch("/api/upload", { method: "POST", body: formData });
+  onProgress?.(90);
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Upload failed");
+  }
+
+  const { url } = await res.json();
+  onProgress?.(100);
+  return url;
+}
+
+// ─── Helper: convert ImageKit URL → proxied URL ──────────────────────────────
+function proxyUrl(url: string, w = 1200): string {
+  if (!url) return "";
+  if (url.includes("ik.imagekit.io")) {
+    const parts = url.split("ik.imagekit.io/")[1]?.split("/") ?? [];
+    const key = parts.slice(1).join("/"); // remove imagekit_id
+    return `/api/image?file=${encodeURIComponent(key)}&w=${w}`;
+  }
+  return url;
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
 export default function HomeEditor() {
   const db = useFirestore();
-  
+
   const [isSaving, setIsSaving] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [isUploading, setIsUploading] = useState(false);
@@ -48,6 +83,7 @@ export default function HomeEditor() {
   const { data: heroData, isLoading: heroLoading } = useDoc(heroRef);
   const [heroForm, setHeroForm] = useState<any>({});
   const [heroFile, setHeroFile] = useState<File | null>(null);
+  const [heroPreview, setHeroPreview] = useState<string>("");
 
   useEffect(() => {
     if (heroData) setHeroForm(heroData);
@@ -58,6 +94,7 @@ export default function HomeEditor() {
   const { data: catsData, isLoading: catsLoading } = useCollection(catsRef);
   const [selectedCat, setSelectedCat] = useState<any>(null);
   const [catFile, setCatFile] = useState<File | null>(null);
+  const [catPreview, setCatPreview] = useState<string>("");
 
   // --- SECTIONS DATA ---
   const sectionsRef = useMemoFirebase(() => doc(db, "home_settings", "sections"), [db]);
@@ -74,40 +111,6 @@ export default function HomeEditor() {
     });
   }, [sectionsData]);
 
-  // --- UPLOAD HELPER ---
-  const uploadFile = (fileRef: any, file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      setIsUploading(true);
-      setUploadProgress(0);
-      
-      const metadata = {
-        contentType: file.type,
-      };
-
-      const uploadTask = uploadBytesResumable(fileRef, file, metadata);
-      
-      uploadTask.on(
-        'state_changed',
-        (snapshot) => {
-          const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-          console.log('Upload is ' + progress + '% done');
-          setUploadProgress(progress);
-        },
-        (error) => {
-          console.error('Storage Upload Error:', error.code, error.message);
-          setIsUploading(false);
-          reject(error);
-        },
-        async () => {
-          const url = await getDownloadURL(uploadTask.snapshot.ref);
-          console.log('File available at', url);
-          setIsUploading(false);
-          resolve(url);
-        }
-      );
-    });
-  };
-
   // --- HANDLERS ---
   const handleSaveHero = async () => {
     setIsSaving(true);
@@ -115,8 +118,13 @@ export default function HomeEditor() {
 
     try {
       if (heroFile) {
-        const fileRef = ref(storage, `home/hero_${Date.now()}`);
-        imageUrl = await uploadFile(fileRef, heroFile);
+        setIsUploading(true);
+        imageUrl = await uploadImageToR2(heroFile, "hero", (pct) => {
+          setUploadProgress(pct);
+        });
+        setIsUploading(false);
+        setHeroFile(null);
+        setHeroPreview("");
       }
 
       await setDoc(heroRef, {
@@ -126,13 +134,12 @@ export default function HomeEditor() {
       }, { merge: true });
 
       toast({ title: "✅ Hero Section Updated!" });
-      setHeroFile(null);
     } catch (e: any) {
       console.error("Save Hero Error:", e);
-      toast({ 
-        title: "Upload Failed", 
-        description: e.message || "Could not upload image. Check console for details.",
-        variant: "destructive" 
+      toast({
+        title: "Upload Failed",
+        description: e.message || "Could not upload image.",
+        variant: "destructive"
       });
     } finally {
       setIsSaving(false);
@@ -147,8 +154,13 @@ export default function HomeEditor() {
 
     try {
       if (file) {
-        const fileRef = ref(storage, `home/categories/${catId}_${Date.now()}`);
-        imageUrl = await uploadFile(fileRef, file);
+        setIsUploading(true);
+        imageUrl = await uploadImageToR2(file, "categories", (pct) => {
+          setUploadProgress(pct);
+        });
+        setIsUploading(false);
+        setCatFile(null);
+        setCatPreview("");
       }
 
       const catDocRef = doc(db, "home_settings", "categories", "items", catId);
@@ -160,13 +172,12 @@ export default function HomeEditor() {
 
       toast({ title: `✅ ${formData.label} Updated!` });
       setSelectedCat(null);
-      setCatFile(null);
     } catch (e: any) {
       console.error("Save Category Error:", e);
-      toast({ 
-        title: "Update Failed", 
+      toast({
+        title: "Update Failed",
         description: e.message || "Check console for details.",
-        variant: "destructive" 
+        variant: "destructive"
       });
     } finally {
       setIsSaving(false);
@@ -178,12 +189,9 @@ export default function HomeEditor() {
   const handleSaveSections = async () => {
     setIsSaving(true);
     try {
-      await setDoc(sectionsRef, {
-        ...sectionsForm,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
+      await setDoc(sectionsRef, { ...sectionsForm, updatedAt: serverTimestamp() }, { merge: true });
       toast({ title: "✅ Home Sections Updated!" });
-    } catch (e: any) {
+    } catch {
       toast({ title: "Save Failed", variant: "destructive" });
     } finally {
       setIsSaving(false);
@@ -198,8 +206,8 @@ export default function HomeEditor() {
     );
   }
 
-  // --- PROGRESS BAR COMPONENT ---
-  const ProgressBar = () => (
+  // --- PROGRESS BAR ---
+  const ProgressBar = () =>
     isUploading ? (
       <div className="w-full space-y-1">
         <div className="flex justify-between text-xs font-bold text-primary">
@@ -207,14 +215,13 @@ export default function HomeEditor() {
           <span>{uploadProgress}%</span>
         </div>
         <div className="w-full bg-primary/10 rounded-full h-2.5">
-          <div 
+          <div
             className="bg-primary h-2.5 rounded-full transition-all duration-300"
             style={{ width: `${uploadProgress}%` }}
           />
         </div>
       </div>
-    ) : null
-  );
+    ) : null;
 
   return (
     <div className="space-y-8 pb-20">
@@ -236,7 +243,7 @@ export default function HomeEditor() {
           </TabsTrigger>
         </TabsList>
 
-        {/* --- HERO TAB --- */}
+        {/* ── HERO TAB ── */}
         <TabsContent value="hero">
           <Card className="rounded-[2rem] border-none shadow-sm overflow-hidden">
             <CardHeader className="bg-muted/30 border-b p-8">
@@ -248,51 +255,32 @@ export default function HomeEditor() {
                 <div className="space-y-6">
                   <div className="space-y-2">
                     <Label>Main Headline</Label>
-                    <Input 
-                      value={heroForm.headline || ""} 
-                      onChange={e => setHeroForm({...heroForm, headline: e.target.value})}
-                      placeholder="e.g. Bring Nature Home"
-                      className="rounded-xl h-12"
-                    />
+                    <Input value={heroForm.headline || ""} onChange={e => setHeroForm({ ...heroForm, headline: e.target.value })} placeholder="e.g. Bring Nature Home" className="rounded-xl h-12" />
                   </div>
                   <div className="space-y-2">
                     <Label>Sub Headline (Accent Text)</Label>
-                    <Input 
-                      value={heroForm.headlineAccent || ""} 
-                      onChange={e => setHeroForm({...heroForm, headlineAccent: e.target.value})}
-                      placeholder="e.g. Garden Fresh"
-                      className="rounded-xl h-12"
-                    />
+                    <Input value={heroForm.headlineAccent || ""} onChange={e => setHeroForm({ ...heroForm, headlineAccent: e.target.value })} placeholder="e.g. Garden Fresh" className="rounded-xl h-12" />
                   </div>
                   <div className="space-y-2">
                     <Label>Description Text</Label>
-                    <Input 
-                      value={heroForm.description || ""} 
-                      onChange={e => setHeroForm({...heroForm, description: e.target.value})}
-                      placeholder="Enter a brief intro..."
-                      className="rounded-xl h-12"
-                    />
+                    <Input value={heroForm.description || ""} onChange={e => setHeroForm({ ...heroForm, description: e.target.value })} placeholder="Enter a brief intro..." className="rounded-xl h-12" />
                   </div>
                   <div className="space-y-2">
                     <Label>Button Text</Label>
-                    <Input 
-                      value={heroForm.buttonText || ""} 
-                      onChange={e => setHeroForm({...heroForm, buttonText: e.target.value})}
-                      placeholder="Shop Now"
-                      className="rounded-xl h-12"
-                    />
+                    <Input value={heroForm.buttonText || ""} onChange={e => setHeroForm({ ...heroForm, buttonText: e.target.value })} placeholder="Shop Now" className="rounded-xl h-12" />
                   </div>
                 </div>
 
                 <div className="space-y-4">
                   <Label>Hero Background Image</Label>
                   <div className="relative aspect-video rounded-3xl overflow-hidden bg-muted border-2 border-dashed border-primary/20 group">
-                    {(heroFile || heroForm.imageUrl) ? (
-                      <Image 
-                        src={heroFile ? URL.createObjectURL(heroFile) : heroForm.imageUrl} 
-                        alt="Hero Preview" 
-                        fill 
-                        className="object-cover" 
+                    {(heroPreview || heroForm.imageUrl) ? (
+                      <Image
+                        src={heroPreview || proxyUrl(heroForm.imageUrl, 1200)}
+                        alt="Hero Preview"
+                        fill
+                        className="object-cover"
+                        unoptimized
                       />
                     ) : (
                       <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground gap-2">
@@ -304,11 +292,15 @@ export default function HomeEditor() {
                       <div className="bg-white text-primary px-4 py-2 rounded-full font-bold flex items-center gap-2">
                         <Upload className="h-4 w-4" /> Change Image
                       </div>
-                      <input 
-                        type="file" 
-                        className="hidden" 
+                      <input
+                        type="file"
+                        className="hidden"
                         accept="image/*"
-                        onChange={e => setHeroFile(e.target.files?.[0] || null)}
+                        onChange={e => {
+                          const f = e.target.files?.[0] || null;
+                          setHeroFile(f);
+                          setHeroPreview(f ? URL.createObjectURL(f) : "");
+                        }}
                       />
                     </label>
                   </div>
@@ -322,13 +314,10 @@ export default function HomeEditor() {
                   {isSaving ? (
                     <>
                       <Loader2 className="h-5 w-5 animate-spin" />
-                      {isUploading ? `Uploading ${uploadProgress}%` : 'Saving...'}
+                      {isUploading ? `Uploading ${uploadProgress}%` : "Saving..."}
                     </>
                   ) : (
-                    <>
-                      <Save className="h-5 w-5" />
-                      Save Hero Settings
-                    </>
+                    <><Save className="h-5 w-5" /> Save Hero Settings</>
                   )}
                 </Button>
               </div>
@@ -336,15 +325,15 @@ export default function HomeEditor() {
           </Card>
         </TabsContent>
 
-        {/* --- CATEGORIES TAB --- */}
+        {/* ── CATEGORIES TAB ── */}
         <TabsContent value="categories">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
               {PRODUCT_CATEGORIES.map(cat => {
                 const dbCat = catsData?.find(c => c.id === cat.value);
                 return (
-                  <Card 
-                    key={cat.value} 
+                  <Card
+                    key={cat.value}
                     className={cn(
                       "rounded-3xl border-none shadow-sm hover:shadow-md transition-all cursor-pointer group relative overflow-hidden",
                       selectedCat?.id === cat.value && "ring-4 ring-primary ring-offset-2"
@@ -352,12 +341,13 @@ export default function HomeEditor() {
                     onClick={() => {
                       setSelectedCat(dbCat || { id: cat.value, label: cat.label, count: "0+ plants" });
                       setCatFile(null);
+                      setCatPreview("");
                     }}
                   >
                     <div className="flex items-center gap-4 p-4">
                       <div className="relative h-16 w-16 rounded-2xl overflow-hidden bg-muted flex-shrink-0">
                         {dbCat?.imageUrl ? (
-                          <Image src={dbCat.imageUrl} alt={cat.label} fill className="object-cover" />
+                          <Image src={proxyUrl(dbCat.imageUrl, 200)} alt={cat.label} fill className="object-cover" unoptimized />
                         ) : (
                           <ImageIcon className="h-6 w-6 m-auto text-muted-foreground opacity-20" />
                         )}
@@ -383,29 +373,22 @@ export default function HomeEditor() {
                   <CardContent className="p-8 space-y-6">
                     <div className="space-y-2">
                       <Label>Display Name</Label>
-                      <Input 
-                        value={selectedCat.label} 
-                        onChange={e => setSelectedCat({...selectedCat, label: e.target.value})}
-                        className="rounded-xl h-12"
-                      />
+                      <Input value={selectedCat.label} onChange={e => setSelectedCat({ ...selectedCat, label: e.target.value })} className="rounded-xl h-12" />
                     </div>
                     <div className="space-y-2">
                       <Label>Plant Count Text</Label>
-                      <Input 
-                        value={selectedCat.count} 
-                        onChange={e => setSelectedCat({...selectedCat, count: e.target.value})}
-                        className="rounded-xl h-12"
-                      />
+                      <Input value={selectedCat.count} onChange={e => setSelectedCat({ ...selectedCat, count: e.target.value })} className="rounded-xl h-12" />
                     </div>
                     <div className="space-y-4">
                       <Label>Background Image</Label>
                       <div className="relative aspect-[4/3] rounded-3xl overflow-hidden bg-muted border-2 border-dashed border-primary/20 group">
-                        {(catFile || selectedCat.imageUrl) ? (
-                          <Image 
-                            src={catFile ? URL.createObjectURL(catFile) : selectedCat.imageUrl} 
-                            alt="Category Preview" 
-                            fill 
-                            className="object-cover" 
+                        {(catPreview || selectedCat.imageUrl) ? (
+                          <Image
+                            src={catPreview || proxyUrl(selectedCat.imageUrl, 400)}
+                            alt="Category Preview"
+                            fill
+                            className="object-cover"
+                            unoptimized
                           />
                         ) : (
                           <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
@@ -414,11 +397,15 @@ export default function HomeEditor() {
                         )}
                         <label className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
                           <Upload className="h-6 w-6 text-white" />
-                          <input 
-                            type="file" 
-                            className="hidden" 
+                          <input
+                            type="file"
+                            className="hidden"
                             accept="image/*"
-                            onChange={e => setCatFile(e.target.files?.[0] || null)}
+                            onChange={e => {
+                              const f = e.target.files?.[0] || null;
+                              setCatFile(f);
+                              setCatPreview(f ? URL.createObjectURL(f) : "");
+                            }}
                           />
                         </label>
                       </div>
@@ -426,7 +413,7 @@ export default function HomeEditor() {
 
                     <ProgressBar />
 
-                    <Button 
+                    <Button
                       className="w-full h-14 rounded-full font-bold text-lg gap-2"
                       disabled={isSaving}
                       onClick={() => handleSaveCat(selectedCat.id, selectedCat, catFile)}
@@ -434,13 +421,10 @@ export default function HomeEditor() {
                       {isSaving ? (
                         <>
                           <Loader2 className="h-5 w-5 animate-spin" />
-                          {isUploading ? `Uploading ${uploadProgress}%` : 'Saving...'}
+                          {isUploading ? `Uploading ${uploadProgress}%` : "Saving..."}
                         </>
                       ) : (
-                        <>
-                          <Save className="h-5 w-5" />
-                          Update Category
-                        </>
+                        <><Save className="h-5 w-5" /> Update Category</>
                       )}
                     </Button>
                   </CardContent>
@@ -455,7 +439,7 @@ export default function HomeEditor() {
           </div>
         </TabsContent>
 
-        {/* --- SECTIONS TAB --- */}
+        {/* ── SECTIONS TAB ── */}
         <TabsContent value="sections">
           <Card className="rounded-[2rem] border-none shadow-sm overflow-hidden">
             <CardHeader className="bg-muted/30 border-b p-8">
@@ -464,16 +448,13 @@ export default function HomeEditor() {
             </CardHeader>
             <CardContent className="p-8 space-y-10">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {Object.entries(sectionsForm).filter(e => e[0] !== 'updatedAt').map(([key, section]: [string, any]) => (
+                {Object.entries(sectionsForm).filter(e => e[0] !== "updatedAt").map(([key, section]: [string, any]) => (
                   <div key={key} className="flex items-center justify-between p-6 rounded-3xl bg-accent/20 border border-transparent hover:border-primary/10 transition-all">
                     <div className="space-y-4 flex-grow pr-8">
                       <div className="flex items-center gap-2">
-                        <Switch 
-                          checked={section.enabled} 
-                          onCheckedChange={checked => setSectionsForm({
-                            ...sectionsForm,
-                            [key]: { ...section, enabled: checked }
-                          })}
+                        <Switch
+                          checked={section.enabled}
+                          onCheckedChange={checked => setSectionsForm({ ...sectionsForm, [key]: { ...section, enabled: checked } })}
                         />
                         <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
                           {section.enabled ? "Visible" : "Hidden"}
@@ -481,12 +462,9 @@ export default function HomeEditor() {
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-xs text-muted-foreground uppercase font-black tracking-widest">Section Title</Label>
-                        <Input 
+                        <Input
                           value={section.title}
-                          onChange={e => setSectionsForm({
-                            ...sectionsForm,
-                            [key]: { ...section, title: e.target.value }
-                          })}
+                          onChange={e => setSectionsForm({ ...sectionsForm, [key]: { ...section, title: e.target.value } })}
                           className="rounded-xl h-11 bg-white"
                         />
                       </div>

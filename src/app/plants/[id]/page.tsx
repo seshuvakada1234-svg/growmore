@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
@@ -12,10 +11,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { PRODUCTS } from "@/lib/mock-data";
-import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
+import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase";
 import {
   doc, setDoc, deleteDoc, serverTimestamp,
   collection, getDocs, query, orderBy, Timestamp,
+  where, limit, getDoc,
 } from "firebase/firestore";
 import { cn } from "@/lib/utils";
 import { ShareButton } from "@/components/shared/ShareButton";
@@ -43,6 +43,29 @@ interface Review {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Image helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+function getProxiedUrl(raw: string, w = 800): string {
+  if (!raw) return "/placeholder.svg";
+  if (raw.includes("ik.imagekit.io")) {
+    const parts = raw.split("ik.imagekit.io/")[1]?.split("/") ?? [];
+    const key = parts.slice(1).join("/");
+    if (!key) return raw;
+    return `/api/image?file=${encodeURIComponent(key)}&w=${w}`;
+  }
+  return raw;
+}
+
+function getProductImages(product: any): string[] {
+  if (product?.images && Array.isArray(product.images) && product.images.length > 0) {
+    return product.images.map((url: string) => getProxiedUrl(url, 1200));
+  }
+  if (product?.imageUrl) return [getProxiedUrl(product.imageUrl, 1200)];
+  return ["/placeholder.svg"];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Recently Viewed helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -57,7 +80,7 @@ function trackRecentlyViewed(productId: string): void {
   } catch { /* blocked */ }
 }
 
-function getRecentlyViewed(excludeId: string): string[] {
+function getRecentlyViewedIds(excludeId: string): string[] {
   try {
     const ids: string[] = JSON.parse(localStorage.getItem(RV_KEY) || "[]");
     return ids.filter((id) => id !== excludeId).slice(0, RV_MAX);
@@ -131,9 +154,7 @@ const QuantityStepper = memo(function QuantityStepper({
         onClick={() => onChange(Math.max(min, value - 1))} disabled={value <= min}>
         <Minus className={icon} />
       </Button>
-      <span className={cn("text-center font-bold text-base", spanW)} aria-live="polite">
-        {value}
-      </span>
+      <span className={cn("text-center font-bold text-base", spanW)} aria-live="polite">{value}</span>
       <Button variant="ghost" size="icon" aria-label="Increase quantity"
         className={cn("rounded-full touch-manipulation", btn)}
         onClick={() => onChange(Math.min(max, value + 1))} disabled={value >= max}>
@@ -188,9 +209,13 @@ const ImageGallery = memo(function ImageGallery({
     if (e.key === "ArrowRight") goTo(selected + 1);
   }, [selected, goTo]);
 
+  const getThumbnailUrl = (url: string) => {
+    if (url.includes("/api/image")) return url.replace(/w=\d+/, "w=200");
+    return url;
+  };
+
   return (
     <div className="space-y-2 md:space-y-4">
-      {/* Main image */}
       <div
         role="region" aria-label="Product image gallery" aria-roledescription="carousel"
         tabIndex={0}
@@ -200,21 +225,17 @@ const ImageGallery = memo(function ImageGallery({
       >
         {images.map((src, i) => (
           <Image
-            key={src} src={src}
+            key={i} src={src}
             alt={`${productName} — view ${i + 1} of ${images.length}`}
             fill
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 600px"
-            className={cn(
-              "object-cover transition-opacity duration-300 pointer-events-none",
-              i === selected ? "opacity-100" : "opacity-0"
-            )}
-            priority={i === 0}
-            loading={i === 0 ? "eager" : "lazy"}
-            draggable={false}
+            className={cn("object-cover transition-opacity duration-300 pointer-events-none",
+              i === selected ? "opacity-100" : "opacity-0")}
+            priority={i === 0} loading={i === 0 ? "eager" : "lazy"}
+            draggable={false} unoptimized
           />
         ))}
 
-        {/* Desktop prev/next arrows */}
         {selected > 0 && (
           <button onClick={() => goTo(selected - 1)} aria-label="Previous image"
             className="hidden md:flex absolute left-3 top-1/2 -translate-y-1/2 h-9 w-9 items-center justify-center rounded-full bg-white/80 backdrop-blur-sm shadow hover:bg-white transition-colors z-10">
@@ -228,77 +249,81 @@ const ImageGallery = memo(function ImageGallery({
           </button>
         )}
 
-        {/* Mobile dot indicators */}
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 md:hidden z-10" aria-hidden="true">
-          {images.map((_, i) => (
-            <button key={i} onClick={() => goTo(i)}
-              className={cn("h-1.5 rounded-full transition-all duration-200 touch-manipulation",
-                i === selected ? "w-5 bg-primary" : "w-1.5 bg-white/70")} />
-          ))}
-        </div>
+        {images.length > 1 && (
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 md:hidden z-10" aria-hidden="true">
+            {images.map((_, i) => (
+              <button key={i} onClick={() => goTo(i)}
+                className={cn("h-1.5 rounded-full transition-all duration-200 touch-manipulation",
+                  i === selected ? "w-5 bg-primary" : "w-1.5 bg-white/70")} />
+            ))}
+          </div>
+        )}
 
-        {/* Image counter */}
-        <div className="absolute top-3 left-3 md:hidden bg-black/40 text-white text-xs font-semibold px-2 py-0.5 rounded-full backdrop-blur-sm z-10" aria-hidden="true">
-          {selected + 1} / {images.length}
-        </div>
+        {images.length > 1 && (
+          <div className="absolute top-3 left-3 md:hidden bg-black/40 text-white text-xs font-semibold px-2 py-0.5 rounded-full backdrop-blur-sm z-10" aria-hidden="true">
+            {selected + 1} / {images.length}
+          </div>
+        )}
 
-        {/* Wishlist + Share */}
         <div className="absolute top-3 right-3 md:top-5 md:right-5 flex flex-col gap-2 z-10">
           <Button variant="secondary" size="icon"
             onClick={onToggleWishlist}
             aria-label={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
             aria-pressed={isWishlisted}
             className="rounded-full bg-white/85 backdrop-blur-sm shadow-sm hover:bg-white w-9 h-9 md:w-10 md:h-10 touch-manipulation">
-            <Heart className={cn(
-              "h-4 w-4 md:h-5 md:w-5 transition-all duration-300",
+            <Heart className={cn("h-4 w-4 md:h-5 md:w-5 transition-all duration-300",
               isWishlisted ? "fill-red-500 text-red-500" : "text-primary",
-              isAnimating && "scale-125"
-            )} />
+              isAnimating && "scale-125")} />
           </Button>
           <ShareButton product={product}
             className="rounded-full bg-white/85 backdrop-blur-sm shadow-sm hover:bg-white w-9 h-9 md:w-10 md:h-10 touch-manipulation" />
         </div>
       </div>
 
-      {/* Thumbnail strip */}
-      <div role="tablist" aria-label="Image thumbnails"
-        className="flex gap-2 md:gap-3 overflow-x-auto no-scrollbar pb-0.5">
-        {images.map((src, i) => (
-          <button key={src} role="tab" aria-selected={i === selected}
-            aria-label={`View image ${i + 1}`} onClick={() => goTo(i)}
-            className={cn(
-              "relative flex-shrink-0 rounded-xl md:rounded-2xl overflow-hidden border-2 transition-all touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
-              "w-[62px] h-[62px] sm:w-[72px] sm:h-[72px] md:flex-1 md:w-auto md:h-auto md:aspect-square",
-              i === selected ? "border-primary" : "border-transparent hover:border-primary/40"
-            )}>
-            <Image src={src} alt={`${productName} thumbnail ${i + 1}`}
-              fill sizes="80px" className="object-cover" loading="lazy" />
-          </button>
-        ))}
-      </div>
+      {images.length > 1 && (
+        <div role="tablist" aria-label="Image thumbnails"
+          className="flex gap-2 md:gap-3 overflow-x-auto no-scrollbar pb-0.5">
+          {images.map((src, i) => (
+            <button key={i} role="tab" aria-selected={i === selected}
+              aria-label={`View image ${i + 1}`} onClick={() => goTo(i)}
+              className={cn(
+                "relative flex-shrink-0 rounded-xl md:rounded-2xl overflow-hidden border-2 transition-all touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                "w-[62px] h-[62px] sm:w-[72px] sm:h-[72px] md:flex-1 md:w-auto md:h-auto md:aspect-square",
+                i === selected ? "border-primary" : "border-transparent hover:border-primary/40"
+              )}>
+              <Image src={getThumbnailUrl(src)} alt={`${productName} thumbnail ${i + 1}`}
+                fill sizes="80px" className="object-cover" loading="lazy" unoptimized />
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ProductCard
+// ProductCard (similar / recently viewed)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ProductCard = memo(function ProductCard({
-  p, imgSizes,
-}: { p: (typeof PRODUCTS)[number]; imgSizes: string }) {
+const ProductCard = memo(function ProductCard({ p, imgSizes }: { p: any; imgSizes: string }) {
+  const imgSrc = getProxiedUrl(p.images?.[0] || p.imageUrl || "", 400);
   return (
-    <Link href={`/plant-detail/${p.id}`} className="block group">
+    <Link href={`/plants/${p.id}`} className="block group">
       <div className="bg-white rounded-xl md:rounded-2xl border border-[#F0F0F0] overflow-hidden hover:shadow-md hover:border-primary/30 active:scale-[0.98] transition-all touch-manipulation">
         <div className="relative overflow-hidden bg-accent" style={{ aspectRatio: "1 / 1" }}>
-          <Image src={p.imageUrl} alt={p.name} fill sizes={imgSizes}
-            className="object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+          {imgSrc ? (
+            <Image src={imgSrc} alt={p.name} fill sizes={imgSizes}
+              className="object-cover group-hover:scale-105 transition-transform duration-300"
+              loading="lazy" unoptimized />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center text-3xl">🌿</div>
+          )}
         </div>
         <div className="p-2 md:p-3">
           <p className="font-bold text-[11px] md:text-xs text-[#1A2E1A] line-clamp-2 leading-tight mb-1">{p.name}</p>
           <div className="flex items-center gap-0.5 md:gap-1 mb-1">
             <Star className="h-2.5 w-2.5 md:h-3 md:w-3 fill-yellow-400 text-yellow-400" aria-hidden="true" />
-            <span className="text-[10px] md:text-xs text-muted-foreground">{p.rating}</span>
+            <span className="text-[10px] md:text-xs text-muted-foreground">{p.rating || "4.5"}</span>
           </div>
           <div className="flex items-baseline gap-1 flex-wrap">
             <span className="font-extrabold text-xs md:text-sm text-primary">₹{p.price}</span>
@@ -331,21 +356,12 @@ const ReviewCard = memo(function ReviewCard({ review }: { review: Review }) {
           </div>
           <div className="min-w-0">
             <p className="font-bold text-xs md:text-sm truncate">{review.userName}</p>
-            <time
-              dateTime={review.createdAt?.seconds
-                ? new Date(review.createdAt.seconds * 1000).toISOString()
-                : undefined}
-              className="text-[10px] md:text-xs text-muted-foreground"
-            >
-              {dateStr}
-            </time>
+            <time className="text-[10px] md:text-xs text-muted-foreground">{dateStr}</time>
           </div>
         </div>
         <StarDisplay rating={review.rating} size="sm" />
       </div>
-      <p className="text-xs md:text-sm text-muted-foreground leading-relaxed pl-10 md:pl-12">
-        {review.comment}
-      </p>
+      <p className="text-xs md:text-sm text-muted-foreground leading-relaxed pl-10 md:pl-12">{review.comment}</p>
     </article>
   );
 });
@@ -354,22 +370,10 @@ const ReviewCard = memo(function ReviewCard({ review }: { review: Review }) {
 // WriteReviewForm
 // ─────────────────────────────────────────────────────────────────────────────
 
-function WriteReviewForm({
-  hasReviewed,
-  userRating,
-  setUserRating,
-  userComment,
-  setUserComment,
-  isSubmittingReview,
-  onSubmit,
-}: {
-  hasReviewed: boolean;
-  userRating: number;
-  setUserRating: (v: number) => void;
-  userComment: string;
-  setUserComment: (v: string) => void;
-  isSubmittingReview: boolean;
-  onSubmit: () => void;
+function WriteReviewForm({ hasReviewed, userRating, setUserRating, userComment, setUserComment, isSubmittingReview, onSubmit }: {
+  hasReviewed: boolean; userRating: number; setUserRating: (v: number) => void;
+  userComment: string; setUserComment: (v: string) => void;
+  isSubmittingReview: boolean; onSubmit: () => void;
 }) {
   if (hasReviewed) {
     return (
@@ -386,25 +390,14 @@ function WriteReviewForm({
         <StarPicker value={userRating} onChange={setUserRating} />
       </div>
       <div>
-        <label htmlFor="review-comment" className="block text-xs md:text-sm text-muted-foreground mb-2">
-          Your Review
-        </label>
-        <Textarea
-          id="review-comment"
-          placeholder="Share your experience with this plant..."
-          value={userComment}
-          onChange={(e) => setUserComment(e.target.value)}
-          className="rounded-xl md:rounded-2xl min-h-[90px] md:min-h-[100px] border-[#E8E8E8] text-sm resize-none"
-        />
+        <label htmlFor="review-comment" className="block text-xs md:text-sm text-muted-foreground mb-2">Your Review</label>
+        <Textarea id="review-comment" placeholder="Share your experience with this plant..."
+          value={userComment} onChange={(e) => setUserComment(e.target.value)}
+          className="rounded-xl md:rounded-2xl min-h-[90px] md:min-h-[100px] border-[#E8E8E8] text-sm resize-none" />
       </div>
-      <Button
-        onClick={onSubmit}
-        disabled={isSubmittingReview}
-        className="w-full sm:w-auto rounded-full gap-2 text-sm h-11 touch-manipulation"
-      >
-        {isSubmittingReview
-          ? <Loader2 className="h-4 w-4 animate-spin" />
-          : <Send className="h-4 w-4" />}
+      <Button onClick={onSubmit} disabled={isSubmittingReview}
+        className="w-full sm:w-auto rounded-full gap-2 text-sm h-11 touch-manipulation">
+        {isSubmittingReview ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
         Submit Review
       </Button>
     </div>
@@ -418,58 +411,119 @@ function WriteReviewForm({
 export default function PlantDetailPage() {
   const { id } = useParams();
   const router = useRouter();
+  const db = useFirestore();
+  const { user } = useUser();
 
-  // ── Derived product data ──────────────────────────────
-
-  const product = useMemo(
-    () =>
-      PRODUCTS.find((p) => p.id === id || p.id === String(id)) ||
-      PRODUCTS.find((p) => String(p.id) === String(id)) ||
-      PRODUCTS[0],
-    [id]
+  // ── Load product from Firestore ───────────────────────────────────────────
+  const productRef = useMemoFirebase(
+    () => (id ? doc(db, "products", String(id)) : null),
+    [db, id]
   );
+  const { data: firestoreProduct, isLoading: productLoading } = useDoc(productRef);
 
-  const similarProducts = useMemo(
-    () => PRODUCTS.filter((p) => p.category === product.category && p.id !== product.id).slice(0, 6),
-    [product.category, product.id]
-  );
+  const product = useMemo(() => {
+    if (firestoreProduct) return firestoreProduct;
+    return PRODUCTS.find((p) => p.id === id || p.id === String(id)) || PRODUCTS[0];
+  }, [firestoreProduct, id]);
 
-  const galleryImages = useMemo(
-    () => [
-      product.imageUrl,
-      ...[1, 2, 3].map((i) => `https://picsum.photos/seed/plant${i}${product.id}/400/400`),
-    ],
-    [product.imageUrl, product.id]
-  );
+  // ── Similar products — fetched from Firestore by category ─────────────────
+  const [similarProducts, setSimilarProducts] = useState<any[]>([]);
+  useEffect(() => {
+    if (!product?.category || !db) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const snap = await getDocs(
+          query(
+            collection(db, "products"),
+            where("category", "==", product.category),
+            limit(10)
+          )
+        );
+        if (cancelled) return;
+        const fromFirestore = snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .filter((p: any) => p.id !== product.id)
+          .slice(0, 6);
 
-  const discountPct = product.oldPrice
+        // Merge with mock data products of same category
+        const mockSimilar = PRODUCTS
+          .filter((p) => p.category === product.category && p.id !== product.id)
+          .slice(0, 6);
+
+        // Combine — Firestore first, then mock (deduplicated)
+        const firestoreIds = new Set(fromFirestore.map((p: any) => p.id));
+        const merged = [
+          ...fromFirestore,
+          ...mockSimilar.filter((p) => !firestoreIds.has(p.id)),
+        ].slice(0, 6);
+
+        setSimilarProducts(merged);
+      } catch {
+        // fallback to mock
+        setSimilarProducts(
+          PRODUCTS.filter((p) => p.category === product.category && p.id !== product.id).slice(0, 6)
+        );
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [db, product?.category, product?.id]);
+
+  // ── Recently Viewed — fetch each product by ID from Firestore ────────────
+  const [recentlyViewedProducts, setRecentlyViewedProducts] = useState<any[]>([]);
+  useEffect(() => {
+    if (!product?.id || !db) return;
+    trackRecentlyViewed(product.id);
+    const ids = getRecentlyViewedIds(product.id);
+    if (ids.length === 0) { setRecentlyViewedProducts([]); return; }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const fetched = await Promise.all(
+          ids.map(async (rvId) => {
+            // Try Firestore first
+            try {
+              const snap = await getDoc(doc(db, "products", rvId));
+              if (snap.exists()) return { id: snap.id, ...snap.data() };
+            } catch { /* ignore */ }
+            // Fallback to mock
+            return PRODUCTS.find((p) => p.id === rvId) || null;
+          })
+        );
+        if (!cancelled) setRecentlyViewedProducts(fetched.filter(Boolean));
+      } catch {
+        if (!cancelled) {
+          setRecentlyViewedProducts(
+            ids.map((rvId) => PRODUCTS.find((p) => p.id === rvId)).filter(Boolean)
+          );
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [db, product?.id]);
+
+  // ── Gallery images ────────────────────────────────────────────────────────
+  const galleryImages = useMemo(() => getProductImages(product), [product]);
+
+  const discountPct = product?.oldPrice
     ? Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)
     : 0;
 
-  // ── State ─────────────────────────────────────────────────────────────────
-
+  // ── State ──────────────────────────────────────────────────────────────────
   const [qty, setQty] = useState(1);
   const [isAnimating, setIsAnimating] = useState(false);
-
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(true);
-
-  // Review form state
   const [userRating, setUserRating] = useState(0);
   const [userComment, setUserComment] = useState("");
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [hasReviewed, setHasReviewed] = useState(false);
 
-  const [recentlyViewedIds, setRecentlyViewedIds] = useState<string[]>([]);
-
-  // ── Firebase ──────────────────────────────────────────────────────────────
-
-  const { user } = useUser();
-  const db = useFirestore();
-
+  // ── Firebase refs ──────────────────────────────────────────────────────────
   const wishlistRef = useMemoFirebase(
-    () => (user?.uid ? doc(db, "users", user.uid, "wishlist", product.id) : null),
-    [db, user?.uid, product.id]
+    () => (user?.uid && product?.id ? doc(db, "users", user.uid, "wishlist", product.id) : null),
+    [db, user?.uid, product?.id]
   );
   const { data: wishlistItem } = useDoc(wishlistRef);
   const isWishlisted = !!wishlistItem;
@@ -480,17 +534,11 @@ export default function PlantDetailPage() {
   );
   const { data: profile } = useDoc(userProfileRef);
   const monterraUser = profile as unknown as MonterraUser;
-  const earning = calculateEarning(product.price, (product as any).affiliateCommission);
+  const earning = calculateEarning(product?.price, (product as any)?.affiliateCommission);
 
-  // ── Effects ───────────────────────────────────────────────────────────────
-
+  // ── Load reviews ───────────────────────────────────────────────────────────
   useEffect(() => {
-    trackRecentlyViewed(product.id);
-    setRecentlyViewedIds(getRecentlyViewed(product.id));
-  }, [product.id]);
-
-  useEffect(() => {
-    if (!db || !product.id) return;
+    if (!db || !product?.id) return;
     let cancelled = false;
     (async () => {
       setReviewsLoading(true);
@@ -506,28 +554,17 @@ export default function PlantDetailPage() {
       finally { if (!cancelled) setReviewsLoading(false); }
     })();
     return () => { cancelled = true; };
-  }, [db, product.id, user?.uid]);
+  }, [db, product?.id, user?.uid]);
 
-  // ── Derived values ────────────────────────────────────────────────────────
-
+  // ── Derived ────────────────────────────────────────────────────────────────
   const avgRating = useMemo(
-    () =>
-      reviews.length
-        ? (reviews.reduce((a, r) => a + r.rating, 0) / reviews.length).toFixed(1)
-        : product.rating,
-    [reviews, product.rating]
+    () => reviews.length
+      ? (reviews.reduce((a, r) => a + r.rating, 0) / reviews.length).toFixed(1)
+      : product?.rating || "0",
+    [reviews, product?.rating]
   );
 
-  const recentlyViewedProducts = useMemo(
-    () =>
-      recentlyViewedIds
-        .map((rvId) => PRODUCTS.find((p) => p.id === rvId))
-        .filter(Boolean) as typeof PRODUCTS,
-    [recentlyViewedIds]
-  );
-
-  // ── Handlers ─────────────────────────
-
+  // ── Handlers ───────────────────────────────────────────────────────────────
   const handleToggleWishlist = useCallback(async () => {
     if (!user) {
       toast({ title: "Login Required", description: "Please login to use wishlist", variant: "destructive" });
@@ -543,112 +580,86 @@ export default function PlantDetailPage() {
       toast({ title: "Added to Wishlist ❤️" });
       setTimeout(() => setIsAnimating(false), 400);
     }
-  }, [user, db, product.id, isWishlisted]);
+  }, [user, db, product?.id, isWishlisted]);
 
   const handleAddToCart = useCallback(() => {
     try {
       const cart = JSON.parse(localStorage.getItem("plantshop_cart") || "[]");
-      const existing = cart.find(
-        (item: any) => (item.id || item.productId || item.plantId) === product.id
-      );
+      const existing = cart.find((item: any) => (item.id || item.productId || item.plantId) === product.id);
       if (existing) {
         existing.quantity = (existing.quantity || 0) + qty;
         existing.id = product.id;
-        delete existing.productId;
-        delete existing.plantId;
+        delete existing.productId; delete existing.plantId;
       } else {
         cart.push({ id: product.id, quantity: qty });
       }
       localStorage.setItem("plantshop_cart", JSON.stringify(cart));
       window.dispatchEvent(new Event("cart-updated"));
       toast({ title: "Added to cart!", description: `${qty} × ${product.name}` });
-    } catch (err) {
-      console.error("handleAddToCart:", err);
-    }
-  }, [product.id, product.name, qty]);
+    } catch (err) { console.error("handleAddToCart:", err); }
+  }, [product?.id, product?.name, qty]);
 
   const handleBuyItNow = useCallback(() => {
     try {
       sessionStorage.setItem("buynow_cart", JSON.stringify([{ id: product.id, quantity: qty }]));
       router.push("/checkout?mode=buynow");
-    } catch (err) {
-      console.error("handleBuyItNow:", err);
-    }
-  }, [product.id, qty, router]);
+    } catch (err) { console.error("handleBuyItNow:", err); }
+  }, [product?.id, qty, router]);
 
   const handleSubmitReview = useCallback(async () => {
-    if (!user) {
-      toast({ title: "Login Required", description: "Please login to leave a review", variant: "destructive" });
-      return;
-    }
-    if (userRating === 0) {
-      toast({ title: "Please select a rating", variant: "destructive" });
-      return;
-    }
-    if (!userComment.trim()) {
-      toast({ title: "Please write a comment", variant: "destructive" });
-      return;
-    }
+    if (!user) { toast({ title: "Login Required", description: "Please login to leave a review", variant: "destructive" }); return; }
+    if (userRating === 0) { toast({ title: "Please select a rating", variant: "destructive" }); return; }
+    if (!userComment.trim()) { toast({ title: "Please write a comment", variant: "destructive" }); return; }
     setIsSubmittingReview(true);
     try {
       const reviewRef = doc(db, "products", String(product.id), "reviews", user.uid);
       const reviewData = {
         userId: user.uid,
         userName: user.displayName || user.email?.split("@")[0] || "Anonymous",
-        rating: userRating,
-        comment: userComment.trim(),
-        createdAt: serverTimestamp(),
+        rating: userRating, comment: userComment.trim(), createdAt: serverTimestamp(),
       };
       await setDoc(reviewRef, reviewData);
       setReviews((prev) => [{ id: user.uid, ...reviewData, createdAt: null }, ...prev]);
-      setHasReviewed(true);
-      setUserRating(0);
-      setUserComment("");
+      setHasReviewed(true); setUserRating(0); setUserComment("");
       toast({ title: "Review submitted! 🌿" });
-    } catch {
-      toast({ title: "Failed to submit review", variant: "destructive" });
-    } finally {
-      setIsSubmittingReview(false);
-    }
-  }, [user, db, product.id, userRating, userComment]);
+    } catch { toast({ title: "Failed to submit review", variant: "destructive" }); }
+    finally { setIsSubmittingReview(false); }
+  }, [user, db, product?.id, userRating, userComment]);
 
   const CARD_SIZES = "(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 200px";
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Render
-  // ─────────────────────────────────────────────────────────────────────────
+  if (productLoading) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <div className="flex-grow flex items-center justify-center">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        </div>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col overflow-x-hidden">
       <Header />
-
       <main className="flex-grow w-full" id="main-content">
         <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 md:py-10 lg:py-14 pb-24 sm:pb-6">
 
           {/* ── Product Hero ── */}
-          <section
-            aria-label="Product details"
-            className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 md:gap-8 lg:gap-14 mb-10 md:mb-16 lg:mb-24"
-          >
-            <ImageGallery
-              images={galleryImages}
-              productName={product.name}
-              isWishlisted={isWishlisted}
-              isAnimating={isAnimating}
-              onToggleWishlist={handleToggleWishlist}
-              product={product}
-            />
+          <section aria-label="Product details"
+            className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 md:gap-8 lg:gap-14 mb-10 md:mb-16 lg:mb-24">
+            <ImageGallery images={galleryImages} productName={product?.name || ""}
+              isWishlisted={isWishlisted} isAnimating={isAnimating}
+              onToggleWishlist={handleToggleWishlist} product={product} />
 
-            {/* Info panel */}
             <div className="flex flex-col">
-
-              {/* Category + title + rating */}
               <div className="mb-4 space-y-2 md:space-y-3">
                 <Badge variant="secondary" className="rounded-full px-3 py-0.5 text-xs md:text-sm text-primary bg-accent font-bold">
-                  {product.category}
+                  {product?.category}
                 </Badge>
                 <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-headline font-extrabold text-primary leading-tight">
-                  {product.name}
+                  {product?.name}
                 </h1>
                 <div className="flex items-center gap-2 md:gap-4 flex-wrap">
                   <div className="flex items-center gap-1.5">
@@ -656,99 +667,66 @@ export default function PlantDetailPage() {
                     <span className="font-bold text-sm md:text-lg">{avgRating}</span>
                   </div>
                   <span className="text-muted-foreground border-l pl-2 md:pl-4 text-xs md:text-sm font-medium">
-                    {reviews.length || product.reviewsCount} verified reviews
+                    {reviews.length || product?.reviewsCount || 0} verified reviews
                   </span>
-                  <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-none text-xs">
-                    In Stock
-                  </Badge>
+                  <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-none text-xs">In Stock</Badge>
                 </div>
               </div>
 
-              {/* Price */}
               <div className="mb-4 md:mb-6 flex items-baseline gap-2 md:gap-3 flex-wrap">
-                <span className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-primary">
-                  ₹{product.price}
-                </span>
-                {product.oldPrice && (
-                  <span className="text-lg md:text-2xl text-muted-foreground line-through font-medium">
-                    ₹{product.oldPrice}
-                  </span>
+                <span className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-primary">₹{product?.price}</span>
+                {product?.oldPrice && (
+                  <span className="text-lg md:text-2xl text-muted-foreground line-through font-medium">₹{product.oldPrice}</span>
                 )}
                 {discountPct > 0 && (
-                  <span className="text-xs sm:text-sm font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-                    {discountPct}% off
-                  </span>
+                  <span className="text-xs sm:text-sm font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">{discountPct}% off</span>
                 )}
               </div>
 
-              {/* Affiliate banner */}
               {monterraUser?.affiliateApproved && earning && (
                 <div className="mb-4 p-3 md:p-4 bg-emerald-50 border border-emerald-100 rounded-xl md:rounded-2xl flex items-center gap-3">
                   <span className="text-xl flex-shrink-0" aria-hidden="true">💰</span>
-                  <p className="text-xs md:text-sm font-bold text-emerald-800">
-                    Earn ₹{earning} when someone buys through your link 🌱
-                  </p>
+                  <p className="text-xs md:text-sm font-bold text-emerald-800">Earn ₹{earning} when someone buys through your link 🌱</p>
                 </div>
               )}
 
-              {/* Description */}
-              <p className="text-sm md:text-base lg:text-lg text-muted-foreground mb-4 md:mb-6 leading-relaxed">
-                {product.description}
-              </p>
+              <p className="text-sm md:text-base lg:text-lg text-muted-foreground mb-4 md:mb-6 leading-relaxed">{product?.description}</p>
 
-              {/* Care badges */}
               <div className="grid grid-cols-2 gap-2 md:gap-4 mb-6 md:mb-8">
-                <div className="bg-accent rounded-xl md:rounded-2xl p-3 md:p-4 flex items-center gap-2 md:gap-3">
-                  <div className="h-8 w-8 md:h-10 md:w-10 rounded-full bg-white flex items-center justify-center text-primary flex-shrink-0">
-                    <Sun className="h-4 w-4 md:h-5 md:w-5" aria-hidden="true" />
+                {[
+                  { icon: Sun, title: "Light Needs", sub: "Bright Indirect" },
+                  { icon: Droplets, title: "Watering", sub: "Every 7–10 days" },
+                ].map(({ icon: Icon, title, sub }) => (
+                  <div key={title} className="bg-accent rounded-xl md:rounded-2xl p-3 md:p-4 flex items-center gap-2 md:gap-3">
+                    <div className="h-8 w-8 md:h-10 md:w-10 rounded-full bg-white flex items-center justify-center text-primary flex-shrink-0">
+                      <Icon className="h-4 w-4 md:h-5 md:w-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="font-bold text-xs md:text-sm">{title}</h3>
+                      <p className="text-[10px] md:text-xs text-muted-foreground leading-tight">{sub}</p>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <h3 className="font-bold text-xs md:text-sm">Light Needs</h3>
-                    <p className="text-[10px] md:text-xs text-muted-foreground leading-tight">Bright Indirect</p>
-                  </div>
-                </div>
-                <div className="bg-accent rounded-xl md:rounded-2xl p-3 md:p-4 flex items-center gap-2 md:gap-3">
-                  <div className="h-8 w-8 md:h-10 md:w-10 rounded-full bg-white flex items-center justify-center text-primary flex-shrink-0">
-                    <Droplets className="h-4 w-4 md:h-5 md:w-5" aria-hidden="true" />
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className="font-bold text-xs md:text-sm">Watering</h3>
-                    <p className="text-[10px] md:text-xs text-muted-foreground leading-tight">Every 7–10 days</p>
-                  </div>
-                </div>
+                ))}
               </div>
 
-              {/* ── Purchase Section ── */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2 text-xs md:text-sm font-medium text-emerald-600 bg-emerald-50 w-fit px-3 py-1.5 rounded-lg">
-                  <Truck className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
-                  Free delivery on orders over ₹999
+                  <Truck className="h-4 w-4 flex-shrink-0" /> Free delivery on orders over ₹999
                 </div>
-
                 <div className="hidden md:flex flex-col gap-3">
-                  {/* Row: Qty + Add to Cart */}
                   <div className="flex items-center gap-3">
                     <QuantityStepper value={qty} onChange={setQty} />
-                    <Button
-                      className="h-12 rounded-full flex-1 font-bold gap-2 touch-manipulation shadow-sm"
-                      onClick={handleAddToCart}
-                    >
-                      <ShoppingCart className="h-5 w-5" aria-hidden="true" /> Add to Cart
+                    <Button className="h-12 rounded-full flex-1 font-bold gap-2 touch-manipulation shadow-sm" onClick={handleAddToCart}>
+                      <ShoppingCart className="h-5 w-5" /> Add to Cart
                     </Button>
                   </div>
-
-                  {/* Row: Buy Now */}
-                  <Button
-                    size="lg"
-                    variant="outline"
+                  <Button size="lg" variant="outline"
                     className="w-full h-12 rounded-full border-2 border-primary text-primary hover:bg-primary hover:text-white font-extrabold transition-all touch-manipulation"
-                    onClick={handleBuyItNow}
-                  >
+                    onClick={handleBuyItNow}>
                     Buy It Now
                   </Button>
                 </div>
               </div>
-
             </div>
           </section>
 
@@ -764,13 +742,12 @@ export default function PlantDetailPage() {
                 ))}
               </TabsList>
 
-              {/* Care Guide */}
               <TabsContent value="care" className="py-5 md:py-8 space-y-4 md:space-y-6">
                 <div className="prose max-w-none text-muted-foreground">
                   <h2 className="text-primary font-headline font-bold text-lg md:text-2xl mb-3">
-                    How to keep your {product.name} happy
+                    How to keep your {product?.name} happy
                   </h2>
-                  <p className="text-sm md:text-base leading-relaxed">{product.careGuide}</p>
+                  <p className="text-sm md:text-base leading-relaxed">{product?.careGuide || "Care instructions coming soon."}</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-8 mt-5 md:mt-10">
                     {[
                       { title: "Temperature", body: "Ideal between 18°C and 24°C. Avoid cold drafts or direct heat vents." },
@@ -785,47 +762,35 @@ export default function PlantDetailPage() {
                 </div>
               </TabsContent>
 
-              {/* All Details */}
               <TabsContent value="details" className="py-5 md:py-8">
                 <div className="space-y-6 md:space-y-8">
                   {[
                     { title: "In the Box", rows: [{ label: "Pack of", value: "1" }] },
-                    {
-                      title: "General",
-                      rows: [
-                        { label: "SKU",             value: `GS-${product.id}-992` },
-                        { label: "Scientific Name", value: "Monstera deliciosa" },
-                        { label: "Category",        value: product.category },
-                        { label: "Type",            value: "Indoor Plant" },
-                      ],
-                    },
-                    {
-                      title: "Plant Details",
-                      rows: [
-                        { label: "Difficulty Level",    value: "Easy to Medium" },
-                        { label: "Light Requirement",   value: "Bright Indirect Light" },
-                        { label: "Watering",            value: "Every 7–10 days" },
-                        { label: "Pet Friendly",        value: "No",       cls: "text-red-500" },
-                        { label: "Air Purifying",       value: "Yes",      cls: "text-emerald-600" },
-                        { label: "Growth Rate",         value: "Moderate" },
-                        { label: "Ideal Temperature",   value: "18°C – 24°C" },
-                        { label: "Pot Included",        value: "Yes" },
-                      ],
-                    },
-                    {
-                      title: "Packaging & Delivery",
-                      rows: [
-                        { label: "Container Type",   value: "Nursery Pot" },
-                        { label: "Pot Size",         value: "4 inch" },
-                        { label: "Shipping Weight",  value: "~500g" },
-                        { label: "Delivery",         value: "Free above ₹999" },
-                      ],
-                    },
+                    { title: "General", rows: [
+                      { label: "SKU", value: `GS-${product?.id}-992` },
+                      { label: "Scientific Name", value: "Monstera deliciosa" },
+                      { label: "Category", value: product?.category },
+                      { label: "Type", value: "Indoor Plant" },
+                    ]},
+                    { title: "Plant Details", rows: [
+                      { label: "Difficulty Level", value: "Easy to Medium" },
+                      { label: "Light Requirement", value: "Bright Indirect Light" },
+                      { label: "Watering", value: "Every 7–10 days" },
+                      { label: "Pet Friendly", value: "No", cls: "text-red-500" },
+                      { label: "Air Purifying", value: "Yes", cls: "text-emerald-600" },
+                      { label: "Growth Rate", value: "Moderate" },
+                      { label: "Ideal Temperature", value: "18°C – 24°C" },
+                      { label: "Pot Included", value: "Yes" },
+                    ]},
+                    { title: "Packaging & Delivery", rows: [
+                      { label: "Container Type", value: "Nursery Pot" },
+                      { label: "Pot Size", value: "4 inch" },
+                      { label: "Shipping Weight", value: "~500g" },
+                      { label: "Delivery", value: "Free above ₹999" },
+                    ]},
                   ].map((section) => (
                     <div key={section.title}>
-                      <h3 className="font-bold text-base md:text-lg text-primary mb-3 pb-2 border-b">
-                        {section.title}
-                      </h3>
+                      <h3 className="font-bold text-base md:text-lg text-primary mb-3 pb-2 border-b">{section.title}</h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 md:gap-x-12">
                         {section.rows.map((row: any) => (
                           <div key={row.label} className="flex justify-between border-b py-2.5 md:py-3 gap-4">
@@ -839,10 +804,7 @@ export default function PlantDetailPage() {
                 </div>
               </TabsContent>
 
-              {/* Reviews */}
               <TabsContent value="reviews" className="py-5 md:py-8 space-y-5 md:space-y-8">
-
-                {/* Rating summary */}
                 {reviews.length > 0 && (
                   <div className="flex items-center gap-4 md:gap-6 bg-accent rounded-2xl md:rounded-3xl p-4 md:p-6">
                     <div className="text-center flex-shrink-0">
@@ -857,16 +819,9 @@ export default function PlantDetailPage() {
                         return (
                           <div key={s} className="flex items-center gap-1.5 text-xs">
                             <span className="w-3 text-muted-foreground flex-shrink-0">{s}</span>
-                            <Star className="h-2.5 w-2.5 fill-yellow-400 text-yellow-400 flex-shrink-0" aria-hidden="true" />
+                            <Star className="h-2.5 w-2.5 fill-yellow-400 text-yellow-400 flex-shrink-0" />
                             <div className="flex-1 h-1.5 md:h-2 bg-white rounded-full overflow-hidden min-w-0">
-                              <div
-                                className="h-full bg-yellow-400 rounded-full transition-all duration-500"
-                                style={{ width: `${pct}%` }}
-                                role="progressbar"
-                                aria-valuenow={count}
-                                aria-valuemin={0}
-                                aria-valuemax={reviews.length}
-                              />
+                              <div className="h-full bg-yellow-400 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
                             </div>
                             <span className="w-4 text-muted-foreground flex-shrink-0 text-right">{count}</span>
                           </div>
@@ -875,32 +830,20 @@ export default function PlantDetailPage() {
                     </div>
                   </div>
                 )}
-
-                <WriteReviewForm
-                  hasReviewed={hasReviewed}
-                  userRating={userRating}
-                  setUserRating={setUserRating}
-                  userComment={userComment}
-                  setUserComment={setUserComment}
-                  isSubmittingReview={isSubmittingReview}
-                  onSubmit={handleSubmitReview}
-                />
-
+                <WriteReviewForm hasReviewed={hasReviewed} userRating={userRating} setUserRating={setUserRating}
+                  userComment={userComment} setUserComment={setUserComment}
+                  isSubmittingReview={isSubmittingReview} onSubmit={handleSubmitReview} />
                 {reviewsLoading ? (
-                  <div className="flex justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                  </div>
+                  <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
                 ) : reviews.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-10 md:py-12 bg-muted/30 rounded-2xl md:rounded-3xl border-2 border-dashed">
-                    <Leaf className="h-10 w-10 md:h-12 md:w-12 text-muted-foreground mb-3 opacity-20" aria-hidden="true" />
+                    <Leaf className="h-10 w-10 md:h-12 md:w-12 text-muted-foreground mb-3 opacity-20" />
                     <h3 className="text-lg md:text-xl font-bold">No reviews yet</h3>
                     <p className="text-sm text-muted-foreground">Be the first to review this plant!</p>
                   </div>
                 ) : (
                   <div className="space-y-3 md:space-y-4" aria-label="Customer reviews">
-                    {reviews.map((review) => (
-                      <ReviewCard key={review.id} review={review} />
-                    ))}
+                    {reviews.map((review) => <ReviewCard key={review.id} review={review} />)}
                   </div>
                 )}
               </TabsContent>
@@ -919,7 +862,7 @@ export default function PlantDetailPage() {
                 </Link>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2 sm:gap-3 md:gap-4">
-                {similarProducts.map((p) => <ProductCard key={p.id} p={p} imgSizes={CARD_SIZES} />)}
+                {similarProducts.map((p: any) => <ProductCard key={p.id} p={p} imgSizes={CARD_SIZES} />)}
               </div>
             </section>
           )}
@@ -928,34 +871,27 @@ export default function PlantDetailPage() {
           {recentlyViewedProducts.length > 0 && (
             <section aria-label="Recently viewed" className="w-full">
               <div className="flex items-center gap-2 mb-4 md:mb-6">
-                <Clock className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
+                <Clock className="h-5 w-5 text-muted-foreground" />
                 <h2 className="text-xl md:text-2xl font-headline font-extrabold text-primary">Recently Viewed</h2>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2 sm:gap-3 md:gap-4">
-                {recentlyViewedProducts.map((p) => <ProductCard key={p.id} p={p} imgSizes={CARD_SIZES} />)}
+                {recentlyViewedProducts.map((p: any) => <ProductCard key={p.id} p={p} imgSizes={CARD_SIZES} />)}
               </div>
             </section>
           )}
         </div>
       </main>
 
-      {/* ── Fixed Mobile Bottom Action Bar ── */}
+      {/* ── Fixed Mobile Bottom Bar ── */}
       <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t p-3 flex items-center gap-3 md:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.1)]"
         style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}>
-        
         <QuantityStepper value={qty} onChange={setQty} size="sm" />
-
-        <Button 
-          variant="outline" 
+        <Button variant="outline"
           className="flex-1 h-11 rounded-full border-2 border-primary text-primary font-extrabold text-xs"
-          onClick={handleAddToCart}
-        >
+          onClick={handleAddToCart}>
           Add to Cart
         </Button>
-        <Button 
-          className="flex-1 h-11 rounded-full font-extrabold text-xs"
-          onClick={handleBuyItNow}
-        >
+        <Button className="flex-1 h-11 rounded-full font-extrabold text-xs" onClick={handleBuyItNow}>
           Buy Now
         </Button>
       </div>
@@ -964,4 +900,3 @@ export default function PlantDetailPage() {
     </div>
   );
 }
-    

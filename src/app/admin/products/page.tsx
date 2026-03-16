@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -31,19 +30,44 @@ import Image from "next/image";
 import { toast } from "@/hooks/use-toast";
 import { adminAIProductDescription } from "@/ai/flows/admin-ai-product-description";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { useFirestore, useCollection, useMemoFirebase, useStorage } from "@/firebase";
+import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import { collection, setDoc, deleteDoc, doc, serverTimestamp, updateDoc } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
 
 const MAX_IMAGES = 5;
 
+// ─── Upload helper ──────────────────────────────────────────────────────────
+async function uploadImageToR2(
+  file: File,
+  folder: string,
+  onProgress?: (pct: number) => void
+): Promise<string> {
+  onProgress?.(10);
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("folder", folder);
+
+  onProgress?.(40);
+  const res = await fetch("/api/upload", { method: "POST", body: formData });
+  onProgress?.(90);
+
+  if (!res.ok) {
+    const { error } = await res.json();
+    throw new Error(error || "Upload failed");
+  }
+
+  const { url } = await res.json();
+  onProgress?.(100);
+  return url;
+}
+
+// ─── Component ──────────────────────────────────────────────────────────────
 export default function AdminProducts() {
   const db = useFirestore();
-  const storage = useStorage();
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [open, setOpen] = useState(false);
 
   const [newProduct, setNewProduct] = useState({
@@ -69,7 +93,7 @@ export default function AdminProducts() {
     const incoming = Array.from(e.target.files);
     const remaining = MAX_IMAGES - imageSlots.length;
     if (remaining <= 0) {
-      toast({ title: "Limit reached", description: `You can upload a maximum of ${MAX_IMAGES} images.`, variant: "destructive" });
+      toast({ title: "Limit reached", description: `Maximum ${MAX_IMAGES} images.`, variant: "destructive" });
       e.target.value = "";
       return;
     }
@@ -93,16 +117,10 @@ export default function AdminProducts() {
   };
 
   const resetForm = () => {
-    setNewProduct({
-      name: "",
-      category: "indoor",
-      price: "",
-      description: "",
-      affiliateCommission: "10",
-      stock: "50"
-    });
+    setNewProduct({ name: "", category: "indoor", price: "", description: "", affiliateCommission: "10", stock: "50" });
     imageSlots.forEach((s) => { if (s.file) URL.revokeObjectURL(s.preview); });
     setImageSlots([]);
+    setUploadProgress(0);
   };
 
   const handleAI = async () => {
@@ -113,10 +131,7 @@ export default function AdminProducts() {
     setIsGenerating(true);
     try {
       const catLabel = PRODUCT_CATEGORIES.find(c => c.value === newProduct.category)?.label || newProduct.category;
-      const result = await adminAIProductDescription({
-        plantName: newProduct.name,
-        category: catLabel
-      });
+      const result = await adminAIProductDescription({ plantName: newProduct.name, category: catLabel });
       setNewProduct({ ...newProduct, description: result.description });
       toast({ title: "AI Generated!", description: "Description created successfully." });
     } catch {
@@ -147,6 +162,8 @@ export default function AdminProducts() {
     }
 
     setIsSaving(true);
+    setUploadProgress(0);
+
     const productRef = doc(collection(db, "products"));
     const productId = productRef.id;
 
@@ -169,14 +186,24 @@ export default function AdminProducts() {
     });
 
     try {
-      const uploadPromises = imageSlots.map(async (slot) => {
-        if (slot.existing) return slot.existing;
-        const fileRef = ref(storage, `products/${productId}/images/${Date.now()}_${slot.file!.name}`);
-        const result = await uploadBytes(fileRef, slot.file!);
-        return await getDownloadURL(result.ref);
-      });
-
-      const imageUrls = await Promise.all(uploadPromises);
+      // Upload images one by one with progress tracking
+      const imageUrls: string[] = [];
+      for (let i = 0; i < imageSlots.length; i++) {
+        const slot = imageSlots[i];
+        if (slot.existing) {
+          imageUrls.push(slot.existing);
+          continue;
+        }
+        const url = await uploadImageToR2(
+          slot.file!,
+          `products/${productId}`,
+          (pct) => {
+            const overall = Math.round(((i + pct / 100) / imageSlots.length) * 100);
+            setUploadProgress(overall);
+          }
+        );
+        imageUrls.push(url);
+      }
 
       updateDoc(productRef, { images: imageUrls, updatedAt: serverTimestamp() })
         .then(() => {
@@ -188,9 +215,9 @@ export default function AdminProducts() {
           const permissionError = new FirestorePermissionError({ path: `products/${productId}`, operation: "update", requestResourceData: { images: imageUrls } });
           errorEmitter.emit("permission-error", permissionError);
         });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Upload error", error);
-      toast({ title: "Upload Failed", description: "Failed to upload images.", variant: "destructive" });
+      toast({ title: "Upload Failed", description: error.message || "Failed to upload images.", variant: "destructive" });
     } finally {
       setIsSaving(false);
     }
@@ -204,6 +231,17 @@ export default function AdminProducts() {
         const permissionError = new FirestorePermissionError({ path: `products/${id}`, operation: "delete" });
         errorEmitter.emit("permission-error", permissionError);
       });
+  };
+
+  // Helper to get proxied image URL
+  const getProxiedUrl = (url: string, w = 800) => {
+    if (!url) return "";
+    // If already an ImageKit URL, proxy it
+    if (url.includes("ik.imagekit.io")) {
+      const key = url.split("ik.imagekit.io/").slice(1).join("ik.imagekit.io/").split("/").slice(1).join("/");
+      return `/api/image?file=${encodeURIComponent(key)}&w=${w}`;
+    }
+    return url;
   };
 
   return (
@@ -324,7 +362,7 @@ export default function AdminProducts() {
                     <div className="grid grid-cols-5 gap-2">
                       {imageSlots.map((slot, i) => (
                         <div key={i} className="relative group aspect-square rounded-xl border bg-muted overflow-hidden">
-                          <Image src={slot.preview || slot.existing!} alt={`preview-${i}`} fill className="object-cover" />
+                          <Image src={slot.preview || slot.existing!} alt={`preview-${i}`} fill className="object-cover" unoptimized />
                           <button type="button" onClick={() => removeImage(i)} className="absolute top-1 right-1 h-5 w-5 rounded-full bg-black/70 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive z-10">
                             <X className="h-3 w-3" />
                           </button>
@@ -332,10 +370,30 @@ export default function AdminProducts() {
                       ))}
                     </div>
                   )}
+
+                  {/* Upload progress bar */}
+                  {isSaving && uploadProgress > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs font-bold text-primary">
+                        <span>Uploading images...</span>
+                        <span>{uploadProgress}%</span>
+                      </div>
+                      <div className="w-full bg-primary/10 rounded-full h-2.5">
+                        <div
+                          className="bg-primary h-2.5 rounded-full transition-all duration-300"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <Button onClick={handleSaveProduct} disabled={isSaving} className="w-full h-12 rounded-full font-bold text-lg mt-4">
-                  {isSaving ? <Loader2 className="h-5 w-5 animate-spin" /> : "Save Product"}
+                  {isSaving ? (
+                    <><Loader2 className="h-5 w-5 animate-spin mr-2" />
+                      {uploadProgress > 0 ? `Uploading ${uploadProgress}%` : "Saving..."}
+                    </>
+                  ) : "Save Product"}
                 </Button>
               </div>
             </DialogContent>
@@ -366,7 +424,17 @@ export default function AdminProducts() {
                     <td className="p-6">
                       <div className="flex items-center gap-4">
                         <div className="h-12 w-12 rounded-xl overflow-hidden relative border shadow-sm bg-muted">
-                          {p.images?.[0] ? <Image src={p.images[0]} alt={p.name} fill className="object-cover" /> : <ImageIcon className="h-4 w-4 m-auto text-muted-foreground" />}
+                          {p.images?.[0] ? (
+                            <Image
+                              src={getProxiedUrl(p.images[0], 100)}
+                              alt={p.name}
+                              fill
+                              className="object-cover"
+                              unoptimized
+                            />
+                          ) : (
+                            <ImageIcon className="h-4 w-4 m-auto text-muted-foreground" />
+                          )}
                         </div>
                         <div>
                           <p className="font-headline font-bold text-primary">{p.name}</p>

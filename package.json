@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1009.0",
     "@genkit-ai/google-genai": "^1.28.0",
     "@google/genai": "^1.44.0",
     "@heroicons/react": "^2.1.1",
