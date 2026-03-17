@@ -9,11 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
   ShoppingBag, ChevronLeft, Loader2, Truck,
@@ -34,9 +30,7 @@ import { FirestorePermissionError } from "@/firebase/errors";
 import { saveCommissionRecord } from "@/lib/affiliateEngine";
 
 declare global {
-  interface Window {
-    Razorpay: any;
-  }
+  interface Window { Razorpay: any; }
 }
 
 const INDIAN_STATES_AND_UTS = [
@@ -57,7 +51,41 @@ const generateOrderId = (method: PaymentMethod) => {
   return `${prefix}-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
 };
 
-// ✅ Inner component that uses useSearchParams
+// ── Helper: resolve image URL through proxy ───────────────────────────────
+function resolveImage(raw: string | undefined, w = 200): string {
+  if (!raw) return "/placeholder.svg";
+  if (raw.includes("ik.imagekit.io")) {
+    const parts = raw.split("ik.imagekit.io/")[1]?.split("/") ?? [];
+    const key = parts.slice(1).join("/");
+    if (key) return `/api/image?file=${encodeURIComponent(key)}&w=${w}`;
+  }
+  return raw;
+}
+
+// ── Fetch a single product: Firestore first, mock fallback ────────────────
+async function fetchProduct(db: any, id: string): Promise<any | null> {
+  try {
+    const snap = await getDoc(doc(db, "products", id));
+    if (snap.exists()) {
+      const data = snap.data();
+      const raw = data.images?.[0] || data.imageUrl || "";
+      return {
+        id: snap.id,
+        name: data.name || "Unknown Plant",
+        price: data.price || 0,
+        oldPrice: data.oldPrice || null,
+        category: data.category || "",
+        imageUrl: resolveImage(raw, 200),
+      };
+    }
+  } catch { /* fallthrough */ }
+
+  // Fallback to mock data
+  const mock = PRODUCTS.find((p) => p.id === id);
+  if (mock) return { ...mock, imageUrl: resolveImage(mock.imageUrl, 200) };
+  return null;
+}
+
 function CheckoutContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -68,40 +96,60 @@ function CheckoutContent() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [cartItems, setCartItems] = useState<any[]>([]);
+  const [cartLoading, setCartLoading] = useState(true);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cod");
   const [isPincodeLoading, setIsPincodeLoading] = useState(false);
 
   const [formData, setFormData] = useState({
-    fullName: "",
-    phone: "",
-    phone2: "",
-    email: "",
-    address: "",
-    city: "",
-    state: "",
-    pincode: "",
+    fullName: "", phone: "", phone2: "", email: "",
+    address: "", city: "", state: "", pincode: "",
   });
 
+  // ── Load cart items from Firestore ──────────────────────────────────────
   useEffect(() => {
-    try {
-      const raw = isBuyNow
-        ? sessionStorage.getItem("buynow_cart")
-        : localStorage.getItem("plantshop_cart");
+    if (!db) return;
+    let cancelled = false;
 
-      const stored = JSON.parse(raw || "[]");
-      const enriched = stored
-        .map((item: any) => {
-          const product = PRODUCTS.find((p) => p.id === (item.id || item.productId));
-          return product ? { ...product, quantity: item.quantity } : null;
-        })
-        .filter(Boolean);
+    (async () => {
+      setCartLoading(true);
+      try {
+        const raw = isBuyNow
+          ? sessionStorage.getItem("buynow_cart")
+          : localStorage.getItem("plantshop_cart");
 
-      setCartItems(enriched);
-    } catch {
-      setCartItems([]);
-    }
-  }, []);
+        const stored: any[] = JSON.parse(raw || "[]");
 
+        // Group by id and sum quantities
+        const grouped: Record<string, number> = {};
+        for (const item of stored) {
+          const id = item.id || item.productId || item.plantId;
+          if (!id) continue;
+          grouped[id] = (grouped[id] || 0) + (item.quantity || 1);
+        }
+
+        const ids = Object.keys(grouped);
+        if (ids.length === 0) { setCartItems([]); setCartLoading(false); return; }
+
+        const enriched = await Promise.all(
+          ids.map(async (id) => {
+            const product = await fetchProduct(db, id);
+            if (!product) return null;
+            return { ...product, quantity: grouped[id] };
+          })
+        );
+
+        if (!cancelled) setCartItems(enriched.filter(Boolean));
+      } catch {
+        if (!cancelled) setCartItems([]);
+      } finally {
+        if (!cancelled) setCartLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [db, isBuyNow]);
+
+  // ── Pre-fill user info ──────────────────────────────────────────────────
   useEffect(() => {
     if (user) {
       setFormData((prev) => ({
@@ -112,10 +160,10 @@ function CheckoutContent() {
     }
   }, [user]);
 
+  // ── Auto-fill city/state from pincode ──────────────────────────────────
   useEffect(() => {
     const pincode = formData.pincode;
     if (pincode.length !== 6) return;
-
     const timer = setTimeout(async () => {
       setIsPincodeLoading(true);
       try {
@@ -129,13 +177,9 @@ function CheckoutContent() {
             state: po.State || prev.state,
           }));
         }
-      } catch {
-        // fail silently
-      } finally {
-        setIsPincodeLoading(false);
-      }
+      } catch { /* fail silently */ }
+      finally { setIsPincodeLoading(false); }
     }, 600);
-
     return () => clearTimeout(timer);
   }, [formData.pincode]);
 
@@ -156,22 +200,16 @@ function CheckoutContent() {
           customerPhone: formData.phone,
           customerPhone2: formData.phone2 || null,
           items: cartItems.map((i) => ({ name: i.name, qty: i.quantity, price: i.price })),
-          total,
-          paymentMethod,
+          total, paymentMethod,
           status: paymentMethod === 'cod' ? 'Pending' : 'Approved',
           shippingAddress: {
             fullAddress: formData.address,
-            city: formData.city,
-            state: formData.state,
-            pincode: formData.pincode,
+            city: formData.city, state: formData.state, pincode: formData.pincode,
           },
         }),
       });
       return await res.json();
-    } catch (err) {
-      console.error('Notification error:', err);
-      return null;
-    }
+    } catch (err) { console.error('Notification error:', err); return null; }
   };
 
   const saveOrderToFirestore = async (
@@ -195,9 +233,7 @@ function CheckoutContent() {
       customerPhone2: formData.phone2 || null,
       shippingAddress: {
         fullAddress: formData.address,
-        city: formData.city,
-        state: formData.state,
-        pincode: formData.pincode,
+        city: formData.city, state: formData.state, pincode: formData.pincode,
       },
       paymentMethod: razorpayPaymentId ? "online" : "cod",
       paymentStatus: razorpayPaymentId ? "paid" : "pending",
@@ -227,7 +263,7 @@ function CheckoutContent() {
           const productSnap = await getDoc(doc(db, "products", item.id));
           const rate = productSnap.exists() ? productSnap.data().affiliateCommission || 5 : 5;
           await saveCommissionRecord({
-            productId: item.slug,
+            productId: item.slug || item.id,
             orderId,
             orderValue: item.price * item.quantity,
             commissionRate: rate,
@@ -235,7 +271,6 @@ function CheckoutContent() {
         }
       }
 
-      // Send email + WhatsApp notifications
       const notifications = await sendOrderNotifications(orderId);
 
       if (isBuyNow) {
@@ -246,26 +281,19 @@ function CheckoutContent() {
       }
 
       const waParam = notifications?.customerWaLink
-        ? `&wa=${encodeURIComponent(notifications.customerWaLink)}`
-        : '';
+        ? `&wa=${encodeURIComponent(notifications.customerWaLink)}` : '';
       router.push(`/order-success?id=${orderId}${waParam}`);
 
     } catch (err) {
-      errorEmitter.emit(
-        "permission-error",
-        new FirestorePermissionError({
-          path: orderRef.path,
-          operation: "create",
-          requestResourceData: orderData,
-        })
-      );
+      errorEmitter.emit("permission-error", new FirestorePermissionError({
+        path: orderRef.path, operation: "create", requestResourceData: orderData,
+      }));
     }
   };
 
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
-
     if (!user) { router.push("/login?redirect=/checkout"); return; }
     if (cartItems.length === 0) { toast({ title: "Cart is empty", variant: "destructive" }); return; }
     if (!formData.state) { toast({ title: "Please select a state", variant: "destructive" }); return; }
@@ -283,7 +311,6 @@ function CheckoutContent() {
         toast({ title: "Order Placed Successfully 🌿" });
       } else {
         const firestoreOrderId = generateOrderId("upi");
-
         const res = await fetch('/api/create-order', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -293,8 +320,7 @@ function CheckoutContent() {
 
         if (!window.Razorpay) {
           toast({ title: "Payment system loading...", description: "Please try again in a second", variant: "destructive" });
-          setIsSubmitting(false);
-          return;
+          setIsSubmitting(false); return;
         }
 
         const options = {
@@ -316,7 +342,6 @@ function CheckoutContent() {
               }),
             });
             const verifyData = await verifyRes.json();
-
             if (verifyData.success) {
               await saveOrderToFirestore(firestoreOrderId, response.razorpay_payment_id, response.razorpay_order_id);
               toast({ title: "Payment Successful 🌿", description: "Your order has been recorded" });
@@ -344,12 +369,9 @@ function CheckoutContent() {
     id: PaymentMethod; icon: React.ReactNode; label: string;
     desc: string; badge?: string; badgeCls?: string;
   }) => (
-    <button
-      type="button"
-      onClick={() => setPaymentMethod(id)}
+    <button type="button" onClick={() => setPaymentMethod(id)}
       className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl border transition-all text-left
-        ${paymentMethod === id ? "border-[#388E3C] bg-[#F1F8E9]" : "border-[#E8E8E8] hover:border-[#D8EDD5]"}`}
-    >
+        ${paymentMethod === id ? "border-[#388E3C] bg-[#F1F8E9]" : "border-[#E8E8E8] hover:border-[#D8EDD5]"}`}>
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors
         ${paymentMethod === id ? "bg-[#388E3C] text-white" : "bg-[#F1F8E9] text-[#388E3C]"}`}>
         {icon}
@@ -357,9 +379,7 @@ function CheckoutContent() {
       <div className="flex-1">
         <div className="flex items-center gap-2 flex-wrap">
           <span className={`font-semibold text-sm ${paymentMethod === id ? "text-[#388E3C]" : "text-[#1A2E1A]"}`}>{label}</span>
-          {badge && (
-            <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide ${badgeCls}`}>{badge}</span>
-          )}
+          {badge && <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide ${badgeCls}`}>{badge}</span>}
         </div>
         <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
       </div>
@@ -396,6 +416,7 @@ function CheckoutContent() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Left — Shipping + Payment */}
             <div className="lg:col-span-7 space-y-5">
               <Card className="rounded-2xl shadow-sm bg-white border border-[#E8E8E8] overflow-hidden">
                 <div className="px-6 py-5 border-b border-[#F5F5F5]">
@@ -488,6 +509,7 @@ function CheckoutContent() {
               </Card>
             </div>
 
+            {/* Right — Summary */}
             <div className="lg:col-span-5">
               <div className="sticky top-20">
                 <Card className="rounded-2xl shadow-sm bg-white border border-[#E8E8E8] overflow-hidden">
@@ -500,24 +522,48 @@ function CheckoutContent() {
                       </span>
                     </h2>
                   </div>
+
+                  {/* Cart items */}
                   <div className="divide-y divide-[#F8F8F8] max-h-56 overflow-y-auto">
-                    {cartItems.map((item, idx) => (
-                      <div key={idx} className="flex items-center gap-3 px-5 py-3.5">
-                        <div className="relative w-14 h-14 rounded-xl overflow-hidden bg-[#F1F8E9] flex-shrink-0 border border-[#F0F0F0]">
-                          <Image src={item.imageUrl} alt={item.name} fill className="object-cover" />
-                          <span className="absolute -top-1 -right-1 w-5 h-5 bg-primary text-white text-[9px] font-black rounded-full flex items-center justify-center">
-                            {item.quantity}
-                          </span>
+                    {cartLoading ? (
+                      // Skeleton while loading
+                      Array.from({ length: 2 }).map((_, i) => (
+                        <div key={i} className="flex items-center gap-3 px-5 py-3.5 animate-pulse">
+                          <div className="w-14 h-14 rounded-xl bg-gray-200 flex-shrink-0" />
+                          <div className="flex-1 space-y-2">
+                            <div className="h-3 bg-gray-200 rounded w-3/4" />
+                            <div className="h-2 bg-gray-200 rounded w-1/2" />
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-xs text-[#1A2E1A] line-clamp-2 leading-tight">{item.name}</p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5">{item.category}</p>
-                          <p className="text-xs font-bold text-primary mt-0.5">{fmt(item.price)}</p>
-                        </div>
-                        <p className="font-bold text-sm text-[#1A2E1A] flex-shrink-0">{fmt(item.price * item.quantity)}</p>
+                      ))
+                    ) : cartItems.length === 0 ? (
+                      <div className="px-5 py-6 text-center text-sm text-muted-foreground">
+                        No items in cart
                       </div>
-                    ))}
+                    ) : (
+                      cartItems.map((item, idx) => (
+                        <div key={idx} className="flex items-center gap-3 px-5 py-3.5">
+                          <div className="relative w-14 h-14 rounded-xl overflow-hidden bg-[#F1F8E9] flex-shrink-0 border border-[#F0F0F0]">
+                            {item.imageUrl && item.imageUrl !== "/placeholder.svg" ? (
+                              <Image src={item.imageUrl} alt={item.name} fill className="object-cover" unoptimized />
+                            ) : (
+                              <div className="absolute inset-0 flex items-center justify-center text-xl">🌿</div>
+                            )}
+                            <span className="absolute -top-1 -right-1 w-5 h-5 bg-primary text-white text-[9px] font-black rounded-full flex items-center justify-center">
+                              {item.quantity}
+                            </span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-xs text-[#1A2E1A] line-clamp-2 leading-tight">{item.name}</p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">{item.category}</p>
+                            <p className="text-xs font-bold text-primary mt-0.5">{fmt(item.price)}</p>
+                          </div>
+                          <p className="font-bold text-sm text-[#1A2E1A] flex-shrink-0">{fmt(item.price * item.quantity)}</p>
+                        </div>
+                      ))
+                    )}
                   </div>
+
                   <div className="px-5 py-4 border-t border-[#F5F5F5] space-y-3">
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Subtotal</span>
@@ -543,8 +589,11 @@ function CheckoutContent() {
                       <span className="font-headline font-bold text-lg text-[#1A2E1A]">Total</span>
                       <span className="font-headline font-extrabold text-2xl text-primary">{fmt(total)}</span>
                     </div>
-                    <Button type="submit" disabled={isSubmitting} className="w-full h-14 rounded-2xl text-base font-semibold mt-2 gap-2">
-                      {isSubmitting ? <><Loader2 className="h-5 w-5 animate-spin" /> Processing...</> : <><PackageCheck className="h-5 w-5" /> Complete Order</>}
+                    <Button type="submit" disabled={isSubmitting || cartLoading}
+                      className="w-full h-14 rounded-2xl text-base font-semibold mt-2 gap-2">
+                      {isSubmitting
+                        ? <><Loader2 className="h-5 w-5 animate-spin" /> Processing...</>
+                        : <><PackageCheck className="h-5 w-5" /> Complete Order</>}
                     </Button>
                     <p className="text-center text-[10px] text-muted-foreground flex items-center justify-center gap-1">
                       <ShieldCheck className="h-3 w-3" /> Secure checkout powered by Monterra
@@ -557,9 +606,10 @@ function CheckoutContent() {
         </div>
       </main>
 
+      {/* Mobile sticky bottom */}
       <div className="sm:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-[#E8E8E8] px-4 py-3 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]"
         style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}>
-        <Button type="submit" disabled={isSubmitting} className="w-full h-14 rounded-2xl text-base font-semibold gap-2">
+        <Button type="submit" disabled={isSubmitting || cartLoading} className="w-full h-14 rounded-2xl text-base font-semibold gap-2">
           {isSubmitting ? <><Loader2 className="h-5 w-5 animate-spin" /> Processing...</> : `Complete Order · ${fmt(total)}`}
         </Button>
       </div>
@@ -567,7 +617,6 @@ function CheckoutContent() {
   );
 }
 
-// ✅ Outer page wraps CheckoutContent in Suspense — fixes useSearchParams build error
 export default function CheckoutPage() {
   return (
     <div className="min-h-screen flex flex-col bg-[#FAFAF7]">
