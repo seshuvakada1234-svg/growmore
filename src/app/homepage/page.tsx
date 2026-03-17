@@ -84,36 +84,37 @@ export default function HomepagePage() {
         <CategorySection />
 
         {/* Dynamic Sections from Home Editor */}
-        {sections.map((section, idx) => (
-          <React.Fragment key={section.key}>
-            <ProductGrid
-              title={section.title}
-              subtitle={SECTION_SUBTITLE[section.key] || 'For You'}
-              filterKey={SECTION_FILTER[section.key] || 'all'}
-              categoryFilter={
-                section.category && section.category !== 'all'
-                  ? section.category
-                  : undefined
-              }
-              pickedProductIds={
-                section.productIds?.length > 0
-                  ? section.productIds
-                  : undefined
-              }
-              bannerImageUrl={section.imageUrl || ''}
-              bannerImageUrl2={section.imageUrl2 || ''}
-              limit={section.key === 'topRated' ? 10 : 5}
-              showViewAll
-              viewAllHref="/plants"
-            />
+        {sections.map((section, idx) => {
+          const hasHandPicked = section.productIds && section.productIds.length > 0;
+          
+          return (
+            <React.Fragment key={section.key}>
+              <ProductGrid
+                title={section.title}
+                subtitle={SECTION_SUBTITLE[section.key] || 'For You'}
+                // Mutual exclusivity: if products are picked, disable automatic filters to prevent overlap
+                filterKey={hasHandPicked ? undefined : (SECTION_FILTER[section.key] || 'all')}
+                categoryFilter={
+                  !hasHandPicked && section.category && section.category !== 'all'
+                    ? section.category
+                    : undefined
+                }
+                pickedProductIds={hasHandPicked ? section.productIds : undefined}
+                bannerImageUrl={section.imageUrl || ''}
+                bannerImageUrl2={section.imageUrl2 || ''}
+                limit={section.key === 'topRated' ? 10 : 5}
+                showViewAll
+                viewAllHref="/plants"
+              />
 
-            {/* Insert Offer Banner after 2nd section */}
-            {idx === 1 && <OfferBanner />}
+              {/* Insert Offer Banner after 2nd section */}
+              {idx === 1 && <OfferBanner />}
 
-            {/* Insert Affiliate Banner after 3rd section */}
-            {idx === 2 && <AffiliateBanner />}
-          </React.Fragment>
-        ))}
+              {/* Insert Affiliate Banner after 3rd section */}
+              {idx === 2 && <AffiliateBanner />}
+            </React.Fragment>
+          );
+        })}
 
       </main>
       <Footer />

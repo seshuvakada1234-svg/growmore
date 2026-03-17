@@ -228,16 +228,16 @@ export default function ProductGrid({
   const memoizedQuery = useMemoFirebase(() => {
     if (!db) return null;
 
-    // 1. Hand-picked products (Admin selection)
+    // 1. Priority: Hand-picked products (Admin selection)
     if (pickedProductIds && pickedProductIds.length > 0) {
       // documentId() 'in' query fetches only the specific IDs provided
       return query(collection(db, "products"), where(documentId(), "in", pickedProductIds));
     }
 
-    // 2. Optimized Fallback Filter Queries
+    // 2. Fallback: Optimized Filter Queries
     const constraints: any[] = [];
 
-    // Category filtering
+    // Category filtering (only if not hand-picked)
     if (categoryFilter && categoryFilter !== 'all') {
       constraints.push(where("category", "==", categoryFilter));
     }
@@ -248,13 +248,15 @@ export default function ProductGrid({
         constraints.push(where("isBestseller", "==", true));
         break;
       case 'new':
-        // ORDER BY createdAt ensures "New Arrivals" are actually latest
+        // Latest products based on timestamp
         constraints.push(orderBy("createdAt", "desc"));
         break;
       case 'featured':
         constraints.push(where("isFeatured", "==", true));
         break;
+      case 'all':
       default:
+        // Default top rated
         constraints.push(orderBy("rating", "desc"));
     }
 
@@ -266,15 +268,17 @@ export default function ProductGrid({
 
   const { data: results, isLoading } = useCollection(memoizedQuery);
 
-  // ── Final Sorting ────────────────────────────────────────────────────────
+  // ── Final Sorting & Ordering ─────────────────────────────────────────────
   const plants = useMemo(() => {
     if (!results) return [];
     
+    // 🚨 CRITICAL: Firestore 'in' query does NOT preserve order.
+    // We must manually map results back to match the pickedProductIds array order.
     if (pickedProductIds && pickedProductIds.length > 0) {
-      // Restore the specific order chosen by the admin
-      return [...results].sort((a, b) => 
-        pickedProductIds.indexOf(a.id) - pickedProductIds.indexOf(b.id)
-      ).slice(0, limitCount);
+      return pickedProductIds
+        .map(id => results.find(p => p.id === id))
+        .filter((p): p is any => !!p) // Remove any nulls if an ID wasn't found
+        .slice(0, limitCount);
     }
     
     return results;
