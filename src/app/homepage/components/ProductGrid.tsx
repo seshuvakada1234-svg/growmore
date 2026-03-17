@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Heart, Star, ArrowRight, Loader2 } from 'lucide-react';
 import Image from 'next/image';
-import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase";
+import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
 import { 
   doc, 
   setDoc, 
@@ -15,7 +15,8 @@ import {
   where, 
   orderBy, 
   limit, 
-  documentId 
+  documentId,
+  getDocs 
 } from "firebase/firestore";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -103,14 +104,12 @@ function PlantCard({ plant }: { plant: any }) {
       <div className="relative overflow-hidden bg-muted" style={{ aspectRatio: '1/1' }}>
         <Image src={imgSrc} alt={plant.name} fill className="object-cover transition-transform duration-500 group-hover:scale-110" unoptimized />
 
-        {/* Badges */}
         <div className="absolute top-1.5 left-1.5 sm:top-3 sm:left-3 flex flex-col gap-1 z-10">
           {plant.isBestseller && <span className="text-[8px] sm:text-[10px] bg-[#FF6F00] text-white font-black px-1 sm:px-2 py-0.5 rounded shadow-sm uppercase tracking-wider">BESTSELLER</span>}
           {plant.isNew && <span className="text-[8px] sm:text-[10px] bg-primary text-white font-black px-1 sm:px-2 py-0.5 rounded shadow-sm uppercase tracking-wider">NEW</span>}
           {discount > 0 && <span className="text-[8px] sm:text-[10px] bg-destructive text-white font-black px-1 sm:px-2 py-0.5 rounded shadow-sm uppercase tracking-wider">{discount}% OFF</span>}
         </div>
 
-        {/* Action buttons */}
         <div className="absolute top-1.5 right-1.5 sm:top-3 sm:right-3 z-10 flex flex-col gap-1 sm:gap-2">
           <button className="p-1 sm:p-2 rounded-full transition-all bg-white/70 hover:bg-white backdrop-blur-sm shadow-sm" onClick={toggleWishlist} aria-label="Add to wishlist">
             <Heart className={cn("h-3 w-3 sm:h-4 sm:w-4 transition-all duration-300", isWishlisted ? "fill-red-500 text-red-500" : "text-muted-foreground", isAnimating && "scale-125")} />
@@ -118,7 +117,6 @@ function PlantCard({ plant }: { plant: any }) {
           <ShareMenu product={plant} className="p-1 sm:p-2 h-auto w-auto rounded-full bg-white/70 hover:bg-white backdrop-blur-sm text-muted-foreground shadow-sm" variant="ghost" />
         </div>
 
-        {/* Quick Add */}
         <div className="absolute bottom-0 left-0 right-0 p-1.5 sm:p-3 sm:translate-y-full sm:group-hover:translate-y-0 transition-transform duration-300 z-10">
           <button onClick={addToCart}
             className={`w-full py-1.5 sm:py-2.5 rounded-lg sm:rounded-xl text-[8px] sm:text-xs font-bold uppercase tracking-widest transition-all shadow-lg ${addedToCart ? 'bg-primary text-white' : 'bg-white/95 text-primary hover:bg-primary hover:text-white'}`}>
@@ -151,7 +149,6 @@ function PlantCard({ plant }: { plant: any }) {
   );
 }
 
-// ── Skeleton card ─────────────────────────────────────────────────────────────
 function SkeletonCard() {
   return (
     <div className="bg-white rounded-xl sm:rounded-2xl overflow-hidden shadow-sm border border-border/50 animate-pulse">
@@ -165,10 +162,8 @@ function SkeletonCard() {
   );
 }
 
-// ── Section Banner Image ──────────────────────────────────────────────────────
 function SectionBanner({ imageUrl, imageUrl2 }: { imageUrl: string; imageUrl2?: string }) {
   if (!imageUrl && !imageUrl2) return null;
-  // Two images side by side
   if (imageUrl && imageUrl2) {
     return (
       <div className="grid grid-cols-2 gap-3 mb-6">
@@ -183,7 +178,6 @@ function SectionBanner({ imageUrl, imageUrl2 }: { imageUrl: string; imageUrl2?: 
       </div>
     );
   }
-  // Single image — full width
   return (
     <div className="relative w-full rounded-2xl overflow-hidden mb-6 h-[120px] sm:h-[200px]">
       <Image src={proxyUrl(imageUrl || imageUrl2 || '', 1200)} alt="Section banner" fill className="object-cover" unoptimized />
@@ -192,7 +186,6 @@ function SectionBanner({ imageUrl, imageUrl2 }: { imageUrl: string; imageUrl2?: 
   );
 }
 
-// ── Main ProductGrid ──────────────────────────────────────────────────────────
 interface ProductGridProps {
   title: string;
   subtitle?: string;
@@ -200,11 +193,8 @@ interface ProductGridProps {
   limit?: number;
   showViewAll?: boolean;
   viewAllHref?: string;
-  // For hand-picked products from home editor
   pickedProductIds?: string[];
-  // Filter by category
   categoryFilter?: string;
-  // Section banner images
   bannerImageUrl?: string;
   bannerImageUrl2?: string;
 }
@@ -223,73 +213,89 @@ export default function ProductGrid({
 }: ProductGridProps) {
   const router = useRouter();
   const db = useFirestore();
+  
+  const [plants, setPlants] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // ── Optimized Firestore Query ─────────────────────────────────────────────
-  const memoizedQuery = useMemoFirebase(() => {
-    if (!db) return null;
+  // Stabilize pickedProductIds for the dependency array
+  const pickedIdsString = JSON.stringify(pickedProductIds);
 
-    // 1. Priority: Hand-picked products (Admin selection)
-    if (pickedProductIds && pickedProductIds.length > 0) {
-      // documentId() 'in' query fetches only the specific IDs provided
-      return query(collection(db, "products"), where(documentId(), "in", pickedProductIds));
-    }
+  useEffect(() => {
+    if (!db) return;
+    let isMounted = true;
 
-    // 2. Fallback: Optimized Filter Queries
-    const constraints: any[] = [];
+    const fetchGridData = async () => {
+      setLoading(true);
+      try {
+        let results: any[] = [];
 
-    // Category filtering (only if not hand-picked)
-    if (categoryFilter && categoryFilter !== 'all') {
-      constraints.push(where("category", "==", categoryFilter));
-    }
+        // 1. Priority: Hand-picked products (Admin selection)
+        if (pickedProductIds && pickedProductIds.length > 0) {
+          const q = query(
+            collection(db, "products"), 
+            where(documentId(), "in", pickedProductIds)
+          );
+          const snap = await getDocs(q);
+          const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          
+          // CRITICAL: Manual reorder to match pickedProductIds array order
+          results = pickedProductIds
+            .map(id => docs.find(p => p.id === id))
+            .filter((p): p is any => !!p)
+            .slice(0, limitCount);
+        } 
+        // 2. Fallback: Optimized Filter Queries
+        else {
+          const constraints: any[] = [];
 
-    // Key-based filtering
-    switch (filterKey) {
-      case 'bestseller':
-        constraints.push(where("isBestseller", "==", true));
-        break;
-      case 'new':
-        // Latest products based on timestamp
-        constraints.push(orderBy("createdAt", "desc"));
-        break;
-      case 'featured':
-        constraints.push(where("isFeatured", "==", true));
-        break;
-      case 'all':
-      default:
-        // Default top rated
-        constraints.push(orderBy("rating", "desc"));
-    }
+          if (categoryFilter && categoryFilter !== 'all') {
+            constraints.push(where("category", "==", categoryFilter));
+          }
 
-    // Fetch exactly what's needed
-    constraints.push(limit(limitCount));
+          switch (filterKey) {
+            case 'bestseller':
+              constraints.push(where("isBestseller", "==", true));
+              break;
+            case 'new':
+              constraints.push(orderBy("createdAt", "desc"));
+              break;
+            case 'featured':
+              constraints.push(where("isFeatured", "==", true));
+              break;
+            case 'all':
+            default:
+              constraints.push(orderBy("rating", "desc"));
+          }
 
-    return query(collection(db, "products"), ...constraints);
-  }, [db, pickedProductIds, filterKey, categoryFilter, limitCount]);
+          constraints.push(limit(limitCount));
+          const q = query(collection(db, "products"), ...constraints);
+          const snap = await getDocs(q);
+          results = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        }
 
-  const { data: results, isLoading } = useCollection(memoizedQuery);
+        if (isMounted) {
+          setPlants(results);
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error(`[ProductGrid: ${title}] fetch error:`, error);
+        if (isMounted) setLoading(false);
+      }
+    };
 
-  // ── Final Sorting & Ordering ─────────────────────────────────────────────
-  const plants = useMemo(() => {
-    if (!results) return [];
-    
-    // 🚨 CRITICAL: Firestore 'in' query does NOT preserve order.
-    // We must manually map results back to match the pickedProductIds array order.
-    if (pickedProductIds && pickedProductIds.length > 0) {
-      return pickedProductIds
-        .map(id => results.find(p => p.id === id))
-        .filter((p): p is any => !!p) // Remove any nulls if an ID wasn't found
-        .slice(0, limitCount);
-    }
-    
-    return results;
-  }, [results, pickedProductIds, limitCount]);
+    fetchGridData();
 
-  if (isLoading) {
+    return () => {
+      isMounted = false;
+    };
+  }, [db, filterKey, categoryFilter, limitCount, pickedIdsString, title]);
+
+  if (loading) {
     return (
       <section className="py-6 sm:py-8 md:py-16 bg-neutral/30">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6">
           <div className="h-8 bg-gray-200 rounded w-48 mb-6 animate-pulse" />
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-4">
             {Array.from({ length: 5 }).map((_, i) => <SkeletonCard key={i} />)}
           </div>
         </div>
@@ -302,11 +308,8 @@ export default function ProductGrid({
   return (
     <section className="py-6 sm:py-8 md:py-16 bg-neutral/30">
       <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6">
-
-        {/* Section Banner Image */}
         <SectionBanner imageUrl={bannerImageUrl || ''} imageUrl2={bannerImageUrl2 || ''} />
 
-        {/* Section Header */}
         <div className="flex flex-row items-center justify-between mb-4 sm:mb-8 gap-2">
           <div>
             {subtitle && <div className="text-primary font-bold uppercase tracking-wider text-[10px] sm:text-xs mb-0.5 sm:mb-1">{subtitle}</div>}
@@ -322,7 +325,6 @@ export default function ProductGrid({
           )}
         </div>
 
-        {/* Product Grid — 2 cols mobile, 3 tablet, 5 desktop */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-4 md:gap-5">
           {plants.map(plant => <PlantCard key={`grid-${plant.id}`} plant={plant} />)}
         </div>

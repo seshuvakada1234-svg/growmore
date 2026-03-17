@@ -90,6 +90,7 @@ export default function HomepagePage() {
           return (
             <React.Fragment key={section.key}>
               <ProductGrid
+                key={section.key}
                 title={section.title}
                 subtitle={SECTION_SUBTITLE[section.key] || 'For You'}
                 // Mutual exclusivity: if products are picked, disable automatic filters to prevent overlap
