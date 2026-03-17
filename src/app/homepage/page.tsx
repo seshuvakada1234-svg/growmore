@@ -26,7 +26,7 @@ const SECTION_SUBTITLE: Record<string, string> = {
   topSales:       'Most Loved',
   crowdFavorites: 'Crowd Picks',
   topRated:       'Handpicked For You',
-  newArrivals:    'Just In',
+  newArrivals:    'Greenhouse Fresh',
 };
 
 export default function HomepagePage() {
@@ -38,10 +38,10 @@ export default function HomepagePage() {
 
   // Default sections if Firestore not loaded yet
   const defaultSections = [
-    { key: 'newArrivals',    title: 'New Arrivals',     enabled: true },
-    { key: 'topSales',       title: 'Best Sellers',     enabled: true },
-    { key: 'crowdFavorites', title: 'Crowd Favorites',  enabled: true },
-    { key: 'topRated',       title: 'Top Rated Plants', enabled: true },
+    { key: 'newArrivals',    title: 'New Arrivals',     enabled: true, order: 0 },
+    { key: 'topSales',       title: 'Best Sellers',     enabled: true, order: 1 },
+    { key: 'crowdFavorites', title: 'Crowd Favorites',  enabled: true, order: 2 },
+    { key: 'topRated',       title: 'Top Rated Plants', enabled: true, order: 3 },
   ];
 
   // Build sections list from Firestore data
@@ -56,7 +56,7 @@ export default function HomepagePage() {
         title:        val.title        || key,
         enabled:      val.enabled      ?? true,
         imageUrl:     val.imageUrl     || '',
-        imageUrl2:    val.imageUrl2    || '', // Fix: Extract second banner
+        imageUrl2:    val.imageUrl2    || '',
         productIds:   val.productIds   || [],
         category:     val.category     || '',
         isCustom:     val.isCustom     || false,
@@ -89,13 +89,7 @@ export default function HomepagePage() {
             <ProductGrid
               title={section.title}
               subtitle={SECTION_SUBTITLE[section.key] || 'For You'}
-              filterKey={
-                section.productIds?.length > 0
-                  ? undefined  // hand-picked → no filter needed
-                  : section.category && section.category !== 'all'
-                    ? undefined
-                    : SECTION_FILTER[section.key] || 'all'
-              }
+              filterKey={SECTION_FILTER[section.key] || 'all'}
               categoryFilter={
                 section.category && section.category !== 'all'
                   ? section.category
@@ -108,7 +102,7 @@ export default function HomepagePage() {
               }
               bannerImageUrl={section.imageUrl || ''}
               bannerImageUrl2={section.imageUrl2 || ''}
-              limit={5}
+              limit={section.key === 'topRated' ? 10 : 5}
               showViewAll
               viewAllHref="/plants"
             />

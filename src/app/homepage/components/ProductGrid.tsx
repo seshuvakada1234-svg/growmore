@@ -1,11 +1,22 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Heart, Star, ArrowRight, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import { useUser, useFirestore, useDoc, useMemoFirebase, useCollection } from "@/firebase";
-import { doc, setDoc, deleteDoc, serverTimestamp, collection, getDoc } from "firebase/firestore";
+import { 
+  doc, 
+  setDoc, 
+  deleteDoc, 
+  serverTimestamp, 
+  collection, 
+  query, 
+  where, 
+  orderBy, 
+  limit, 
+  documentId 
+} from "firebase/firestore";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { ShareMenu } from '@/components/shared/ShareButton';
@@ -202,7 +213,7 @@ export default function ProductGrid({
   title,
   subtitle,
   filterKey,
-  limit = 5,
+  limit: limitCount = 5,
   showViewAll = true,
   viewAllHref = '/plants',
   pickedProductIds,
@@ -212,42 +223,64 @@ export default function ProductGrid({
 }: ProductGridProps) {
   const router = useRouter();
   const db = useFirestore();
-  const [plants, setPlants] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  // ── Load products from Firestore ──────────────────────────────────────────
-  const productsRef = useMemoFirebase(() => collection(db, 'products'), [db]);
-  const { data: allProducts } = useCollection(productsRef);
+  // ── Optimized Firestore Query ─────────────────────────────────────────────
+  const memoizedQuery = useMemoFirebase(() => {
+    if (!db) return null;
 
-  useEffect(() => {
-    if (!allProducts) return;
-
-    let result: any[] = [];
-
+    // 1. Hand-picked products (Admin selection)
     if (pickedProductIds && pickedProductIds.length > 0) {
-      // Fix: Resolve hand-picked products accurately using document IDs (slugs)
-      result = pickedProductIds
-        .map(id => allProducts.find((p: any) => p.id === id))
-        .filter(Boolean);
-    } else {
-      // Filter-based fallback
-      switch (filterKey) {
-        case 'bestseller': result = allProducts.filter((p: any) => p.isBestseller); break;
-        case 'new': result = allProducts.filter((p: any) => p.isNew); break;
-        case 'featured': result = allProducts.filter((p: any) => p.isFeatured); break;
-        default: result = [...allProducts].sort((a: any, b: any) => (b.rating || 0) - (a.rating || 0));
-      }
-      // Apply category filter if set
-      if (categoryFilter && categoryFilter !== 'all') {
-        result = result.filter((p: any) => p.category === categoryFilter);
-      }
+      // documentId() 'in' query fetches only the specific IDs provided
+      return query(collection(db, "products"), where(documentId(), "in", pickedProductIds));
     }
 
-    setPlants(result.slice(0, limit));
-    setLoading(false);
-  }, [allProducts, pickedProductIds, filterKey, categoryFilter, limit]);
+    // 2. Optimized Fallback Filter Queries
+    const constraints: any[] = [];
 
-  if (loading) {
+    // Category filtering
+    if (categoryFilter && categoryFilter !== 'all') {
+      constraints.push(where("category", "==", categoryFilter));
+    }
+
+    // Key-based filtering
+    switch (filterKey) {
+      case 'bestseller':
+        constraints.push(where("isBestseller", "==", true));
+        break;
+      case 'new':
+        // ORDER BY createdAt ensures "New Arrivals" are actually latest
+        constraints.push(orderBy("createdAt", "desc"));
+        break;
+      case 'featured':
+        constraints.push(where("isFeatured", "==", true));
+        break;
+      default:
+        constraints.push(orderBy("rating", "desc"));
+    }
+
+    // Fetch exactly what's needed
+    constraints.push(limit(limitCount));
+
+    return query(collection(db, "products"), ...constraints);
+  }, [db, pickedProductIds, filterKey, categoryFilter, limitCount]);
+
+  const { data: results, isLoading } = useCollection(memoizedQuery);
+
+  // ── Final Sorting ────────────────────────────────────────────────────────
+  const plants = useMemo(() => {
+    if (!results) return [];
+    
+    if (pickedProductIds && pickedProductIds.length > 0) {
+      // Restore the specific order chosen by the admin
+      return [...results].sort((a, b) => 
+        pickedProductIds.indexOf(a.id) - pickedProductIds.indexOf(b.id)
+      ).slice(0, limitCount);
+    }
+    
+    return results;
+  }, [results, pickedProductIds, limitCount]);
+
+  if (isLoading) {
     return (
       <section className="py-6 sm:py-8 md:py-16 bg-neutral/30">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6">
