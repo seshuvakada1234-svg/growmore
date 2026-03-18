@@ -338,7 +338,7 @@ export default function PartnerProfilePage() {
               commissions.map((comm) => (
                 <TableRow key={comm.id} className="hover:bg-accent/30 transition-colors border-b border-muted">
                   <TableCell className="p-6 font-mono text-xs font-bold text-primary">
-                    #{comm.orderId?.substring(0, 12)}
+                    <a href={`/admin/orders/${comm.orderId}`} className="hover:underline cursor-pointer">#{comm.orderId?.substring(0, 12)}</a>
                   </TableCell>
                   <TableCell className="p-6 font-bold text-primary">₹{comm.orderValue.toLocaleString()}</TableCell>
                   <TableCell className="p-6">
@@ -355,7 +355,7 @@ export default function PartnerProfilePage() {
                     </Badge>
                   </TableCell>
                   <TableCell className="p-6 text-right text-xs text-muted-foreground">
-                    {comm.createdAt ? format(comm.createdAt.toDate(), "MMM dd, yyyy") : "Recent"}
+                    {comm.createdAt ? format(comm.createdAt.toDate(), "MMM dd, yyyy · hh:mm a") : "Recent"}
                   </TableCell>
                 </TableRow>
               ))
