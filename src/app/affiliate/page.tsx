@@ -604,6 +604,10 @@ export default function AffiliateDashboard() {
               {/* Recent Earnings */}
               <div className="space-y-4">
                 <h3 className="text-xl font-headline font-extrabold text-primary">Recent Earnings</h3>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 px-4 py-2 rounded-full w-fit">
+                  <span>ⓘ</span>
+                  <span>Commission is approved after 15 days of order delivery.</span>
+                </div>
                 <Card className="rounded-[2rem] border-none shadow-sm bg-white overflow-hidden">
                   <table className="w-full text-left">
                     <thead>
@@ -632,7 +636,7 @@ export default function AffiliateDashboard() {
                                 ? 'bg-emerald-100 text-emerald-700' 
                                 : 'bg-blue-100 text-blue-700'
                             }`}>
-                              {c.status}
+                              {c.status.replace('"', '').replace('"', '')}
                             </span>
                           </td>
                         </tr>

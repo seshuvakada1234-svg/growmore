@@ -96,6 +96,13 @@ export default function OrdersPage() {
     try {
       await updateDoc(orderRef, cancelData);
 
+      try {
+        const { cancelCommissionByOrder } = await import("@/lib/affiliateCommissionService");
+        await cancelCommissionByOrder(cancellingOrder.id, 'order_cancelled');
+      } catch (commissionError) {
+        console.warn("Commission reversal skipped:", commissionError);
+      }
+
       toast({
         title: "Order Cancelled",
         description: pm === "online"
