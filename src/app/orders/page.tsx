@@ -15,8 +15,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   collection, query, where, orderBy,
-  doc, updateDoc, serverTimestamp,
 } from "firebase/firestore";
+// ✅ REMOVED: doc, updateDoc, serverTimestamp — no longer needed on client
 import { format, differenceInHours } from "date-fns";
 import {
   Dialog, DialogContent, DialogHeader,
@@ -30,14 +30,76 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
+// ✅ REMOVED: cancelCommissionByOrder — commission is now handled server-side in the API
+import { auth } from "@/lib/firebase"; // ✅ ADD: needed to get ID token for API call
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export interface OrderItem {
+  name: string;
+  imageUrl?: string;
+  qty?: number;
+  quantity?: number;
+  price: number;
+  productId?: string;
+  id?: string;
+}
+
+export interface Order {
+  id: string;
+  orderId?: string;
+  userId: string;
+  status: string;
+  totalAmount?: number;
+  total?: number;
+  paymentMethod?: string;
+  razorpayPaymentId?: string;
+  refundStatus?: "pending" | "processed" | "failed";
+  commissionSync?: "ok" | "failed" | "not_applicable";
+  cancelled?: boolean;
+  createdAt?: { seconds: number };
+  items?: OrderItem[];
+}
+
+type CancelReason =
+  | "Ordered by mistake"
+  | "Found cheaper elsewhere"
+  | "Changed my mind"
+  | "Delivery time too long"
+  | "Other";
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const CANCELLABLE_STATUSES = ["Pending", "Approved", "Paid"] as const;
+const CANCEL_WINDOW_HOURS = 24;
+
+// ─── Pure Helpers ─────────────────────────────────────────────────────────────
+
+const getPaymentMethod = (order: Order | null): string =>
+  order?.paymentMethod?.toLowerCase() ?? "";
+
+const canCancel = (order: Order): boolean => {
+  if (order.status === "Cancelled") return false;
+  if (!CANCELLABLE_STATUSES.includes(order.status as typeof CANCELLABLE_STATUSES[number])) return false;
+
+  if (!order.createdAt?.seconds) {
+    console.warn(`[Orders] canCancel: order "${order.id}" has no createdAt — blocking cancel.`);
+    return false;
+  }
+
+  const createdAt = new Date(order.createdAt.seconds * 1000);
+  return differenceInHours(new Date(), createdAt) <= CANCEL_WINDOW_HOURS;
+};
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function OrdersPage() {
   const { user, isUserLoading } = useUser();
   const db = useFirestore();
   const router = useRouter();
 
-  const [cancellingOrder, setCancellingOrder] = useState<any>(null);
-  const [cancelReason, setCancelReason] = useState<string>("");
+  const [cancellingOrder, setCancellingOrder] = useState<Order | null>(null);
+  const [cancelReason, setCancelReason] = useState<CancelReason | "">("");
   const [cancelFeedback, setCancelFeedback] = useState<string>("");
   const [isSubmittingCancel, setIsSubmittingCancel] = useState(false);
 
@@ -58,66 +120,75 @@ export default function OrdersPage() {
     }
   }, [user, isUserLoading, router]);
 
-  // Normalize payment method for a given order object
-  const getPaymentMethod = (order: any) => order?.paymentMethod?.toLowerCase();
-
-  const canCancel = (order: any) => {
-    if (order.status === "Cancelled") return false;
-    const cancellableStatuses = ["Pending", "Approved", "Paid"];
-    if (!cancellableStatuses.includes(order.status)) return false;
-    const createdAt = order.createdAt?.seconds
-      ? new Date(order.createdAt.seconds * 1000)
-      : new Date();
-    return differenceInHours(new Date(), createdAt) <= 24;
+  const handleCloseCancelModal = () => {
+    setCancellingOrder(null);
+    setCancelReason("");
+    setCancelFeedback("");
   };
 
+  // ✅ FIXED: No more direct Firestore updateDoc — everything goes through the API
   const handleConfirmCancel = async () => {
     if (!cancellingOrder || !cancelReason) return;
 
     setIsSubmittingCancel(true);
-    const orderRef = doc(db, "orders", cancellingOrder.id);
-
-    // Normalize at point of use
-    const pm = getPaymentMethod(cancellingOrder);
-
-    const cancelData: any = {
-      status: "Cancelled",
-      cancelled: true,
-      cancelReason,
-      cancelFeedback: cancelReason === "Other" ? cancelFeedback : "",
-      cancelledAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    };
-
-    if (pm === "online" && cancellingOrder.razorpayPaymentId) {
-      cancelData.refundStatus = "pending";
-    }
 
     try {
-      await updateDoc(orderRef, cancelData);
+      // Step 1: Get the user's Firebase ID token for the API auth header
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) throw new Error("Not authenticated");
 
-      try {
-        const { cancelCommissionByOrder } = await import("@/lib/affiliateCommissionService");
-        await cancelCommissionByOrder(cancellingOrder.id, 'order_cancelled');
-      } catch (commissionError) {
-        console.warn("Commission reversal skipped:", commissionError);
-      }
+      // Step 2: Use the business orderId (e.g. "GS-COD-ZFRX6...") for the API
+      // The API resolves this to the correct Firestore doc internally
+      const businessOrderId = cancellingOrder.orderId ?? cancellingOrder.id;
 
-      toast({
-        title: "Order Cancelled",
-        description: pm === "online"
-          ? "Our team will review and process your refund shortly."
-          : "Your order has been successfully cancelled.",
+      console.log(
+        `[Orders] Calling cancel API — ` +
+        `businessOrderId: "${businessOrderId}", ` +
+        `reason: "${cancelReason}", ` +
+        `paymentMethod: "${getPaymentMethod(cancellingOrder)}"`
+      );
+
+      // Step 3: Call the API — it handles Firestore update + commission cancellation
+      // using Admin SDK (bypasses all Firestore security rules)
+      const res = await fetch("/api/cancel-commission", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          orderId: businessOrderId,
+          reason: cancelReason,
+          paymentMethod: cancellingOrder.paymentMethod,
+          razorpayPaymentId: cancellingOrder.razorpayPaymentId ?? undefined,
+          idempotencyKey: crypto.randomUUID(), // prevents double-cancel on retry
+        }),
       });
 
-      setCancellingOrder(null);
-      setCancelReason("");
-      setCancelFeedback("");
-    } catch (error) {
-      console.error("Cancel error:", error);
+      const data = await res.json();
+
+      if (!data.success) {
+        throw new Error(data.error ?? "Cancel failed");
+      }
+
+      console.log(`[Orders] ✅ Cancel API succeeded:`, data);
+
+      // Step 4: Show success toast
+      toast({
+        title: "Order Cancelled",
+        description:
+          getPaymentMethod(cancellingOrder) === "online"
+            ? "Your refund request has been sent. Our team will review it shortly."
+            : "Your order has been successfully cancelled.",
+      });
+
+      handleCloseCancelModal();
+
+    } catch (err) {
+      console.error(`[Orders] ❌ Cancel API failed:`, err);
       toast({
         title: "Failed to cancel order",
-        description: "Something went wrong. Please try again.",
+        description: "Could not update your order. Please try again or contact support.",
         variant: "destructive",
       });
     } finally {
@@ -125,12 +196,10 @@ export default function OrdersPage() {
     }
   };
 
-  const getRefundBadge = (order: any) => {
+  const getRefundBadge = (order: Order) => {
     if (order.status !== "Cancelled") return null;
-
     const pm = getPaymentMethod(order);
 
-    // COD: no refund needed — show a neutral badge
     if (pm === "cod") {
       return (
         <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 bg-gray-100 px-3 py-1.5 rounded-full mt-2">
@@ -140,33 +209,31 @@ export default function OrdersPage() {
       );
     }
 
-    // Online: show refund status
-    if (order.refundStatus === "processed") {
-      return (
+    const refundStates = {
+      processed: (
         <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full mt-2">
           <CheckCircle2 className="h-3.5 w-3.5" />
           Refund processed · Credit in 5–7 business days
         </div>
-      );
-    }
-    if (order.refundStatus === "pending") {
-      return (
+      ),
+      pending: (
         <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full mt-2">
           <Clock className="h-3.5 w-3.5 animate-pulse" />
           Refund pending approval
         </div>
-      );
-    }
-    if (order.refundStatus === "failed") {
-      return (
+      ),
+      failed: (
         <div className="flex items-center gap-1.5 text-xs font-semibold text-red-500 bg-red-50 px-3 py-1.5 rounded-full mt-2">
           <AlertTriangle className="h-3.5 w-3.5" />
           Refund failed — please contact support
         </div>
-      );
-    }
-    return null;
+      ),
+    };
+
+    return order.refundStatus ? (refundStates[order.refundStatus] ?? null) : null;
   };
+
+  // ─── Guards ──────────────────────────────────────────────────────────────────
 
   if (isUserLoading || isOrdersLoading) {
     return (
@@ -182,11 +249,15 @@ export default function OrdersPage() {
 
   if (!user) return null;
 
+  // ─── Render ──────────────────────────────────────────────────────────────────
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
       <main className="flex-grow bg-neutral/30 py-12">
         <div className="container mx-auto px-4 max-w-4xl">
+
+          {/* Header Row */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-10">
             <div>
               <h1 className="text-3xl font-headline font-extrabold text-primary">Your Orders</h1>
@@ -201,6 +272,7 @@ export default function OrdersPage() {
             </div>
           </div>
 
+          {/* Empty state */}
           {!orders || orders.length === 0 ? (
             <div className="text-center py-20 bg-white rounded-[2rem] shadow-sm border-2 border-dashed border-muted">
               <Package className="h-16 w-16 text-muted-foreground/30 mx-auto mb-4" />
@@ -214,17 +286,17 @@ export default function OrdersPage() {
             </div>
           ) : (
             <div className="space-y-6">
-              {orders.map((order: any) => (
+              {(orders as Order[]).map((order) => (
                 <Card
                   key={order.id}
-                  className="rounded-3xl border-none shadow-sm overflow-hidden bg-white hover:shadow-md transition-all group"
+                  className="rounded-3xl border-none shadow-sm overflow-hidden bg-white hover:shadow-md transition-all"
                 >
                   <CardHeader className="bg-accent/30 border-b flex flex-row items-center justify-between p-6">
                     <div className="flex flex-wrap gap-x-8 gap-y-2">
                       <div>
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-black mb-0.5">Order ID</p>
                         <p className="font-bold text-primary text-xs sm:text-sm font-mono">
-                          {order.id.substring(0, 12)}...
+                          {order.orderId ?? order.id.substring(0, 12) + "…"}
                         </p>
                       </div>
                       <div className="hidden sm:block">
@@ -233,29 +305,29 @@ export default function OrdersPage() {
                           <Calendar className="h-3.5 w-3.5" />
                           {order.createdAt?.seconds
                             ? format(new Date(order.createdAt.seconds * 1000), "MMM d, yyyy")
-                            : "Recent"}
+                            : "—"}
                         </div>
                       </div>
                       <div>
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-black mb-0.5">Total</p>
                         <p className="font-bold text-primary text-sm">
-                          ₹{(order.totalAmount || order.total || 0).toLocaleString()}
+                          ₹{(order.totalAmount ?? order.total ?? 0).toLocaleString("en-IN")}
                         </p>
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-1">
-                      <StatusChip status={order.status || "Pending"} />
+                      <StatusChip status={order.status ?? "Pending"} />
                       {getRefundBadge(order)}
                     </div>
                   </CardHeader>
 
                   <CardContent className="p-6">
                     <div className="flex flex-col gap-6">
-                      {(order.items || []).map((item: any, idx: number) => (
+                      {(order.items ?? []).map((item, idx) => (
                         <div key={idx} className="flex gap-4 items-center">
                           <div className="relative h-16 w-16 sm:h-20 sm:w-20 rounded-2xl overflow-hidden bg-muted flex-shrink-0 border">
                             <Image
-                              src={item.imageUrl || "https://picsum.photos/seed/plant/200/200"}
+                              src={item.imageUrl ?? "https://picsum.photos/seed/plant/200/200"}
                               alt={item.name}
                               fill
                               className="object-cover"
@@ -264,11 +336,11 @@ export default function OrdersPage() {
                           <div className="flex-grow min-w-0">
                             <h4 className="font-headline font-bold text-base sm:text-lg truncate">{item.name}</h4>
                             <p className="text-xs sm:text-sm text-muted-foreground">
-                              Qty: {item.qty || item.quantity || 1} • ₹{item.price}
+                              Qty: {item.qty ?? item.quantity ?? 1} · ₹{item.price.toLocaleString("en-IN")}
                             </p>
                           </div>
                           <div className="text-right hidden sm:block">
-                            <Link href={`/plants/${item.productId || item.id}`}>
+                            <Link href={`/plants/${item.productId ?? item.id}`}>
                               <button className="text-primary text-xs font-bold flex items-center gap-1 hover:underline">
                                 Buy again <ArrowUpRight className="h-3.5 w-3.5" />
                               </button>
@@ -306,8 +378,11 @@ export default function OrdersPage() {
         </div>
       </main>
 
-      {/* Cancellation Modal */}
-      <Dialog open={!!cancellingOrder} onOpenChange={(open) => !open && setCancellingOrder(null)}>
+      {/* ─── Cancellation Modal ──────────────────────────────────────────────── */}
+      <Dialog
+        open={!!cancellingOrder}
+        onOpenChange={(open) => { if (!open) handleCloseCancelModal(); }}
+      >
         <DialogContent className="rounded-[2rem] max-w-md">
           <DialogHeader>
             <DialogTitle className="text-2xl font-headline font-extrabold text-primary flex items-center gap-2">
@@ -324,7 +399,10 @@ export default function OrdersPage() {
           <div className="space-y-6 py-4">
             <div className="space-y-2">
               <Label className="font-bold">Reason for cancellation</Label>
-              <Select onValueChange={setCancelReason} value={cancelReason}>
+              <Select
+                onValueChange={(v) => setCancelReason(v as CancelReason)}
+                value={cancelReason}
+              >
                 <SelectTrigger className="rounded-xl h-12 border-muted">
                   <SelectValue placeholder="Select a reason" />
                 </SelectTrigger>
@@ -350,7 +428,6 @@ export default function OrdersPage() {
               </div>
             )}
 
-            {/* ✅ COD vs Online info block */}
             {getPaymentMethod(cancellingOrder) === "online" ? (
               <div className="flex items-start gap-3 bg-blue-50 rounded-2xl p-4">
                 <RefreshCw className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
@@ -371,8 +448,9 @@ export default function OrdersPage() {
           <DialogFooter className="flex flex-col sm:flex-row gap-2">
             <Button
               variant="ghost"
-              onClick={() => setCancellingOrder(null)}
+              onClick={handleCloseCancelModal}
               className="rounded-full flex-1"
+              disabled={isSubmittingCancel}
             >
               Keep Order
             </Button>
@@ -380,17 +458,16 @@ export default function OrdersPage() {
               variant="destructive"
               disabled={
                 !cancelReason ||
-                (cancelReason === "Other" && !cancelFeedback) ||
+                (cancelReason === "Other" && !cancelFeedback.trim()) ||
                 isSubmittingCancel
               }
               onClick={handleConfirmCancel}
               className="rounded-full flex-1 font-bold h-11"
             >
-              {isSubmittingCancel ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                "Confirm Cancellation"
-              )}
+              {isSubmittingCancel
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : "Confirm Cancellation"
+              }
             </Button>
           </DialogFooter>
         </DialogContent>
