@@ -1,4 +1,3 @@
-// app/api/cancel-commission/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { adminDb, adminAuth } from '@/lib/firebase-admin';
 import { FieldValue, Transaction } from 'firebase-admin/firestore';
@@ -111,7 +110,6 @@ const TIMEOUT_IDEMPOTENCY_MS = 3_000;
 const TIMEOUT_COMMISSIONS_MS = 4_000;
 const TIMEOUT_TRANSACTION_MS = 8_000;
 const TIMEOUT_COMMISSION_SYNC_MS = 3_000;
-// ✅ NEW: dedicated timeout for updating order status
 const TIMEOUT_ORDER_UPDATE_MS = 5_000;
 
 const RATE_LIMIT_WINDOW_MS = 2_000;
@@ -173,7 +171,6 @@ function validateBody(raw: unknown): { data: RequestBody } | { error: string; st
     }
   }
 
-  // ✅ Accept paymentMethod and razorpayPaymentId (used for refund metadata on order doc)
   const paymentMethod =
     typeof body.paymentMethod === 'string' ? body.paymentMethod.trim() : undefined;
   const razorpayPaymentId =
@@ -310,18 +307,8 @@ async function resolveOrderByBusinessId(orderId: string) {
   return null;
 }
 
-// ─── ✅ NEW: Update Order Status to Cancelled ─────────────────────────────────
+// ─── Update Order Status to Cancelled ────────────────────────────────────────
 
-/**
- * THE MISSING PIECE — this is what was causing "Failed to cancel order".
- *
- * The original route cancelled commissions but never wrote status: 'Cancelled'
- * to the order document. The frontend checked the order after the API call,
- * saw status still 'Pending', and showed the error toast.
- *
- * Uses Admin SDK so Firestore security rules are bypassed entirely —
- * no client-side permission issues possible.
- */
 async function updateOrderStatusToCancelled(
   orderDocId: string,
   reason: string,
@@ -334,14 +321,13 @@ async function updateOrderStatusToCancelled(
     () =>
       adminDb
         .collection('orders')
-        .doc(orderDocId)                         // ✅ always the Firestore doc ID, not business orderId
+        .doc(orderDocId)
         .update({
-          status: 'Cancelled',                   // ✅ what the frontend checks
+          status: 'Cancelled',
           cancelReason: reason,
           cancelledAt: FieldValue.serverTimestamp(),
           cancelledBy: callerUid,
           updatedAt: FieldValue.serverTimestamp(),
-          // Store payment metadata for refund tracking if provided
           ...(paymentMethod && { paymentMethod }),
           ...(razorpayPaymentId && { razorpayPaymentId }),
         }),
@@ -393,6 +379,8 @@ async function cancelSingleCommission(
   return withTimeout(
     () =>
       adminDb.runTransaction(async (tx: Transaction): Promise<CancelResult> => {
+
+        // ✅ ALL READS FIRST
         const commSnap = await tx.get(commRef);
 
         if (!commSnap.exists) {
@@ -421,6 +409,14 @@ async function cancelSingleCommission(
         const wasApproved = data.status === 'approved';
         const affiliateId = data.affiliateId;
 
+        // ✅ Read profile BEFORE any writes
+        let profileSnap: FirebaseFirestore.DocumentSnapshot | null = null;
+        if (affiliateId && amountToDeduct > 0) {
+          const profileRef = adminDb.collection('affiliateProfiles').doc(affiliateId);
+          profileSnap = await tx.get(profileRef);
+        }
+
+        // ✅ ALL WRITES AFTER ALL READS
         tx.update(commRef, {
           status: 'cancelled',
           reason,
@@ -431,31 +427,27 @@ async function cancelSingleCommission(
           commissionAmount: 0,
         });
 
-        if (affiliateId && amountToDeduct > 0) {
+        if (affiliateId && amountToDeduct > 0 && profileSnap && profileSnap.exists) {
           const profileRef = adminDb.collection('affiliateProfiles').doc(affiliateId);
-          const profileSnap = await tx.get(profileRef);
+          const profile = profileSnap.data()!;
+          const currentEarnings = Number(profile.totalEarnings ?? 0);
+          const currentWithdrawable = Number(profile.withdrawableAmount ?? 0);
+          const newEarnings = Math.max(0, currentEarnings - amountToDeduct);
+          const newWithdrawable = wasApproved
+            ? Math.max(0, currentWithdrawable - amountToDeduct)
+            : currentWithdrawable;
 
-          if (profileSnap.exists) {
-            const profile = profileSnap.data()!;
-            const currentEarnings = Number(profile.totalEarnings ?? 0);
-            const currentWithdrawable = Number(profile.withdrawableAmount ?? 0);
-            const newEarnings = Math.max(0, currentEarnings - amountToDeduct);
-            const newWithdrawable = wasApproved
-              ? Math.max(0, currentWithdrawable - amountToDeduct)
-              : currentWithdrawable;
-
-            tx.update(profileRef, {
-              totalEarnings: newEarnings,
-              ...(wasApproved && { withdrawableAmount: newWithdrawable }),
-              updatedAt: FieldValue.serverTimestamp(),
-            });
-          } else {
-            log.warn('Affiliate profile not found — skipping earnings deduction', {
-              affiliateId,
-              commissionDocId: commDocId,
-              amountToDeduct,
-            });
-          }
+          tx.update(profileRef, {
+            totalEarnings: newEarnings,
+            ...(wasApproved && { withdrawableAmount: newWithdrawable }),
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+        } else if (affiliateId && amountToDeduct > 0 && profileSnap && !profileSnap.exists) {
+          log.warn('Affiliate profile not found — skipping earnings deduction', {
+            affiliateId,
+            commissionDocId: commDocId,
+            amountToDeduct,
+          });
         }
 
         return {
@@ -517,7 +509,8 @@ export async function POST(req: NextRequest) {
   }
 
   const { orderId, reason, paymentMethod, razorpayPaymentId, idempotencyKey } = validation.data;
-  const log = createLogger({ requestId, orderId, callerUid });
+  const cleanOrderId = String(validation.data.orderId).trim().toUpperCase();
+  const log = createLogger({ requestId, orderId: cleanOrderId, callerUid });
 
   log.info('Cancel order request received', { idempotencyKey: idempotencyKey ?? null, reason });
 
@@ -530,7 +523,7 @@ export async function POST(req: NextRequest) {
       'checkRateLimit'
     );
   } catch {
-    rateLimitAllowed = true; // fail open
+    rateLimitAllowed = true;
   }
 
   if (!rateLimitAllowed) {
@@ -582,7 +575,7 @@ export async function POST(req: NextRequest) {
     let order: Awaited<ReturnType<typeof resolveOrderByBusinessId>>;
     try {
       order = await withTimeout(
-        () => resolveOrderByBusinessId(orderId),
+        () => resolveOrderByBusinessId(cleanOrderId),
         TIMEOUT_ORDER_RESOLVE_MS,
         'resolveOrderByBusinessId'
       );
@@ -650,17 +643,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── 9. ✅ UPDATE ORDER STATUS FIRST ────────────────────────────────────────────
-    //
-    // THIS WAS THE MISSING STEP in the original route.
-    // Must happen before commission cancellation so:
-    //   a) The frontend immediately sees status: 'Cancelled' on refresh
-    //   b) If commission cancellation partially fails, the order is still
-    //      visibly cancelled and commissionSync='failed' flags it for ops
-    //
+    // ── 9. Update order status to Cancelled ────────────────────────────────────────
     try {
       await updateOrderStatusToCancelled(
-        order.docId,          // ✅ Firestore doc ID — NOT the business orderId string
+        order.docId,
         reason ?? 'order_cancelled',
         paymentMethod,
         razorpayPaymentId,
@@ -686,14 +672,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── 10. Find & cancel commission docs ──────────────────────────────────────────
+    // ── 10. Find commission docs via indexed query ──────────────────────────────────
     let commissionsSnap: FirebaseFirestore.QuerySnapshot;
     try {
       commissionsSnap = await withTimeout(
         () =>
           adminDb
             .collection('affiliate_commissions')
-            .where('orderId', '==', orderId)
+            .where('orderId', '==', cleanOrderId)
             .get(),
         TIMEOUT_COMMISSIONS_MS,
         'fetchCommissions'
@@ -703,11 +689,10 @@ export async function POST(req: NextRequest) {
       log.error('Commission fetch failed — order already cancelled', {
         error: isTimeout ? 'timeout' : fetchErr instanceof Error ? fetchErr.message : String(fetchErr),
       });
-      // Order is already cancelled above — flag for ops and return partial success
       await writeCommissionSync(order.docId, 'failed', log);
       return NextResponse.json(
         {
-          success: true,           // order WAS cancelled
+          success: true,
           orderId,
           message: 'Order cancelled. Commission sync failed — our team has been notified.',
           commissionSync: 'failed',
@@ -718,23 +703,139 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // ── 10a. FALLBACK: full collection scan if indexed query returned empty ─────────
     if (commissionsSnap.empty) {
-      log.info('No commission records found', { durationMs: Date.now() - requestStart });
-      await writeCommissionSync(order.docId, 'not_applicable', log);
+      log.warn('Indexed commission query returned empty — attempting full-collection fallback scan', {
+        orderId: cleanOrderId,
+        orderDocId: order.docId,
+      });
 
-      const response = {
+      let fallbackSnap: FirebaseFirestore.QuerySnapshot | null = null;
+      try {
+        fallbackSnap = await withTimeout(
+          () => adminDb.collection('affiliate_commissions').get(),
+          TIMEOUT_COMMISSIONS_MS,
+          'fetchCommissionsFallback'
+        );
+      } catch (fallbackErr) {
+        const isTimeout = fallbackErr instanceof AbortError;
+        log.error('Fallback commission scan failed — proceeding without commission cancellation', {
+          error: isTimeout ? 'timeout' : fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr),
+          orderId: cleanOrderId,
+        });
+        await writeCommissionSync(order.docId, 'failed', log);
+        const response = {
+          success: true,
+          orderId,
+          message: 'Order cancelled. Commission sync failed — our team has been notified.',
+          updatedCount: 0,
+          skippedCount: 0,
+          results: [],
+          commissionSync: 'failed',
+          requestId,
+          durationMs: Date.now() - requestStart,
+        };
+        if (idempotencyKey) await writeIdempotencyResult(idempotencyKey, callerUid, response, log);
+        return NextResponse.json(response, { status: 200 });
+      }
+
+      const matchedDocs = fallbackSnap.docs.filter(
+        (d) => String(d.data().orderId).trim().toUpperCase() === cleanOrderId
+      );
+
+      log.info('Fallback commission scan complete', {
+        totalScanned: fallbackSnap.size,
+        matched: matchedDocs.length,
+        orderId: cleanOrderId,
+      });
+
+      if (matchedDocs.length === 0) {
+        log.info('No commission records found after fallback scan', {
+          durationMs: Date.now() - requestStart,
+        });
+        await writeCommissionSync(order.docId, 'not_applicable', log);
+
+        const response = {
+          success: true,
+          orderId,
+          message: 'Order cancelled successfully.',
+          updatedCount: 0,
+          skippedCount: 0,
+          results: [],
+          requestId,
+          durationMs: Date.now() - requestStart,
+        };
+
+        if (idempotencyKey) await writeIdempotencyResult(idempotencyKey, callerUid, response, log);
+        return NextResponse.json(response, { status: 200 });
+      }
+
+      const fallbackResults: CancelResult[] = [];
+      const fallbackErrors: Array<{ commDocId: string; error: string }> = [];
+
+      await Promise.allSettled(
+        matchedDocs.map(async (commDoc) => {
+          try {
+            const result = await cancelSingleCommission(
+              commDoc.id,
+              reason as ValidReason,
+              callerUid!,
+              log
+            );
+            fallbackResults.push(result);
+          } catch (txError) {
+            const errMsg =
+              txError instanceof AbortError
+                ? `timeout after ${TIMEOUT_TRANSACTION_MS}ms`
+                : txError instanceof Error
+                ? txError.message
+                : String(txError);
+            log.error('Transaction failed for commission doc (fallback path)', {
+              commDocId: commDoc.id,
+              error: errMsg,
+            });
+            fallbackErrors.push({ commDocId: commDoc.id, error: errMsg });
+          }
+        })
+      );
+
+      const fallbackUpdatedCount = fallbackResults.filter((r) => !r.skipped).length;
+      const fallbackSkippedCount = fallbackResults.filter((r) => r.skipped).length;
+      const fallbackTotalAmountDeducted = fallbackResults.reduce((sum, r) => sum + r.amountDeducted, 0);
+      const fallbackHasPartialFailure = fallbackErrors.length > 0;
+
+      await writeCommissionSync(order.docId, fallbackHasPartialFailure ? 'failed' : 'ok', log);
+
+      log.info('Fallback commission cancellation complete', {
+        updatedCount: fallbackUpdatedCount,
+        skippedCount: fallbackSkippedCount,
+        totalAmountDeducted: fallbackTotalAmountDeducted,
+        errorCount: fallbackErrors.length,
+        durationMs: Date.now() - requestStart,
+      });
+
+      const fallbackResponse = {
         success: true,
         orderId,
-        message: 'Order cancelled successfully.',
-        updatedCount: 0,
-        skippedCount: 0,
-        results: [],
+        message: fallbackHasPartialFailure
+          ? 'Order cancelled. Some commissions could not be updated — our team has been notified.'
+          : 'Order cancelled successfully.',
+        updatedCount: fallbackUpdatedCount,
+        skippedCount: fallbackSkippedCount,
+        totalAmountDeducted: fallbackTotalAmountDeducted,
+        ...(fallbackHasPartialFailure && {
+          partialFailure: true,
+          failedCount: fallbackErrors.length,
+        }),
         requestId,
         durationMs: Date.now() - requestStart,
       };
 
-      if (idempotencyKey) await writeIdempotencyResult(idempotencyKey, callerUid, response, log);
-      return NextResponse.json(response, { status: 200 });
+      if (idempotencyKey && !fallbackHasPartialFailure) {
+        await writeIdempotencyResult(idempotencyKey, callerUid, fallbackResponse, log);
+      }
+
+      return NextResponse.json(fallbackResponse, { status: 200 });
     }
 
     // ── 11. Cancel each commission atomically ──────────────────────────────────────
@@ -776,7 +877,7 @@ export async function POST(req: NextRequest) {
     });
 
     const response = {
-      success: true,           // ✅ always true here — order status was updated above
+      success: true,
       orderId,
       message: hasPartialFailure
         ? 'Order cancelled. Some commissions could not be updated — our team has been notified.'
