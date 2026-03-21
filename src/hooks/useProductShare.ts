@@ -35,10 +35,16 @@ export function useProductShare({ product, user }: UseProductShareProps) {
   }, [product, user]);
 
   const handleShare = async (platform: SharePlatform) => {
-    // If affiliate, ensure the link is logged in the system for tracking
+    // ── Affiliates: log share link to Firestore for tracking ─────────────────
+    // try/catch ensures share always works even if Firestore write fails
     if (isAffiliate && user) {
-      const originalUrl = `${window.location.origin}/plants/${product.slug || product.id}`;
-      await saveAffiliateLink(user.uid, originalUrl, shareLink);
+      try {
+        const originalUrl = `${window.location.origin}/plants/${product.slug || product.id}`;
+        await saveAffiliateLink(user.uid, originalUrl, shareLink);
+      } catch (err) {
+        // Silent fail — share continues regardless of logging result
+        console.warn('Affiliate link logging failed (share will continue):', err);
+      }
     }
 
     const result = await triggerShare(platform, shareMessage, shareLink, product.name);
