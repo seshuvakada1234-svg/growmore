@@ -20,11 +20,13 @@ const INDIAN_STATES_AND_UTS = [
 
 export type AddressLabel = "Home" | "Work" | "Other";
 
+// ✅ CHANGE 1: Added `district` field to AddressFormData
 export interface AddressFormData {
   fullName: string;
   phone: string;
   address: string;
   city: string;
+  district: string; // ✅ NEW — East Godavari, etc.
   state: string;
   pincode: string;
   label: AddressLabel;
@@ -47,9 +49,10 @@ interface AddressFormProps {
   isSaving?: boolean;
 }
 
+// ✅ CHANGE 2: Added `district: ""` to EMPTY_FORM
 const EMPTY_FORM: AddressFormData = {
   fullName: "", phone: "", address: "", city: "",
-  state: "", pincode: "", label: "Home", isDefault: false,
+  district: "", state: "", pincode: "", label: "Home", isDefault: false,
 };
 
 export function AddressForm({
@@ -92,7 +95,13 @@ export function AddressForm({
         if (data[0]?.Status === "Success") {
           const offices: PostOffice[] = data[0].PostOffice || [];
           if (offices.length === 1) {
-            setForm(prev => ({ ...prev, city: offices[0].District, state: offices[0].State }));
+            // ✅ CHANGE 3: city = Block (Kothapeta), district = District (East Godavari)
+            setForm(prev => ({
+              ...prev,
+              city:     offices[0].Block    || offices[0].Name,
+              district: offices[0].District || "",
+              state:    offices[0].State,
+            }));
             setPostOffices([]);
             setShowAreaPicker(false);
           } else if (offices.length > 1) {
@@ -106,8 +115,14 @@ export function AddressForm({
     return () => clearTimeout(timer);
   }, [form.pincode]);
 
+  // ✅ CHANGE 4: selectArea now correctly maps Block→city, District→district
   const selectArea = (po: PostOffice) => {
-    setForm(prev => ({ ...prev, city: po.District, state: po.State }));
+    setForm(prev => ({
+      ...prev,
+      city:     po.Block    || po.Name,
+      district: po.District || "",
+      state:    po.State,
+    }));
     setShowAreaPicker(false);
   };
 
@@ -246,10 +261,10 @@ export function AddressForm({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
-          {/* City */}
+          {/* City / Town — auto-filled from Block */}
           <div className="space-y-1.5">
             <Label className="text-sm font-medium flex items-center gap-1">
-              City
+              City / Town
               {pincodeLoading && (
                 <span className="text-[10px] text-muted-foreground font-normal">Detecting...</span>
               )}
@@ -257,14 +272,31 @@ export function AddressForm({
             <Input
               value={form.city}
               onChange={e => set("city", e.target.value)}
-              placeholder="Bengaluru"
+              placeholder="Kothapeta"
               className={`rounded-2xl border-[#E8E8E8] h-12 ${errors.city ? "border-red-400" : ""}`}
             />
             {errors.city && <p className="text-xs text-red-500">{errors.city}</p>}
           </div>
 
-          {/* State */}
+          {/* ✅ CHANGE 5: District — read-only, auto-filled from District */}
           <div className="space-y-1.5">
+            <Label className="text-sm font-medium flex items-center gap-1">
+              District
+              {pincodeLoading && (
+                <span className="text-[10px] text-muted-foreground font-normal">Detecting...</span>
+              )}
+            </Label>
+            <Input
+              value={form.district}
+              readOnly
+              tabIndex={-1}
+              placeholder="East Godavari"
+              className="rounded-2xl border-[#E8E8E8] h-12 bg-[#F9F9F9] text-muted-foreground cursor-not-allowed"
+            />
+          </div>
+
+          {/* State — auto-filled, user can override */}
+          <div className="sm:col-span-2 space-y-1.5">
             <Label className="text-sm font-medium flex items-center gap-1">
               State
               {pincodeLoading && (

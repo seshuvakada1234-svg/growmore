@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { ShareMenu } from "@/components/shared/ShareButton";
 import { calculateEarning } from "@/lib/affiliateEngine";
 import { MonterraUser } from "@/types/affiliate.types";
+import { useCart } from "@/hooks/useCart"; // ✅ centralized cart hook
 import {
   Star, Truck, Heart, ShoppingCart, Minus, Plus,
   Sun, Droplets, Leaf, Send, Loader2, ChevronLeft, ChevronRight, Clock,
@@ -143,10 +144,10 @@ const StarDisplay = memo(function StarDisplay({
 const QuantityStepper = memo(function QuantityStepper({
   value, onChange, min = 1, max = 99, size = "md",
 }: { value: number; onChange: (v: number) => void; min?: number; max?: number; size?: "sm" | "md" }) {
-  const h = size === "sm" ? "h-11" : "h-12";
-  const btn = size === "sm" ? "h-8 w-8" : "h-9 w-9";
+  const h     = size === "sm" ? "h-11" : "h-12";
+  const btn   = size === "sm" ? "h-8 w-8" : "h-9 w-9";
   const spanW = size === "sm" ? "w-8" : "w-12";
-  const icon = size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4";
+  const icon  = size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4";
   return (
     <div className={cn("flex items-center border rounded-full px-1 bg-muted/50 flex-shrink-0", h)}>
       <Button variant="ghost" size="icon" aria-label="Decrease quantity"
@@ -178,7 +179,7 @@ const ImageGallery = memo(function ImageGallery({
   const [selected, setSelected] = useState(0);
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
-  const isDragging = useRef(false);
+  const isDragging  = useRef(false);
 
   const goTo = useCallback((idx: number) =>
     setSelected(Math.max(0, Math.min(images.length - 1, idx))),
@@ -187,7 +188,7 @@ const ImageGallery = memo(function ImageGallery({
   const onTouchStart = useCallback((e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
-    isDragging.current = false;
+    isDragging.current  = false;
   }, []);
 
   const onTouchMove = useCallback((e: React.TouchEvent) => {
@@ -302,7 +303,7 @@ const ImageGallery = memo(function ImageGallery({
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ProductCard (similar / recently viewed)
+// ProductCard
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ProductCard = memo(function ProductCard({ p, imgSizes }: { p: any; imgSizes: string }) {
@@ -409,10 +410,13 @@ function WriteReviewForm({ hasReviewed, userRating, setUserRating, userComment, 
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function PlantDetailPage() {
-  const { id } = useParams();
-  const router = useRouter();
-  const db = useFirestore();
-  const { user } = useUser();
+  const { id }    = useParams();
+  const router    = useRouter();
+  const db        = useFirestore();
+  const { user }  = useUser();
+
+  // ✅ Centralized cart hook — handles both guest and logged-in users
+  const { addToCart } = useCart();
 
   // ── Load product from Firestore ───────────────────────────────────────────
   const productRef = useMemoFirebase(
@@ -426,41 +430,33 @@ export default function PlantDetailPage() {
     return PRODUCTS.find((p) => p.id === id || p.id === String(id)) || PRODUCTS[0];
   }, [firestoreProduct, id]);
 
-  // ── Similar products — fetched from Firestore by category ─────────────────
+  // ── Similar products ──────────────────────────────────────────────────────
   const [similarProducts, setSimilarProducts] = useState<any[]>([]);
   useEffect(() => {
     if (!product?.category || !db) return;
     let cancelled = false;
     (async () => {
       try {
-        const snap = await getDocs(
-          query(
-            collection(db, "products"),
-            where("category", "==", product.category),
-            limit(10)
-          )
-        );
+        const snap = await getDocs(query(
+          collection(db, "products"),
+          where("category", "==", product.category),
+          limit(10)
+        ));
         if (cancelled) return;
         const fromFirestore = snap.docs
           .map((d) => ({ id: d.id, ...d.data() }))
           .filter((p: any) => p.id !== product.id)
           .slice(0, 6);
-
-        // Merge with mock data products of same category
-        const mockSimilar = PRODUCTS
+        const mockSimilar   = PRODUCTS
           .filter((p) => p.category === product.category && p.id !== product.id)
           .slice(0, 6);
-
-        // Combine — Firestore first, then mock (deduplicated)
-        const firestoreIds = new Set(fromFirestore.map((p: any) => p.id));
-        const merged = [
+        const firestoreIds  = new Set(fromFirestore.map((p: any) => p.id));
+        const merged        = [
           ...fromFirestore,
           ...mockSimilar.filter((p) => !firestoreIds.has(p.id)),
         ].slice(0, 6);
-
         setSimilarProducts(merged);
       } catch {
-        // fallback to mock
         setSimilarProducts(
           PRODUCTS.filter((p) => p.category === product.category && p.id !== product.id).slice(0, 6)
         );
@@ -469,25 +465,22 @@ export default function PlantDetailPage() {
     return () => { cancelled = true; };
   }, [db, product?.category, product?.id]);
 
-  // ── Recently Viewed — fetch each product by ID from Firestore ────────────
+  // ── Recently Viewed ───────────────────────────────────────────────────────
   const [recentlyViewedProducts, setRecentlyViewedProducts] = useState<any[]>([]);
   useEffect(() => {
     if (!product?.id || !db) return;
     trackRecentlyViewed(product.id);
     const ids = getRecentlyViewedIds(product.id);
     if (ids.length === 0) { setRecentlyViewedProducts([]); return; }
-
     let cancelled = false;
     (async () => {
       try {
         const fetched = await Promise.all(
           ids.map(async (rvId) => {
-            // Try Firestore first
             try {
               const snap = await getDoc(doc(db, "products", rvId));
               if (snap.exists()) return { id: snap.id, ...snap.data() };
             } catch { /* ignore */ }
-            // Fallback to mock
             return PRODUCTS.find((p) => p.id === rvId) || null;
           })
         );
@@ -505,20 +498,19 @@ export default function PlantDetailPage() {
 
   // ── Gallery images ────────────────────────────────────────────────────────
   const galleryImages = useMemo(() => getProductImages(product), [product]);
-
-  const discountPct = product?.oldPrice
+  const discountPct   = product?.oldPrice
     ? Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)
     : 0;
 
   // ── State ──────────────────────────────────────────────────────────────────
-  const [qty, setQty] = useState(1);
-  const [isAnimating, setIsAnimating] = useState(false);
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [reviewsLoading, setReviewsLoading] = useState(true);
-  const [userRating, setUserRating] = useState(0);
-  const [userComment, setUserComment] = useState("");
-  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
-  const [hasReviewed, setHasReviewed] = useState(false);
+  const [qty,                 setQty]                = useState(1);
+  const [isAnimating,         setIsAnimating]         = useState(false);
+  const [reviews,             setReviews]             = useState<Review[]>([]);
+  const [reviewsLoading,      setReviewsLoading]      = useState(true);
+  const [userRating,          setUserRating]          = useState(0);
+  const [userComment,         setUserComment]         = useState("");
+  const [isSubmittingReview,  setIsSubmittingReview]  = useState(false);
+  const [hasReviewed,         setHasReviewed]         = useState(false);
 
   // ── Firebase refs ──────────────────────────────────────────────────────────
   const wishlistRef = useMemoFirebase(
@@ -526,15 +518,15 @@ export default function PlantDetailPage() {
     [db, user?.uid, product?.id]
   );
   const { data: wishlistItem } = useDoc(wishlistRef);
-  const isWishlisted = !!wishlistItem;
+  const isWishlisted           = !!wishlistItem;
 
   const userProfileRef = useMemoFirebase(
     () => (!user?.uid ? null : doc(db, "users", user.uid)),
     [db, user?.uid]
   );
   const { data: profile } = useDoc(userProfileRef);
-  const monterraUser = profile as unknown as MonterraUser;
-  const earning = calculateEarning(product?.price, (product as any)?.affiliateCommission);
+  const monterraUser      = profile as unknown as MonterraUser;
+  const earning           = calculateEarning(product?.price, (product as any)?.affiliateCommission);
 
   // ── Load reviews ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -582,22 +574,17 @@ export default function PlantDetailPage() {
     }
   }, [user, db, product?.id, isWishlisted]);
 
-  const handleAddToCart = useCallback(() => {
+  // ✅ FIXED: handleAddToCart now uses useCart hook
+  // - Logged-in user → writes directly to Firestore, syncs in real-time
+  // - Guest user     → writes to localStorage as before
+  const handleAddToCart = useCallback(async () => {
     try {
-      const cart = JSON.parse(localStorage.getItem("plantshop_cart") || "[]");
-      const existing = cart.find((item: any) => (item.id || item.productId || item.plantId) === product.id);
-      if (existing) {
-        existing.quantity = (existing.quantity || 0) + qty;
-        existing.id = product.id;
-        delete existing.productId; delete existing.plantId;
-      } else {
-        cart.push({ id: product.id, quantity: qty });
-      }
-      localStorage.setItem("plantshop_cart", JSON.stringify(cart));
-      window.dispatchEvent(new Event("cart-updated"));
+      await addToCart(product.id, qty);
       toast({ title: "Added to cart!", description: `${qty} × ${product.name}` });
-    } catch (err) { console.error("handleAddToCart:", err); }
-  }, [product?.id, product?.name, qty]);
+    } catch (err) {
+      console.error("handleAddToCart:", err);
+    }
+  }, [addToCart, product?.id, product?.name, qty]);
 
   const handleBuyItNow = useCallback(() => {
     try {
@@ -612,11 +599,13 @@ export default function PlantDetailPage() {
     if (!userComment.trim()) { toast({ title: "Please write a comment", variant: "destructive" }); return; }
     setIsSubmittingReview(true);
     try {
-      const reviewRef = doc(db, "products", String(product.id), "reviews", user.uid);
+      const reviewRef  = doc(db, "products", String(product.id), "reviews", user.uid);
       const reviewData = {
-        userId: user.uid,
+        userId:   user.uid,
         userName: user.displayName || user.email?.split("@")[0] || "Anonymous",
-        rating: userRating, comment: userComment.trim(), createdAt: serverTimestamp(),
+        rating:   userRating,
+        comment:  userComment.trim(),
+        createdAt: serverTimestamp(),
       };
       await setDoc(reviewRef, reviewData);
       setReviews((prev) => [{ id: user.uid, ...reviewData, createdAt: null }, ...prev]);
@@ -694,8 +683,8 @@ export default function PlantDetailPage() {
 
               <div className="grid grid-cols-2 gap-2 md:gap-4 mb-6 md:mb-8">
                 {[
-                  { icon: Sun, title: "Light Needs", sub: "Bright Indirect" },
-                  { icon: Droplets, title: "Watering", sub: "Every 7–10 days" },
+                  { icon: Sun,      title: "Light Needs", sub: "Bright Indirect" },
+                  { icon: Droplets, title: "Watering",    sub: "Every 7–10 days" },
                 ].map(({ icon: Icon, title, sub }) => (
                   <div key={title} className="bg-accent rounded-xl md:rounded-2xl p-3 md:p-4 flex items-center gap-2 md:gap-3">
                     <div className="h-8 w-8 md:h-10 md:w-10 rounded-full bg-white flex items-center justify-center text-primary flex-shrink-0">
@@ -751,7 +740,7 @@ export default function PlantDetailPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-8 mt-5 md:mt-10">
                     {[
                       { title: "Temperature", body: "Ideal between 18°C and 24°C. Avoid cold drafts or direct heat vents." },
-                      { title: "Humidity", body: "Prefers moderate to high humidity. Consider a humidifier or misting once a week." },
+                      { title: "Humidity",    body: "Prefers moderate to high humidity. Consider a humidifier or misting once a week." },
                     ].map(({ title, body }) => (
                       <div key={title} className="space-y-2">
                         <h3 className="font-bold text-primary text-base md:text-lg">{title}</h3>
@@ -765,28 +754,28 @@ export default function PlantDetailPage() {
               <TabsContent value="details" className="py-5 md:py-8">
                 <div className="space-y-6 md:space-y-8">
                   {[
-                    { title: "In the Box", rows: [{ label: "Pack of", value: "1" }] },
-                    { title: "General", rows: [
-                      { label: "SKU", value: `GS-${product?.id}-992` },
+                    { title: "In the Box",  rows: [{ label: "Pack of", value: "1" }] },
+                    { title: "General",     rows: [
+                      { label: "SKU",             value: `GS-${product?.id}-992` },
                       { label: "Scientific Name", value: "Monstera deliciosa" },
-                      { label: "Category", value: product?.category },
-                      { label: "Type", value: "Indoor Plant" },
+                      { label: "Category",        value: product?.category },
+                      { label: "Type",            value: "Indoor Plant" },
                     ]},
                     { title: "Plant Details", rows: [
-                      { label: "Difficulty Level", value: "Easy to Medium" },
-                      { label: "Light Requirement", value: "Bright Indirect Light" },
-                      { label: "Watering", value: "Every 7–10 days" },
-                      { label: "Pet Friendly", value: "No", cls: "text-red-500" },
-                      { label: "Air Purifying", value: "Yes", cls: "text-emerald-600" },
-                      { label: "Growth Rate", value: "Moderate" },
-                      { label: "Ideal Temperature", value: "18°C – 24°C" },
-                      { label: "Pot Included", value: "Yes" },
+                      { label: "Difficulty Level",    value: "Easy to Medium" },
+                      { label: "Light Requirement",   value: "Bright Indirect Light" },
+                      { label: "Watering",            value: "Every 7–10 days" },
+                      { label: "Pet Friendly",        value: "No",  cls: "text-red-500" },
+                      { label: "Air Purifying",       value: "Yes", cls: "text-emerald-600" },
+                      { label: "Growth Rate",         value: "Moderate" },
+                      { label: "Ideal Temperature",   value: "18°C – 24°C" },
+                      { label: "Pot Included",        value: "Yes" },
                     ]},
                     { title: "Packaging & Delivery", rows: [
-                      { label: "Container Type", value: "Nursery Pot" },
-                      { label: "Pot Size", value: "4 inch" },
+                      { label: "Container Type",  value: "Nursery Pot" },
+                      { label: "Pot Size",        value: "4 inch" },
                       { label: "Shipping Weight", value: "~500g" },
-                      { label: "Delivery", value: "Free above ₹999" },
+                      { label: "Delivery",        value: "Free above ₹999" },
                     ]},
                   ].map((section) => (
                     <div key={section.title}>
@@ -815,7 +804,7 @@ export default function PlantDetailPage() {
                     <div className="flex-1 space-y-1 md:space-y-1.5 min-w-0">
                       {[5, 4, 3, 2, 1].map((s) => {
                         const count = reviews.filter((r) => r.rating === s).length;
-                        const pct = reviews.length ? (count / reviews.length) * 100 : 0;
+                        const pct   = reviews.length ? (count / reviews.length) * 100 : 0;
                         return (
                           <div key={s} className="flex items-center gap-1.5 text-xs">
                             <span className="w-3 text-muted-foreground flex-shrink-0">{s}</span>

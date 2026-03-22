@@ -6,14 +6,14 @@ import { StatusChip } from "@/components/shared/StatusChip";
 import {
   ArrowLeft, Package, MapPin, CreditCard, Loader2,
   CheckCircle2, Clock, AlertTriangle, RefreshCw,
-  XCircle, Calendar, Truck, Banknote,
+  XCircle, Calendar, Truck, Banknote, Download,
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
 import { useRouter, useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, updateDoc, serverTimestamp, getDoc, getFirestore } from "firebase/firestore";
 import { format, differenceInHours } from "date-fns";
 import {
   Dialog, DialogContent, DialogHeader,
@@ -28,16 +28,450 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Subtotal calculator
+// ─────────────────────────────────────────────────────────────────────────────
+function calcSubtotal(items: any[]): number {
+  if (!Array.isArray(items)) return 0;
+  return items.reduce((acc, item) => {
+    const price = item.price || 0;
+    const qty   = item.qty || item.quantity || 1;
+    return acc + price * qty;
+  }, 0);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Payment status label
+// ─────────────────────────────────────────────────────────────────────────────
+function getPaymentStatusLabel(
+  paymentMethod: string,
+  paymentStatus: string,
+  orderStatus: string,
+): { label: string; color: string } {
+  if (paymentMethod === "cod") {
+    if (orderStatus === "Delivered") return { label: "Paid",      color: "text-emerald-600" };
+    if (orderStatus === "Cancelled") return { label: "Cancelled", color: "text-gray-500"    };
+    return                                   { label: "Pending",  color: "text-amber-600"   };
+  }
+  if (paymentStatus === "paid")   return { label: "Paid",    color: "text-emerald-600" };
+  if (paymentStatus === "failed") return { label: "Failed",  color: "text-red-600"     };
+  return                                 { label: "Pending", color: "text-amber-600"   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fetch business info
+// ─────────────────────────────────────────────────────────────────────────────
+async function fetchBusinessInfo(): Promise<{
+  storeName: string;
+  legalName: string;
+  email: string;
+  phone: string;
+  gstin: string;
+  showGST: boolean;
+}> {
+  const defaults = {
+    storeName: "Monterra",
+    legalName: "",
+    email:     "support@monterra.in",
+    phone:     "",
+    gstin:     "",
+    showGST:   false,
+  };
+  try {
+    const { app } = await import("@/lib/firebase");
+    const db      = getFirestore(app);
+    const snap    = await getDoc(doc(db, "settings", "businessInfo"));
+    if (!snap.exists()) return defaults;
+    const data = snap.data();
+    return {
+      storeName: data.storeName || defaults.storeName,
+      legalName: data.legalName || "",
+      email:     data.email     || defaults.email,
+      phone:     data.phone     || "",
+      gstin:     data.gstin     || "",
+      showGST:   data.showGST   === true,
+    };
+  } catch (err) {
+    console.warn("Could not fetch business info, using defaults:", err);
+    return defaults;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ✅ Helper: format currency for PDF (Rs. instead of ₹ — jsPDF can't render ₹)
+// ─────────────────────────────────────────────────────────────────────────────
+function pdfRs(value: number): string {
+  return `Rs. ${value.toLocaleString("en-IN")}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Invoice PDF generator — Premium Non-GST
+// ─────────────────────────────────────────────────────────────────────────────
+async function downloadInvoice(order: any, orderId: string) {
+  if (!order) return;
+
+  try {
+    const jsPDFModule     = await import("jspdf");
+    const autoTableModule = await import("jspdf-autotable");
+    const jsPDF           = jsPDFModule.default;
+    const autoTable       = autoTableModule.default ?? autoTableModule;
+
+    const biz         = await fetchBusinessInfo();
+    const isCancelled = order.status === "Cancelled";
+    const today       = new Date().toISOString().split("T")[0];
+
+    const doc        = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const pageWidth  = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+
+    // ── Derive totals ─────────────────────────────────────────────────────────
+    const subtotal    = calcSubtotal(order.items || []);
+    const discount    = order.discount || 0;
+    const shipRaw     = order.shippingCost ?? order.shippingFee ?? order.deliveryCharge ?? order.shipping ?? 0;
+    const storedTotal = order.totalAmount || order.total || 0;
+    const shipping    = shipRaw === 0 && storedTotal > subtotal
+      ? storedTotal - subtotal + discount
+      : shipRaw;
+    const total       = storedTotal || (subtotal + shipping - discount);
+
+    // ── Payment labels ────────────────────────────────────────────────────────
+    const paymentMethodRaw   = order.paymentMethod?.toLowerCase();
+    const paymentMethodLabel = paymentMethodRaw === "cod"
+      ? "Cash on Delivery"
+      : paymentMethodRaw === "online" ? "Online Payment" : order.paymentMethod || "-";
+
+    let paymentStatusLabel = "Pending";
+    if (paymentMethodRaw === "cod") {
+      if (order.status === "Delivered")  paymentStatusLabel = "Paid";
+      else if (isCancelled)              paymentStatusLabel = "Cancelled";
+    } else {
+      if (order.paymentStatus === "paid")   paymentStatusLabel = "Paid";
+      else if (order.paymentStatus === "failed") paymentStatusLabel = "Failed";
+    }
+
+    const orderDate = order.createdAt?.seconds
+      ? format(new Date(order.createdAt.seconds * 1000), "dd MMM yyyy, h:mm a")
+      : "-";
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // HEADER
+    // ══════════════════════════════════════════════════════════════════════════
+    const headerColor: [number, number, number] = isCancelled ? [180, 30, 30] : [27, 94, 32];
+    doc.setFillColor(...headerColor);
+    doc.rect(0, 0, pageWidth, 38, "F");
+
+    // Left — store name
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(22);
+    doc.setFont("helvetica", "bold");
+    doc.text((biz.legalName || biz.storeName).toUpperCase(), 15, 14);
+
+    // Left — tagline
+    doc.setFontSize(8.5);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(210, 240, 210);
+    doc.text("Premium Plants & Nursery", 15, 22);
+
+    // Left — contact
+    doc.setFontSize(8);
+    doc.setTextColor(190, 230, 190);
+    const contactLine = biz.phone ? `${biz.email}   |   ${biz.phone}` : biz.email;
+    doc.text(contactLine, 15, 29);
+
+    // Right — title
+    const invoiceTitle = isCancelled ? "CANCELLED INVOICE" : "INVOICE";
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(16);
+    doc.setFont("helvetica", "bold");
+    doc.text(invoiceTitle, pageWidth - 15, 14, { align: "right" });
+
+    // Right — meta
+    doc.setFontSize(7.5);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(210, 240, 210);
+    doc.text(`Invoice No : INV-${orderId}`, pageWidth - 15, 22, { align: "right" });
+    doc.text(`Order ID   : #${orderId}`,    pageWidth - 15, 29, { align: "right" });
+    doc.text(`Date       : ${orderDate}`,   pageWidth - 15, 36, { align: "right" });
+
+    // ── Cancelled banner ──────────────────────────────────────────────────────
+    let y = 46;
+    if (isCancelled) {
+      doc.setFillColor(255, 235, 235);
+      doc.rect(0, 38, pageWidth, 10, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(180, 30, 30);
+      doc.text("This order was cancelled.", pageWidth / 2, 45, { align: "center" });
+      y = 56;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // ORDER META ROW
+    // ══════════════════════════════════════════════════════════════════════════
+    doc.setFillColor(250, 250, 250);
+    doc.rect(0, y - 2, pageWidth, 16, "F");
+    doc.setDrawColor(230, 230, 230);
+    doc.line(0, y - 2, pageWidth, y - 2);
+    doc.line(0, y + 14, pageWidth, y + 14);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(110, 110, 110);
+    doc.text("ORDER STATUS",    15,  y + 4);
+    doc.text("PAYMENT METHOD",  80,  y + 4);
+    doc.text("PAYMENT STATUS",  150, y + 4);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.setTextColor(30, 30, 30);
+    doc.text(order.status || "-",  15,  y + 11);
+    doc.text(paymentMethodLabel,   80,  y + 11);
+    doc.text(paymentStatusLabel,   150, y + 11);
+
+    y += 22;
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // SHIP TO
+    // ══════════════════════════════════════════════════════════════════════════
+    const addr = order.shippingAddress;
+    if (addr) {
+      doc.setFillColor(245, 252, 245);
+      doc.setDrawColor(200, 230, 200);
+      doc.roundedRect(15, y, pageWidth - 30, 34, 3, 3, "FD");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.5);
+      doc.setTextColor(27, 94, 32);
+      doc.text("DELIVER TO", 20, y + 6);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(20, 20, 20);
+      doc.text(addr.name || addr.fullName || order.customerName || "-", 20, y + 13);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(70, 70, 70);
+      doc.text(addr.fullAddress || addr.address || "-", 20, y + 20);
+
+      const cityLine = [addr.city, addr.state, addr.pincode].filter(Boolean).join(", ");
+      doc.text(cityLine, 20, y + 27);
+
+      if (addr.phone || order.customerPhone) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8.5);
+        doc.setTextColor(50, 50, 50);
+        doc.text(`Ph: ${addr.phone || order.customerPhone}`, pageWidth - 20, y + 27, { align: "right" });
+      }
+
+      y += 42;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // ITEMS TABLE  — ✅ Rs. replaces ₹
+    // ══════════════════════════════════════════════════════════════════════════
+    const tableRows = (order.items || []).map((item: any, i: number) => {
+      const qty   = item.qty || item.quantity || 1;
+      const price = item.price || 0;
+      return [
+        String(i + 1),
+        item.name || "Unknown Item",
+        String(qty),
+        pdfRs(price),
+        pdfRs(price * qty),
+      ];
+    });
+
+    autoTable(doc, {
+      startY: y,
+      head: [["#", "Item Description", "Qty", "Unit Price", "Amount"]],
+      body: tableRows,
+      theme: "grid",
+      headStyles: {
+        fillColor: headerColor,
+        textColor: 255,
+        fontStyle: "bold",
+        fontSize: 9,
+        cellPadding: { top: 5, bottom: 5, left: 4, right: 4 },
+      },
+      bodyStyles: {
+        fontSize: 9,
+        textColor: [30, 30, 30],
+        cellPadding: { top: 4, bottom: 4, left: 4, right: 4 },
+        lineColor: [220, 220, 220],
+        lineWidth: 0.2,
+      },
+      columnStyles: {
+        0: { cellWidth: 10,    halign: "center" },
+        1: { cellWidth: "auto", fontStyle: "bold" },
+        2: { cellWidth: 14,    halign: "center" },
+        3: { cellWidth: 36,    halign: "right"  },
+        4: { cellWidth: 36,    halign: "right", fontStyle: "bold" },
+      },
+      alternateRowStyles: { fillColor: [248, 252, 248] },
+      margin: { left: 15, right: 15 },
+    });
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // TOTALS + PAYMENT SUMMARY  — ✅ wider box, Rs. fix
+    // ══════════════════════════════════════════════════════════════════════════
+    const finalY = (doc as any).lastAutoTable.finalY + 8;
+
+    // — Totals box: right half of page
+    const totalsBoxX = pageWidth / 2 + 2;
+    const totalsBoxW = pageWidth - 15 - totalsBoxX;   // ~88mm, plenty of space
+    const rowH       = 8;
+    const numRows    = discount > 0 ? 4 : 3;
+    const totalsBoxH = numRows * rowH + 14;
+
+    doc.setFillColor(246, 252, 246);
+    doc.setDrawColor(200, 230, 200);
+    doc.roundedRect(totalsBoxX, finalY - 4, totalsBoxW, totalsBoxH, 3, 3, "FD");
+
+    const labelCol = totalsBoxX + 6;
+    const valueCol = totalsBoxX + totalsBoxW - 5; // fully inside box
+
+    let tY = finalY;
+
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(80, 80, 80);
+
+    // Subtotal
+    doc.text("Subtotal", labelCol, tY + 3);
+    doc.text(pdfRs(subtotal), valueCol, tY + 3, { align: "right" });
+    tY += rowH;
+
+    // Shipping
+    doc.text("Shipping", labelCol, tY + 3);
+    if (shipping === 0) {
+      doc.setTextColor(27, 94, 32);
+      doc.setFont("helvetica", "bold");
+      doc.text("FREE", valueCol, tY + 3, { align: "right" });
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(80, 80, 80);
+    } else {
+      doc.text(pdfRs(shipping), valueCol, tY + 3, { align: "right" });
+    }
+    tY += rowH;
+
+    // Discount
+    if (discount > 0) {
+      doc.setTextColor(27, 94, 32);
+      doc.text("Discount", labelCol, tY + 3);
+      doc.text(`- ${pdfRs(discount)}`, valueCol, tY + 3, { align: "right" });
+      doc.setTextColor(80, 80, 80);
+      tY += rowH;
+    }
+
+    // Divider
+    doc.setDrawColor(180, 215, 180);
+    doc.setLineWidth(0.5);
+    doc.line(labelCol, tY + 1, valueCol, tY + 1);
+    doc.setLineWidth(0.2);
+    tY += 5;
+
+    // Total row — filled background
+    doc.setFillColor(...headerColor);
+    doc.roundedRect(totalsBoxX + 2, tY - 1, totalsBoxW - 4, 10, 2, 2, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(255, 255, 255);
+    doc.text("TOTAL", labelCol, tY + 6);
+    doc.text(pdfRs(total), valueCol, tY + 6, { align: "right" });
+
+    // — Payment summary box: left half
+    const psBoxX = 15;
+    const psBoxW = pageWidth / 2 - 15 - 4;
+    const psBoxH = totalsBoxH + 12; // taller to fit 4 rows + header + divider
+
+    doc.setFillColor(250, 250, 255);
+    doc.setDrawColor(210, 210, 230);
+    doc.roundedRect(psBoxX, finalY - 4, psBoxW, psBoxH, 3, 3, "FD");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(27, 94, 32);
+    doc.text("PAYMENT SUMMARY", psBoxX + 5, finalY + 3);
+
+    doc.setDrawColor(200, 230, 200);
+    doc.line(psBoxX + 5, finalY + 6, psBoxX + psBoxW - 5, finalY + 6);
+
+    const psLabel = psBoxX + 5;
+    const psValue = psBoxX + psBoxW - 5;
+
+    const pRow = (label: string, value: string, yPos: number) => {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 100, 100);
+      doc.text(label, psLabel, yPos);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(30, 30, 30);
+      doc.text(value, psValue, yPos, { align: "right" });
+    };
+
+    pRow("Payment Method",  paymentMethodLabel,  finalY + 13);
+    pRow("Payment Status",  paymentStatusLabel,  finalY + 21);
+    pRow("Order Status",    order.status || "-", finalY + 29);
+    if (order.createdAt?.seconds) {
+      pRow(
+        "Order Date",
+        format(new Date(order.createdAt.seconds * 1000), "dd MMM yyyy"),
+        finalY + 37,
+      );
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // FOOTER
+    // ══════════════════════════════════════════════════════════════════════════
+    doc.setFillColor(245, 245, 245);
+    doc.rect(0, pageHeight - 22, pageWidth, 22, "F");
+    doc.setDrawColor(215, 215, 215);
+    doc.line(0, pageHeight - 22, pageWidth, pageHeight - 22);
+
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(7.5);
+    doc.setTextColor(140, 140, 140);
+    doc.text(
+      "This is a system-generated invoice. GST not applicable.",
+      pageWidth / 2, pageHeight - 13, { align: "center" },
+    );
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(80, 80, 80);
+    doc.text(
+      `Thank you for shopping with ${biz.storeName}!`,
+      pageWidth / 2, pageHeight - 6, { align: "center" },
+    );
+
+    doc.save(`${biz.storeName}-Invoice-${orderId}-${today}.pdf`);
+    toast({ title: "Invoice downloaded!" });
+
+  } catch (err: any) {
+    console.error("Invoice generation error:", err?.message || err);
+    toast({
+      title: "Failed to generate invoice",
+      description: err?.message || "Check browser console for details",
+      variant: "destructive",
+    });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main Page Component
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function OrderDetailPage() {
   const { user, isUserLoading } = useUser();
-  const db = useFirestore();
-  const router = useRouter();
-  const params = useParams();
+  const db      = useFirestore();
+  const router  = useRouter();
+  const params  = useParams();
   const orderId = params?.id as string;
 
-  const [cancelReason, setCancelReason] = useState("");
-  const [cancelFeedback, setCancelFeedback] = useState("");
-  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelReason,       setCancelReason]       = useState("");
+  const [cancelFeedback,     setCancelFeedback]     = useState("");
+  const [showCancelModal,    setShowCancelModal]    = useState(false);
   const [isSubmittingCancel, setIsSubmittingCancel] = useState(false);
 
   const orderDocRef = useMemoFirebase(() => {
@@ -47,7 +481,6 @@ export default function OrderDetailPage() {
 
   const { data: order, isLoading } = useDoc(orderDocRef);
 
-  // Normalize payment method to lowercase for reliable comparisons ("COD", "cod", "Cod" → "cod")
   const paymentMethod = order?.paymentMethod?.toLowerCase();
 
   useEffect(() => {
@@ -56,12 +489,36 @@ export default function OrderDetailPage() {
     }
   }, [user, isUserLoading, router]);
 
-  // Redirect if order doesn't belong to this user
   useEffect(() => {
     if (!isLoading && order && user && order.userId !== user.uid) {
       router.push("/orders");
     }
   }, [order, isLoading, user, router]);
+
+  const subtotal    = calcSubtotal(order?.items || []);
+  const shipRaw     = order?.shippingCost ?? order?.shippingFee ?? order?.deliveryCharge ?? order?.shipping ?? 0;
+  const discount    = order?.discount || 0;
+  const storedTotal = order?.totalAmount || order?.total || 0;
+
+  const derivedShipping = shipRaw === 0 && storedTotal > subtotal
+    ? storedTotal - subtotal + discount
+    : shipRaw;
+  const total = storedTotal || (subtotal + derivedShipping - discount);
+
+  if (order) {
+    console.log("[Order Totals Debug]", {
+      subtotal, shipRaw, derivedShipping, discount, storedTotal, finalTotal: total,
+      firestoreFields: {
+        shippingCost: order.shippingCost, shippingFee: order.shippingFee,
+        deliveryCharge: order.deliveryCharge, shipping: order.shipping,
+        totalAmount: order.totalAmount, total: order.total,
+      },
+    });
+  }
+
+  const { label: paymentStatusLabel, color: paymentStatusColor } = order
+    ? getPaymentStatusLabel(paymentMethod || "", order.paymentStatus || "", order.status || "")
+    : { label: "-", color: "text-muted-foreground" };
 
   const canCancel = () => {
     if (!order) return false;
@@ -81,13 +538,17 @@ export default function OrderDetailPage() {
     const orderRef = doc(db, "orders", orderId);
 
     const cancelData: any = {
-      status: "Cancelled",
-      cancelled: true,
+      status:         "Cancelled",
+      cancelled:      true,
       cancelReason,
       cancelFeedback: cancelReason === "Other" ? cancelFeedback : "",
-      cancelledAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
+      cancelledAt:    serverTimestamp(),
+      updatedAt:      serverTimestamp(),
     };
+
+    if (paymentMethod === "cod") {
+      cancelData.paymentStatus = "cancelled";
+    }
 
     if (paymentMethod === "online" && order.razorpayPaymentId) {
       cancelData.refundStatus = "pending";
@@ -95,14 +556,12 @@ export default function OrderDetailPage() {
 
     try {
       await updateDoc(orderRef, cancelData);
-
       toast({
         title: "Order Cancelled",
         description: paymentMethod === "online"
           ? "Our team will review and process your refund shortly."
           : "Your order has been successfully cancelled.",
       });
-
       setShowCancelModal(false);
       setCancelReason("");
       setCancelFeedback("");
@@ -114,11 +573,9 @@ export default function OrderDetailPage() {
     }
   };
 
-  // ─── Refund section shown inside Cancelled notice ────────────────────────────
   const getRefundSection = () => {
     if (order?.status !== "Cancelled") return null;
 
-    // COD: no payment was made, show simple info badge
     if (paymentMethod === "cod") {
       return (
         <div className="flex items-start gap-3 rounded-2xl p-4 mt-4 bg-gray-50 border border-gray-200">
@@ -133,11 +590,10 @@ export default function OrderDetailPage() {
       );
     }
 
-    // Online payment: show refund status
     return (
       <div className={`flex items-start gap-3 rounded-2xl p-4 mt-4 ${
         order?.refundStatus === "processed" ? "bg-emerald-50" :
-        order?.refundStatus === "failed" ? "bg-red-50" : "bg-amber-50"
+        order?.refundStatus === "failed"    ? "bg-red-50"     : "bg-amber-50"
       }`}>
         {order?.refundStatus === "processed"
           ? <CheckCircle2 className="h-5 w-5 text-emerald-500 mt-0.5 flex-shrink-0" />
@@ -148,17 +604,15 @@ export default function OrderDetailPage() {
         <div>
           <p className={`text-sm font-bold ${
             order?.refundStatus === "processed" ? "text-emerald-700" :
-            order?.refundStatus === "failed" ? "text-red-600" : "text-amber-700"
+            order?.refundStatus === "failed"    ? "text-red-600"     : "text-amber-700"
           }`}>
-            {order?.refundStatus === "processed"
-              ? "Refund Processed"
-              : order?.refundStatus === "failed"
-              ? "Refund Failed"
+            {order?.refundStatus === "processed" ? "Refund Processed"
+              : order?.refundStatus === "failed" ? "Refund Failed"
               : "Refund Pending Review"}
           </p>
           <p className="text-xs mt-0.5 text-muted-foreground">
             {order?.refundStatus === "processed"
-              ? `Refund ID: ${order?.refundId} · Your refund (if applicable) will be processed back to your original payment method within 5–7 business days.`
+              ? `Refund ID: ${order?.refundId} · Your refund (if applicable) will be processed back to your original payment method within 5-7 business days.`
               : order?.refundStatus === "failed"
               ? order?.refundError || "Please contact support"
               : "An administrator will approve your refund request shortly."}
@@ -168,8 +622,7 @@ export default function OrderDetailPage() {
     );
   };
 
-  const statusSteps = ["Pending", "Approved", "Shipped", "Delivered"];
-
+  const statusSteps  = ["Pending", "Approved", "Shipped", "Delivered"];
   const getStepIndex = () => {
     if (order?.status === "Cancelled") return -1;
     return statusSteps.indexOf(order?.status);
@@ -215,35 +668,31 @@ export default function OrderDetailPage() {
       <main className="flex-grow bg-neutral/30 py-10">
         <div className="container mx-auto px-4 max-w-3xl">
 
-          {/* Back */}
           <Link href="/orders">
             <button className="flex items-center gap-2 text-sm font-bold text-muted-foreground hover:text-primary transition-colors mb-6">
               <ArrowLeft className="h-4 w-4" /> Back to Orders
             </button>
           </Link>
 
-          {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-8">
             <div>
               <h1 className="text-2xl font-headline font-extrabold text-primary">Order Details</h1>
               <p className="text-xs text-muted-foreground font-mono mt-1">{orderId}</p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <StatusChip status={order.status || "Pending"} />
-              {canCancel() && (
-                <button
-                  onClick={() => setShowCancelModal(true)}
-                  className="text-sm font-bold px-5 py-2 rounded-full text-destructive border border-destructive/20 hover:bg-destructive/5 transition-all flex items-center gap-1.5"
-                >
-                  <XCircle className="h-4 w-4" /> Cancel
-                </button>
-              )}
+              <button
+                onClick={() => { if (!order) return; downloadInvoice(order, orderId); }}
+                disabled={!order || isLoading}
+                className="text-sm font-bold px-5 py-2 rounded-full text-primary border border-primary/20 hover:bg-primary/5 transition-all flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Download className="h-4 w-4" /> Invoice
+              </button>
             </div>
           </div>
 
           <div className="space-y-5">
 
-            {/* Order Status Timeline */}
             {order.status !== "Cancelled" && (
               <div className="bg-white rounded-3xl shadow-sm p-6">
                 <h2 className="text-sm font-black uppercase tracking-wider text-muted-foreground mb-6 flex items-center gap-2">
@@ -277,7 +726,6 @@ export default function OrderDetailPage() {
               </div>
             )}
 
-            {/* ── Cancelled notice ─────────────────────────────────────────────── */}
             {order.status === "Cancelled" && (
               <div className="bg-red-50 rounded-3xl p-6 border border-red-100">
                 <div className="flex items-start gap-3">
@@ -292,20 +740,17 @@ export default function OrderDetailPage() {
                         Cancelled on {format(new Date(order.cancelledAt.seconds * 1000), "MMM d, yyyy · h:mm a")}
                       </p>
                     )}
-                    {/* ✅ Refund message based on payment method */}
                     <p className="text-xs text-red-400 mt-2 italic">
                       {paymentMethod === "cod"
                         ? "Since this was a Cash on Delivery order, no payment was collected and no refund is required."
-                        : "Your refund (if applicable) will be processed back to your original payment method within 5–7 business days."}
+                        : "Your refund (if applicable) will be processed back to your original payment method within 5-7 business days."}
                     </p>
                   </div>
                 </div>
-                {/* Detailed refund status block */}
                 {getRefundSection()}
               </div>
             )}
 
-            {/* Items */}
             <div className="bg-white rounded-3xl shadow-sm p-6">
               <h2 className="text-sm font-black uppercase tracking-wider text-muted-foreground mb-5 flex items-center gap-2">
                 <Package className="h-4 w-4" /> Items Ordered
@@ -334,30 +779,32 @@ export default function OrderDetailPage() {
                 ))}
               </div>
 
-              {/* Price breakdown */}
               <div className="mt-6 pt-5 border-t space-y-2">
                 <div className="flex justify-between text-sm text-muted-foreground">
                   <span>Subtotal</span>
-                  <span>₹{(order.subtotal || order.total || 0).toLocaleString()}</span>
+                  <span>₹{subtotal.toLocaleString("en-IN")}</span>
                 </div>
                 <div className="flex justify-between text-sm text-muted-foreground">
                   <span>Shipping</span>
-                  <span>{(order.shippingCost || 0) === 0 ? <span className="text-emerald-600 font-semibold">Free</span> : `₹${order.shippingCost}`}</span>
+                  <span>
+                    {derivedShipping === 0
+                      ? <span className="text-emerald-600 font-semibold">Free</span>
+                      : `₹${derivedShipping.toLocaleString("en-IN")}`}
+                  </span>
                 </div>
-                {order.discount > 0 && (
+                {discount > 0 && (
                   <div className="flex justify-between text-sm text-emerald-600">
                     <span>Discount</span>
-                    <span>−₹{order.discount}</span>
+                    <span>-₹{discount.toLocaleString("en-IN")}</span>
                   </div>
                 )}
                 <div className="flex justify-between font-extrabold text-primary text-base pt-2 border-t">
                   <span>Total</span>
-                  <span>₹{(order.totalAmount || order.total || 0).toLocaleString()}</span>
+                  <span>₹{total.toLocaleString("en-IN")}</span>
                 </div>
               </div>
             </div>
 
-            {/* Shipping Address */}
             {order.shippingAddress && (
               <div className="bg-white rounded-3xl shadow-sm p-6">
                 <h2 className="text-sm font-black uppercase tracking-wider text-muted-foreground mb-4 flex items-center gap-2">
@@ -378,32 +825,23 @@ export default function OrderDetailPage() {
               </div>
             )}
 
-            {/* ── Payment Info ─────────────────────────────────────────────────── */}
             <div className="bg-white rounded-3xl shadow-sm p-6">
               <h2 className="text-sm font-black uppercase tracking-wider text-muted-foreground mb-4 flex items-center gap-2">
                 <CreditCard className="h-4 w-4" /> Payment
               </h2>
               <div className="space-y-3 text-sm">
-
-                {/* Payment Method */}
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Method</span>
                   <span className="font-bold capitalize">
-                    {paymentMethod === "online" ? "💳 Online Payment" : "💵 Cash on Delivery"}
+                    {paymentMethod === "online" ? "💳 Online Payment" : "Cash on Delivery"}
                   </span>
                 </div>
-
-                {/* Payment Status */}
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Status</span>
-                  <span className={`font-bold ${
-                    order.paymentStatus === "paid" ? "text-emerald-600" : "text-amber-600"
-                  }`}>
-                    {order.paymentStatus === "paid" ? "✓ Paid" : order.paymentStatus || "Pending"}
+                  <span className={`font-bold ${paymentStatusColor}`}>
+                    {paymentStatusLabel}
                   </span>
                 </div>
-
-                {/* ✅ Refund badge — only shown on cancelled orders */}
                 {order.status === "Cancelled" && (
                   <div className="flex justify-between items-center pt-2 border-t">
                     <span className="text-muted-foreground">Refund</span>
@@ -413,10 +851,8 @@ export default function OrderDetailPage() {
                       </span>
                     ) : (
                       <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full ${
-                        order.refundStatus === "processed"
-                          ? "bg-emerald-100 text-emerald-700"
-                          : order.refundStatus === "failed"
-                          ? "bg-red-100 text-red-700"
+                        order.refundStatus === "processed" ? "bg-emerald-100 text-emerald-700"
+                          : order.refundStatus === "failed" ? "bg-red-100 text-red-700"
                           : "bg-amber-100 text-amber-700"
                       }`}>
                         {order.refundStatus === "processed" ? (
@@ -430,8 +866,6 @@ export default function OrderDetailPage() {
                     )}
                   </div>
                 )}
-
-                {/* Order Date */}
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Order Date</span>
                   <span className="font-bold flex items-center gap-1">
@@ -448,7 +882,7 @@ export default function OrderDetailPage() {
         </div>
       </main>
 
-      {/* ── Cancellation Modal ──────────────────────────────────────────────────── */}
+      {/* Cancellation Modal */}
       <Dialog open={showCancelModal} onOpenChange={(open) => !open && setShowCancelModal(false)}>
         <DialogContent className="rounded-[2rem] max-w-md">
           <DialogHeader>
@@ -492,12 +926,11 @@ export default function OrderDetailPage() {
               </div>
             )}
 
-            {/* ✅ Modal info block — COD vs Online */}
             {paymentMethod === "online" ? (
               <div className="flex items-start gap-3 bg-blue-50 rounded-2xl p-4">
                 <RefreshCw className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
                 <p className="text-xs text-blue-700 font-medium leading-relaxed">
-                  Upon approval, ₹{(order.totalAmount || order.total || 0).toLocaleString()} will be automatically refunded to your original payment method.
+                  Upon approval, ₹{total.toLocaleString("en-IN")} will be automatically refunded to your original payment method.
                 </p>
               </div>
             ) : (
