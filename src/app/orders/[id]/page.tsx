@@ -28,9 +28,6 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Subtotal calculator
-// ─────────────────────────────────────────────────────────────────────────────
 function calcSubtotal(items: any[]): number {
   if (!Array.isArray(items)) return 0;
   return items.reduce((acc, item) => {
@@ -40,27 +37,35 @@ function calcSubtotal(items: any[]): number {
   }, 0);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Payment status label
-// ─────────────────────────────────────────────────────────────────────────────
+// ── UPDATED: added refundStatus param + fixed online logic ───────────────────
 function getPaymentStatusLabel(
   paymentMethod: string,
   paymentStatus: string,
   orderStatus: string,
+  refundStatus?: string,
 ): { label: string; color: string } {
+
+  // COD — unchanged
   if (paymentMethod === "cod") {
     if (orderStatus === "Delivered") return { label: "Paid",      color: "text-emerald-600" };
     if (orderStatus === "Cancelled") return { label: "Cancelled", color: "text-gray-500"    };
     return                                   { label: "Pending",  color: "text-amber-600"   };
   }
-  if (paymentStatus === "paid")   return { label: "Paid",    color: "text-emerald-600" };
-  if (paymentStatus === "failed") return { label: "Failed",  color: "text-red-600"     };
-  return                                 { label: "Pending", color: "text-amber-600"   };
+
+  // ONLINE — fixed
+  if (paymentMethod === "online") {
+    if (orderStatus === "Cancelled") {
+      if (refundStatus === "processed") {
+        return { label: "Refunded",       color: "text-emerald-600" };
+      }
+      return   { label: "Refund Pending", color: "text-amber-600"   };
+    }
+    return     { label: "Paid",           color: "text-emerald-600" };
+  }
+
+  return { label: "Pending", color: "text-amber-600" };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Fetch business info
-// ─────────────────────────────────────────────────────────────────────────────
 async function fetchBusinessInfo(): Promise<{
   storeName: string;
   legalName: string;
@@ -97,16 +102,10 @@ async function fetchBusinessInfo(): Promise<{
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ✅ Helper: format currency for PDF (Rs. instead of ₹ — jsPDF can't render ₹)
-// ─────────────────────────────────────────────────────────────────────────────
 function pdfRs(value: number): string {
   return `Rs. ${value.toLocaleString("en-IN")}`;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Invoice PDF generator — Premium Non-GST
-// ─────────────────────────────────────────────────────────────────────────────
 async function downloadInvoice(order: any, orderId: string) {
   if (!order) return;
 
@@ -116,15 +115,31 @@ async function downloadInvoice(order: any, orderId: string) {
     const jsPDF           = jsPDFModule.default;
     const autoTable       = autoTableModule.default ?? autoTableModule;
 
-    const biz         = await fetchBusinessInfo();
-    const isCancelled = order.status === "Cancelled";
-    const today       = new Date().toISOString().split("T")[0];
+    const biz   = await fetchBusinessInfo();
+    const today = new Date().toISOString().split("T")[0];
+
+    const type =
+      order.status === "Cancelled"
+        ? "CANCELLED"
+        : order.status === "Approved"
+        ? "PROFORMA"
+        : "FINAL";
+
+    let invoiceTitle = "INVOICE";
+    if (type === "PROFORMA")  invoiceTitle = "PROFORMA INVOICE";
+    if (type === "CANCELLED") invoiceTitle = "CANCELLED INVOICE";
+
+    const headerColor: [number, number, number] =
+      type === "CANCELLED"
+        ? [180, 30, 30]
+        : type === "PROFORMA"
+        ? [120, 120, 120]
+        : [27, 94, 32];
 
     const doc        = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     const pageWidth  = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
 
-    // ── Derive totals ─────────────────────────────────────────────────────────
     const subtotal    = calcSubtotal(order.items || []);
     const discount    = order.discount || 0;
     const shipRaw     = order.shippingCost ?? order.shippingFee ?? order.deliveryCharge ?? order.shipping ?? 0;
@@ -132,21 +147,33 @@ async function downloadInvoice(order: any, orderId: string) {
     const shipping    = shipRaw === 0 && storedTotal > subtotal
       ? storedTotal - subtotal + discount
       : shipRaw;
-    const total       = storedTotal || (subtotal + shipping - discount);
+    const total = storedTotal || (subtotal + shipping - discount);
 
-    // ── Payment labels ────────────────────────────────────────────────────────
     const paymentMethodRaw   = order.paymentMethod?.toLowerCase();
     const paymentMethodLabel = paymentMethodRaw === "cod"
       ? "Cash on Delivery"
       : paymentMethodRaw === "online" ? "Online Payment" : order.paymentMethod || "-";
 
     let paymentStatusLabel = "Pending";
+
+    if (paymentMethodRaw === "online") {
+      if (type === "CANCELLED") {
+        paymentStatusLabel = order.refundStatus === "processed"
+          ? "Refunded"
+          : "Refund Pending";
+      } else {
+        paymentStatusLabel = "Paid";
+      }
+    }
+
     if (paymentMethodRaw === "cod") {
-      if (order.status === "Delivered")  paymentStatusLabel = "Paid";
-      else if (isCancelled)              paymentStatusLabel = "Cancelled";
-    } else {
-      if (order.paymentStatus === "paid")   paymentStatusLabel = "Paid";
-      else if (order.paymentStatus === "failed") paymentStatusLabel = "Failed";
+      if (order.status === "Delivered") {
+        paymentStatusLabel = "Paid";
+      } else if (type === "CANCELLED") {
+        paymentStatusLabel = "Not Paid";
+      } else {
+        paymentStatusLabel = "Pending";
+      }
     }
 
     const orderDate = order.createdAt?.seconds
@@ -156,36 +183,29 @@ async function downloadInvoice(order: any, orderId: string) {
     // ══════════════════════════════════════════════════════════════════════════
     // HEADER
     // ══════════════════════════════════════════════════════════════════════════
-    const headerColor: [number, number, number] = isCancelled ? [180, 30, 30] : [27, 94, 32];
     doc.setFillColor(...headerColor);
     doc.rect(0, 0, pageWidth, 38, "F");
 
-    // Left — store name
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(22);
     doc.setFont("helvetica", "bold");
     doc.text((biz.legalName || biz.storeName).toUpperCase(), 15, 14);
 
-    // Left — tagline
     doc.setFontSize(8.5);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(210, 240, 210);
     doc.text("Premium Plants & Nursery", 15, 22);
 
-    // Left — contact
     doc.setFontSize(8);
     doc.setTextColor(190, 230, 190);
     const contactLine = biz.phone ? `${biz.email}   |   ${biz.phone}` : biz.email;
     doc.text(contactLine, 15, 29);
 
-    // Right — title
-    const invoiceTitle = isCancelled ? "CANCELLED INVOICE" : "INVOICE";
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(16);
     doc.setFont("helvetica", "bold");
     doc.text(invoiceTitle, pageWidth - 15, 14, { align: "right" });
 
-    // Right — meta
     doc.setFontSize(7.5);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(210, 240, 210);
@@ -193,9 +213,12 @@ async function downloadInvoice(order: any, orderId: string) {
     doc.text(`Order ID   : #${orderId}`,    pageWidth - 15, 29, { align: "right" });
     doc.text(`Date       : ${orderDate}`,   pageWidth - 15, 36, { align: "right" });
 
-    // ── Cancelled banner ──────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════════════════════
+    // BANNER — one per invoice type
+    // ══════════════════════════════════════════════════════════════════════════
     let y = 46;
-    if (isCancelled) {
+
+    if (type === "CANCELLED") {
       doc.setFillColor(255, 235, 235);
       doc.rect(0, 38, pageWidth, 10, "F");
       doc.setFont("helvetica", "bold");
@@ -203,6 +226,39 @@ async function downloadInvoice(order: any, orderId: string) {
       doc.setTextColor(180, 30, 30);
       doc.text("This order was cancelled.", pageWidth / 2, 45, { align: "center" });
       y = 56;
+
+    } else if (type === "PROFORMA") {
+      doc.setFillColor(245, 245, 245);
+      doc.rect(0, 38, pageWidth, 10, "F");
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(9);
+      doc.setTextColor(120, 120, 120);
+      doc.text(
+        "This is a provisional invoice. Final invoice will be generated after delivery.",
+        pageWidth / 2,
+        45,
+        { align: "center" },
+      );
+      y = 56;
+
+    } else {
+      doc.setFillColor(235, 248, 235);
+      doc.rect(0, 38, pageWidth, 14, "F");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(27, 94, 32);
+      doc.text("\u2714 Order successfully delivered.", pageWidth / 2, 46, { align: "center" });
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(60, 120, 60);
+      const deliveredDate = order.deliveredAt?.seconds
+        ? format(new Date(order.deliveredAt.seconds * 1000), "dd MMM yyyy")
+        : format(new Date(), "dd MMM yyyy");
+      doc.text(`Delivered on ${deliveredDate}`, pageWidth / 2, 50, { align: "center" });
+
+      y = 60;
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -217,16 +273,16 @@ async function downloadInvoice(order: any, orderId: string) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.5);
     doc.setTextColor(110, 110, 110);
-    doc.text("ORDER STATUS",    15,  y + 4);
-    doc.text("PAYMENT METHOD",  80,  y + 4);
-    doc.text("PAYMENT STATUS",  150, y + 4);
+    doc.text("ORDER STATUS",   15,  y + 4);
+    doc.text("PAYMENT METHOD", 80,  y + 4);
+    doc.text("PAYMENT STATUS", 150, y + 4);
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9.5);
     doc.setTextColor(30, 30, 30);
-    doc.text(order.status || "-",  15,  y + 11);
-    doc.text(paymentMethodLabel,   80,  y + 11);
-    doc.text(paymentStatusLabel,   150, y + 11);
+    doc.text(order.status || "-", 15,  y + 11);
+    doc.text(paymentMethodLabel,  80,  y + 11);
+    doc.text(paymentStatusLabel,  150, y + 11);
 
     y += 22;
 
@@ -268,7 +324,7 @@ async function downloadInvoice(order: any, orderId: string) {
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // ITEMS TABLE  — ✅ Rs. replaces ₹
+    // ITEMS TABLE
     // ══════════════════════════════════════════════════════════════════════════
     const tableRows = (order.items || []).map((item: any, i: number) => {
       const qty   = item.qty || item.quantity || 1;
@@ -302,24 +358,23 @@ async function downloadInvoice(order: any, orderId: string) {
         lineWidth: 0.2,
       },
       columnStyles: {
-        0: { cellWidth: 10,    halign: "center" },
+        0: { cellWidth: 10,     halign: "center" },
         1: { cellWidth: "auto", fontStyle: "bold" },
-        2: { cellWidth: 14,    halign: "center" },
-        3: { cellWidth: 36,    halign: "right"  },
-        4: { cellWidth: 36,    halign: "right", fontStyle: "bold" },
+        2: { cellWidth: 14,     halign: "center" },
+        3: { cellWidth: 36,     halign: "right"  },
+        4: { cellWidth: 36,     halign: "right", fontStyle: "bold" },
       },
       alternateRowStyles: { fillColor: [248, 252, 248] },
       margin: { left: 15, right: 15 },
     });
 
     // ══════════════════════════════════════════════════════════════════════════
-    // TOTALS + PAYMENT SUMMARY  — ✅ wider box, Rs. fix
+    // TOTALS + PAYMENT SUMMARY
     // ══════════════════════════════════════════════════════════════════════════
     const finalY = (doc as any).lastAutoTable.finalY + 8;
 
-    // — Totals box: right half of page
     const totalsBoxX = pageWidth / 2 + 2;
-    const totalsBoxW = pageWidth - 15 - totalsBoxX;   // ~88mm, plenty of space
+    const totalsBoxW = pageWidth - 15 - totalsBoxX;
     const rowH       = 8;
     const numRows    = discount > 0 ? 4 : 3;
     const totalsBoxH = numRows * rowH + 14;
@@ -329,7 +384,7 @@ async function downloadInvoice(order: any, orderId: string) {
     doc.roundedRect(totalsBoxX, finalY - 4, totalsBoxW, totalsBoxH, 3, 3, "FD");
 
     const labelCol = totalsBoxX + 6;
-    const valueCol = totalsBoxX + totalsBoxW - 5; // fully inside box
+    const valueCol = totalsBoxX + totalsBoxW - 5;
 
     let tY = finalY;
 
@@ -337,12 +392,10 @@ async function downloadInvoice(order: any, orderId: string) {
     doc.setFont("helvetica", "normal");
     doc.setTextColor(80, 80, 80);
 
-    // Subtotal
     doc.text("Subtotal", labelCol, tY + 3);
     doc.text(pdfRs(subtotal), valueCol, tY + 3, { align: "right" });
     tY += rowH;
 
-    // Shipping
     doc.text("Shipping", labelCol, tY + 3);
     if (shipping === 0) {
       doc.setTextColor(27, 94, 32);
@@ -355,7 +408,6 @@ async function downloadInvoice(order: any, orderId: string) {
     }
     tY += rowH;
 
-    // Discount
     if (discount > 0) {
       doc.setTextColor(27, 94, 32);
       doc.text("Discount", labelCol, tY + 3);
@@ -364,14 +416,12 @@ async function downloadInvoice(order: any, orderId: string) {
       tY += rowH;
     }
 
-    // Divider
     doc.setDrawColor(180, 215, 180);
     doc.setLineWidth(0.5);
     doc.line(labelCol, tY + 1, valueCol, tY + 1);
     doc.setLineWidth(0.2);
     tY += 5;
 
-    // Total row — filled background
     doc.setFillColor(...headerColor);
     doc.roundedRect(totalsBoxX + 2, tY - 1, totalsBoxW - 4, 10, 2, 2, "F");
     doc.setFont("helvetica", "bold");
@@ -380,10 +430,9 @@ async function downloadInvoice(order: any, orderId: string) {
     doc.text("TOTAL", labelCol, tY + 6);
     doc.text(pdfRs(total), valueCol, tY + 6, { align: "right" });
 
-    // — Payment summary box: left half
     const psBoxX = 15;
     const psBoxW = pageWidth / 2 - 15 - 4;
-    const psBoxH = totalsBoxH + 12; // taller to fit 4 rows + header + divider
+    const psBoxH = totalsBoxH + 12;
 
     doc.setFillColor(250, 250, 255);
     doc.setDrawColor(210, 210, 230);
@@ -410,15 +459,96 @@ async function downloadInvoice(order: any, orderId: string) {
       doc.text(value, psValue, yPos, { align: "right" });
     };
 
-    pRow("Payment Method",  paymentMethodLabel,  finalY + 13);
-    pRow("Payment Status",  paymentStatusLabel,  finalY + 21);
-    pRow("Order Status",    order.status || "-", finalY + 29);
+    pRow("Payment Method", paymentMethodLabel,  finalY + 13);
+    pRow("Payment Status", paymentStatusLabel,  finalY + 21);
+    pRow("Order Status",   order.status || "-", finalY + 29);
     if (order.createdAt?.seconds) {
       pRow(
         "Order Date",
         format(new Date(order.createdAt.seconds * 1000), "dd MMM yyyy"),
         finalY + 37,
       );
+    }
+
+    let postSummaryY = finalY - 4 + Math.max(totalsBoxH, psBoxH) + 10;
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // REFUND HIGHLIGHT BOX (online + cancelled only)
+    // ══════════════════════════════════════════════════════════════════════════
+    if (paymentMethodRaw === "online" && type === "CANCELLED") {
+      const isRefunded = order.refundStatus === "processed";
+
+      doc.setFillColor(isRefunded ? 240 : 255, isRefunded ? 255 : 243, isRefunded ? 240 : 205);
+      doc.setDrawColor(isRefunded ? 180 : 230, isRefunded ? 220 : 190, isRefunded ? 180 : 100);
+      doc.roundedRect(14, postSummaryY, pageWidth - 28, 16, 3, 3, "FD");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(isRefunded ? 0 : 140, isRefunded ? 120 : 80, 0);
+      doc.text(
+        isRefunded ? "\u2714 Refund Processed" : "\u23F3 Refund Pending",
+        18,
+        postSummaryY + 6,
+      );
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(60, 60, 60);
+      doc.text(
+        isRefunded
+          ? `Refund ID: ${order.refundId || "-"}`
+          : "Your refund will be processed soon.",
+        18,
+        postSummaryY + 12,
+      );
+
+      postSummaryY += 22;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // PAYMENT TIMELINE (online only)
+    // ══════════════════════════════════════════════════════════════════════════
+    if (paymentMethodRaw === "online") {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8.5);
+      doc.setTextColor(60, 60, 60);
+      doc.text("Payment Timeline", 14, postSummaryY);
+
+      postSummaryY += 7;
+
+      const dotY  = postSummaryY - 1;
+      const dot2X = type === "CANCELLED" ? 70 : 0;
+
+      doc.setFillColor(27, 94, 32);
+      doc.circle(18, dotY, 2, "F");
+
+      if (type === "CANCELLED") {
+        doc.setDrawColor(200, 200, 200);
+        doc.setLineWidth(0.4);
+        doc.line(20, dotY, dot2X - 2, dotY);
+        doc.setLineWidth(0.2);
+
+        const refunded = order.refundStatus === "processed";
+        doc.setFillColor(refunded ? 27 : 180, refunded ? 94 : 120, refunded ? 32 : 0);
+        doc.circle(dot2X, dotY, 2, "F");
+      }
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.setTextColor(27, 94, 32);
+      doc.text("\u2714 Paid", 22, postSummaryY + 1);
+
+      if (type === "CANCELLED") {
+        const refunded = order.refundStatus === "processed";
+        doc.setTextColor(refunded ? 27 : 180, refunded ? 94 : 80, refunded ? 32 : 0);
+        doc.text(
+          refunded ? "\u2714 Refunded" : "\u23F3 Refund Pending",
+          dot2X + 4,
+          postSummaryY + 1,
+        );
+      }
+
+      postSummaryY += 12;
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -516,8 +646,14 @@ export default function OrderDetailPage() {
     });
   }
 
+  // ── UPDATED: now passes order.refundStatus as 4th arg ────────────────────
   const { label: paymentStatusLabel, color: paymentStatusColor } = order
-    ? getPaymentStatusLabel(paymentMethod || "", order.paymentStatus || "", order.status || "")
+    ? getPaymentStatusLabel(
+        paymentMethod || "",
+        order.paymentStatus || "",
+        order.status || "",
+        order.refundStatus,
+      )
     : { label: "-", color: "text-muted-foreground" };
 
   const canCancel = () => {
@@ -882,7 +1018,6 @@ export default function OrderDetailPage() {
         </div>
       </main>
 
-      {/* Cancellation Modal */}
       <Dialog open={showCancelModal} onOpenChange={(open) => !open && setShowCancelModal(false)}>
         <DialogContent className="rounded-[2rem] max-w-md">
           <DialogHeader>

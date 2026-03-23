@@ -28,7 +28,7 @@ import {
   UserCheck,
   BadgeCheck
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "@/hooks/use-toast";
 import { 
   useUser, 
@@ -41,6 +41,7 @@ import {
   doc, 
   setDoc,
   writeBatch,
+  getDoc,          // ← ADDED
   serverTimestamp, 
   query, 
   collection, 
@@ -76,7 +77,6 @@ export default function AffiliateDashboard() {
   const [isApplying, setIsApplying] = useState(false);
   const [timeLeft, setTimeLeft] = useState<string | null>(null);
 
-  // Form State
   const [formData, setFormData] = useState({
     accountHolderName: "",
     bankAccountNumber: "",
@@ -85,33 +85,35 @@ export default function AffiliateDashboard() {
     upiId: "",
     address: "",
     city: "",
+    district: "",
     state: "",
     pincode: ""
   });
 
-  // Helper States
   const [branchName, setBranchName] = useState("");
   const [ifscError, setIfscError] = useState("");
   const [isFetchingIfsc, setIsFetchingIfsc] = useState(false);
 
-  // Unified status from context
+  const [isFetchingPincode, setIsFetchingPincode] = useState(false);
+  const [pincodeError, setPincodeError]           = useState("");
+  const districtManuallyEdited = useRef(false);
+  const stateManuallyEdited    = useRef(false);
+  const pincodeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const { isApproved, affiliateProfile, loading: isAffiliateLoading } = useAffiliate();
 
-  // Fetch Application status
   const appRef = useMemoFirebase(
     () => !user?.uid ? null : doc(db, 'affiliateApplications', user.uid), 
     [db, user?.uid]
   );
   const { data: application } = useDoc(appRef);
 
-  // Fetch User Profile
   const userProfileRef = useMemoFirebase(
     () => !user?.uid ? null : doc(db, 'users', user.uid), 
     [db, user?.uid]
   );
   const { data: profile, isLoading: isProfileLoading } = useDoc(userProfileRef);
 
-  // Fetch Commissions
   const commQuery = useMemoFirebase(() => {
     if (!user?.uid || !db) return null;
     return query(
@@ -122,16 +124,13 @@ export default function AffiliateDashboard() {
   }, [db, user?.uid]);
   const { data: commissions } = useCollection(commQuery);
 
-  // Countdown logic
   useEffect(() => {
     if (!application?.createdAt) return;
-    
     const calculateTime = () => {
       const start = application.createdAt.seconds * 1000;
       const deadline = start + (48 * 60 * 60 * 1000);
       const now = Date.now();
       const diff = deadline - now;
-
       if (diff <= 0) {
         setTimeLeft("EXPIRED");
       } else {
@@ -140,13 +139,11 @@ export default function AffiliateDashboard() {
         setTimeLeft(`${hours}h ${minutes}m remaining`);
       }
     };
-
     calculateTime();
     const timer = setInterval(calculateTime, 60000);
     return () => clearInterval(timer);
   }, [application?.createdAt]);
 
-  // Redirect if not logged in
   useEffect(() => {
     if (!isUserLoading && !user) router.push('/login?redirect=/affiliate');
   }, [user, isUserLoading, router]);
@@ -181,11 +178,44 @@ export default function AffiliateDashboard() {
     }
   };
 
+  const fetchPincodeDetails = async (pin: string) => {
+    setIsFetchingPincode(true);
+    setPincodeError("");
+    try {
+      const res = await fetch(`https://api.postalpincode.in/pincode/${pin}`);
+      if (!res.ok) throw new Error("API error");
+      const data = await res.json();
+      if (data[0]?.Status === "Success" && data[0].PostOffice?.length > 0) {
+        const postOffice = data[0].PostOffice[0];
+        const matchedState = INDIA_STATES.find(
+          s => s.toLowerCase() === postOffice.State?.toLowerCase()
+        );
+        setFormData(prev => ({
+          ...prev,
+          district: districtManuallyEdited.current ? prev.district : (postOffice.District || prev.district),
+          state: stateManuallyEdited.current ? prev.state : (matchedState || prev.state),
+        }));
+      } else {
+        setPincodeError("Pincode not found");
+      }
+    } catch {
+      setPincodeError("Could not fetch pincode details");
+    } finally {
+      setIsFetchingPincode(false);
+    }
+  };
+
   const handlePincodeChange = (val: string) => {
     const pin = val.replace(/\D/g, "").slice(0, 6);
     setFormData(prev => ({ ...prev, pincode: pin }));
+    setPincodeError("");
+    if (pincodeDebounceRef.current) clearTimeout(pincodeDebounceRef.current);
+    if (pin.length === 6 && isValidPincode(pin)) {
+      pincodeDebounceRef.current = setTimeout(() => fetchPincodeDetails(pin), 400);
+    }
   };
 
+  // ── FIXED handleApply ─────────────────────────────────────────────────────
   const handleApply = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user?.uid || !db) return;
@@ -198,36 +228,63 @@ export default function AffiliateDashboard() {
       });
       return;
     }
-    
+
     setIsApplying(true);
-    
+
+    // Fields the user is always allowed to write
+    const safeFields = {
+      userId: user.uid,
+      accountHolderName: formData.accountHolderName,
+      bankAccountNumber: formData.bankAccountNumber,
+      bankName: formData.bankName,
+      ifscCode: formData.ifscCode,
+      upiId: formData.upiId,
+      address: formData.address,
+      city: formData.city,
+      district: formData.district,
+      state: formData.state,
+      pincode: formData.pincode,
+      updatedAt: serverTimestamp(),
+    };
+
     try {
       const batch = writeBatch(db);
 
-      // 1. Affiliate Profile — user can create/update their own profile
-      const profileRef = doc(db, 'affiliateProfiles', user.uid);
-      batch.set(profileRef, {
-        userId: user.uid,
-        ...formData,
-        totalEarnings: 0,
-        withdrawableAmount: 0,
-        paidEarnings: 0,
-        approved: false,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      }, { merge: true });
+      // ── 1. Profile ──────────────────────────────────────────────────────
+      const profileRef  = doc(db, 'affiliateProfiles', user.uid);
+      const profileSnap = await getDoc(profileRef);
 
-      // 2. Affiliate Application — doc ID = user UID, status must be "pending"
-      const applicationRef = doc(db, 'affiliateApplications', user.uid);
-      batch.set(applicationRef, { 
-        userId: user.uid, 
-        status: "pending", 
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      }, { merge: true });
+      if (!profileSnap.exists()) {
+        // First time → CREATE with protected financial fields
+        batch.set(profileRef, {
+          ...safeFields,
+          totalEarnings: 0,
+          withdrawableAmount: 0,
+          paidEarnings: 0,
+          approved: false,
+          createdAt: serverTimestamp(),
+        });
+      } else {
+        // Already exists → UPDATE safe fields only (rules block financial fields)
+        batch.update(profileRef, safeFields);
+      }
 
-      // ✅ NO users update here — role is set by admin on approval only
-      // Updating role/affiliateApproved yourself violates Firestore rules
+      // ── 2. Application ──────────────────────────────────────────────────
+      const appDocRef = doc(db, 'affiliateApplications', user.uid);
+      const appSnap   = await getDoc(appDocRef);
+
+      if (!appSnap.exists()) {
+        // First time → CREATE
+        batch.set(appDocRef, {
+          userId: user.uid,
+          status: "pending",
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        // Already exists → only touch updatedAt (admin owns status)
+        batch.update(appDocRef, { updatedAt: serverTimestamp() });
+      }
 
       await batch.commit();
 
@@ -247,6 +304,7 @@ export default function AffiliateDashboard() {
       setIsApplying(false);
     }
   };
+  // ─────────────────────────────────────────────────────────────────────────
 
   const handleCopy = () => {
     if (typeof window === 'undefined' || !user?.uid) return;
@@ -261,7 +319,6 @@ export default function AffiliateDashboard() {
     const normalizedStatus = status === 'pending' ? 'submitted' : status;
     const currentIndex = order.indexOf(normalizedStatus);
     const stepIndex = order.indexOf(stepId);
-
     if (currentIndex > stepIndex) return 'completed';
     if (currentIndex === stepIndex) return 'active';
     return 'pending';
@@ -274,7 +331,6 @@ export default function AffiliateDashboard() {
     { id: 'approved', label: 'Affiliate Activated', icon: BadgeCheck },
   ];
 
-  // --- LOADING STATE ---
   if (isUserLoading || isAffiliateLoading || isProfileLoading) {
     return (
       <div className="min-h-screen flex flex-col">
@@ -289,7 +345,6 @@ export default function AffiliateDashboard() {
 
   if (!user) return null;
 
-  // --- NOT APPROVED VIEW ---
   if (!isApproved) {
     const isPending = application?.status === 'pending' || profile?.role === 'affiliate' && profile?.affiliateApproved === false;
 
@@ -300,7 +355,6 @@ export default function AffiliateDashboard() {
           <div className="container mx-auto px-4 max-w-4xl">
 
             {isPending ? (
-              // --- PENDING APPLICATION VIEW ---
               <Card className="p-8 md:p-12 space-y-10 rounded-[3rem] border-none shadow-xl text-center overflow-hidden bg-white">
                 <div className="space-y-4">
                   <h1 className="text-4xl font-headline font-extrabold text-primary">
@@ -311,7 +365,6 @@ export default function AffiliateDashboard() {
                   </p>
                 </div>
 
-                {/* Progress Steps */}
                 <div className="relative flex justify-between items-start max-w-2xl mx-auto mb-12 px-4">
                   <div className="absolute top-5 left-0 w-full h-0.5 bg-gray-100 -z-0">
                     <div 
@@ -322,7 +375,6 @@ export default function AffiliateDashboard() {
                       }}
                     />
                   </div>
-
                   {steps.map((step) => {
                     const status = getStepStatus(step.id);
                     const Icon = step.icon;
@@ -347,7 +399,6 @@ export default function AffiliateDashboard() {
                   })}
                 </div>
 
-                {/* Countdown */}
                 <div className="bg-neutral/50 rounded-3xl p-8 border border-muted flex flex-col items-center gap-4">
                   <div className="space-y-1">
                     <p className="text-xs font-black text-muted-foreground uppercase tracking-widest">
@@ -377,7 +428,6 @@ export default function AffiliateDashboard() {
               </Card>
 
             ) : (
-              // --- APPLICATION FORM VIEW ---
               <div className="space-y-12">
                 <div className="text-center space-y-4">
                   <h1 className="text-5xl md:text-7xl font-headline font-extrabold text-primary">
@@ -478,11 +528,37 @@ export default function AffiliateDashboard() {
                           />
                         </div>
 
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center">
+                            <Label>District</Label>
+                            {isFetchingPincode ? (
+                              <span className="text-[10px] text-primary font-bold flex items-center gap-1">
+                                <Loader2 className="h-3 w-3 animate-spin" /> Auto-filling…
+                              </span>
+                            ) : formData.district && (
+                              <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                            )}
+                          </div>
+                          <Input
+                            required
+                            value={formData.district}
+                            onChange={e => {
+                              districtManuallyEdited.current = true;
+                              setFormData({ ...formData, district: e.target.value });
+                            }}
+                            placeholder="Auto-filled from pincode"
+                            className="rounded-xl h-12"
+                          />
+                        </div>
+
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
                             <Label>State</Label>
                             <Select 
-                              onValueChange={(val) => setFormData({...formData, state: val})} 
+                              onValueChange={(val) => {
+                                stateManuallyEdited.current = true;
+                                setFormData({...formData, state: val});
+                              }} 
                               value={formData.state}
                             >
                               <SelectTrigger className="rounded-xl h-12">
@@ -499,9 +575,12 @@ export default function AffiliateDashboard() {
                           <div className="space-y-2">
                             <div className="flex justify-between items-center">
                               <Label>Pincode</Label>
-                              {isValidPincode(formData.pincode) && (
-                                <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-                              )}
+                              {isFetchingPincode
+                                ? <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                                : isValidPincode(formData.pincode) && !pincodeError && (
+                                    <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                                  )
+                              }
                             </div>
                             <Input 
                               required 
@@ -516,6 +595,9 @@ export default function AffiliateDashboard() {
                               <p className="text-[10px] text-destructive font-bold">
                                 Enter a valid 6-digit Indian pincode
                               </p>
+                            )}
+                            {pincodeError && (
+                              <p className="text-[10px] text-destructive font-bold">{pincodeError}</p>
                             )}
                           </div>
                         </div>
@@ -543,7 +625,6 @@ export default function AffiliateDashboard() {
     );
   }
 
-  // --- APPROVED AFFILIATE DASHBOARD ---
   const stats = affiliateProfile;
   const balance = stats?.withdrawableAmount || 0;
 
@@ -563,7 +644,6 @@ export default function AffiliateDashboard() {
             </div>
           </div>
 
-          {/* Stats */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
             {[
               { label: "Gross Earnings", value: `₹${(stats?.totalEarnings || 0).toLocaleString()}`, icon: Wallet, color: "bg-blue-50 text-blue-600" },
@@ -586,7 +666,6 @@ export default function AffiliateDashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-8">
 
-              {/* Referral Link */}
               <Card className="rounded-[2rem] border-none shadow-sm bg-white p-8">
                 <h3 className="text-xl font-headline font-extrabold text-primary mb-6 flex items-center gap-2">
                   <LinkIcon className="h-5 w-5" /> Your Referral Link
@@ -601,7 +680,6 @@ export default function AffiliateDashboard() {
                 </div>
               </Card>
 
-              {/* Recent Earnings */}
               <div className="space-y-4">
                 <h3 className="text-xl font-headline font-extrabold text-primary">Recent Earnings</h3>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 px-4 py-2 rounded-full w-fit">
@@ -654,7 +732,6 @@ export default function AffiliateDashboard() {
               </div>
             </div>
 
-            {/* Withdraw Card */}
             <div className="space-y-6">
               <Card className="rounded-[2rem] border-none shadow-sm bg-primary text-white p-8">
                 <h3 className="text-xl font-headline font-bold mb-6">Withdraw Balance</h3>
