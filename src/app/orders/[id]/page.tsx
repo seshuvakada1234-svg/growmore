@@ -6,7 +6,7 @@ import { StatusChip } from "@/components/shared/StatusChip";
 import {
   ArrowLeft, Package, MapPin, CreditCard, Loader2,
   CheckCircle2, Clock, AlertTriangle, RefreshCw,
-  XCircle, Calendar, Truck, Banknote, Download,
+  XCircle, Calendar, Truck, Banknote, Download, Phone,
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -37,7 +37,6 @@ function calcSubtotal(items: any[]): number {
   }, 0);
 }
 
-// ── UPDATED: added refundStatus param + fixed online logic ───────────────────
 function getPaymentStatusLabel(
   paymentMethod: string,
   paymentStatus: string,
@@ -45,14 +44,12 @@ function getPaymentStatusLabel(
   refundStatus?: string,
 ): { label: string; color: string } {
 
-  // COD — unchanged
   if (paymentMethod === "cod") {
     if (orderStatus === "Delivered") return { label: "Paid",      color: "text-emerald-600" };
     if (orderStatus === "Cancelled") return { label: "Cancelled", color: "text-gray-500"    };
     return                                   { label: "Pending",  color: "text-amber-600"   };
   }
 
-  // ONLINE — fixed
   if (paymentMethod === "online") {
     if (orderStatus === "Cancelled") {
       if (refundStatus === "processed") {
@@ -118,7 +115,6 @@ async function downloadInvoice(order: any, orderId: string) {
     const biz   = await fetchBusinessInfo();
     const today = new Date().toISOString().split("T")[0];
 
-    // ── FIX 1: Pending/Shipped fall through to PROFORMA, only Delivered → FINAL
     const type =
       order.status === "Cancelled"
         ? "CANCELLED"
@@ -126,7 +122,7 @@ async function downloadInvoice(order: any, orderId: string) {
         ? "PROFORMA"
         : order.status === "Delivered"
         ? "FINAL"
-        : "PROFORMA"; // Pending, Shipped, or any other non-terminal status → PROFORMA
+        : "PROFORMA";
 
     let invoiceTitle = "INVOICE";
     if (type === "PROFORMA")  invoiceTitle = "PROFORMA INVOICE";
@@ -150,7 +146,7 @@ async function downloadInvoice(order: any, orderId: string) {
     const shipping    = shipRaw === 0 && storedTotal > subtotal
       ? storedTotal - subtotal + discount
       : shipRaw;
-    const total = storedTotal || (subtotal + derivedShipping - discount);
+    const total = storedTotal || (subtotal + shipping - discount);
 
     const paymentMethodRaw   = order.paymentMethod?.toLowerCase();
     const paymentMethodLabel = paymentMethodRaw === "cod"
@@ -183,9 +179,6 @@ async function downloadInvoice(order: any, orderId: string) {
       ? format(new Date(order.createdAt.seconds * 1000), "dd MMM yyyy, h:mm a")
       : "-";
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // HEADER
-    // ══════════════════════════════════════════════════════════════════════════
     doc.setFillColor(...headerColor);
     doc.rect(0, 0, pageWidth, 38, "F");
 
@@ -216,9 +209,6 @@ async function downloadInvoice(order: any, orderId: string) {
     doc.text(`Order ID   : #${orderId}`,    pageWidth - 15, 29, { align: "right" });
     doc.text(`Date       : ${orderDate}`,   pageWidth - 15, 36, { align: "right" });
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // BANNER — one per invoice type
-    // ══════════════════════════════════════════════════════════════════════════
     let y = 46;
 
     if (type === "CANCELLED") {
@@ -245,14 +235,12 @@ async function downloadInvoice(order: any, orderId: string) {
       y = 56;
 
     } else {
-      // type === "FINAL" — only reached when order.status === "Delivered"
       doc.setFillColor(235, 248, 235);
       doc.rect(0, 38, pageWidth, 14, "F");
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(10);
       doc.setTextColor(27, 94, 32);
-      // ── FIX 2: Replace \u2714 (renders as apostrophe in Helvetica) with plain ASCII checkmark
       doc.text("Order successfully delivered.", pageWidth / 2, 46, { align: "center" });
 
       doc.setFont("helvetica", "normal");
@@ -266,9 +254,6 @@ async function downloadInvoice(order: any, orderId: string) {
       y = 60;
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // ORDER META ROW
-    // ══════════════════════════════════════════════════════════════════════════
     doc.setFillColor(250, 250, 250);
     doc.rect(0, y - 2, pageWidth, 16, "F");
     doc.setDrawColor(230, 230, 230);
@@ -291,9 +276,6 @@ async function downloadInvoice(order: any, orderId: string) {
 
     y += 22;
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // SHIP TO
-    // ══════════════════════════════════════════════════════════════════════════
     const addr = order.shippingAddress;
     if (addr) {
       doc.setFillColor(245, 252, 245);
@@ -318,19 +300,16 @@ async function downloadInvoice(order: any, orderId: string) {
       const cityLine = [addr.city, addr.state, addr.pincode].filter(Boolean).join(", ");
       doc.text(cityLine, 20, y + 27);
 
-      if (addr.phone || order.customerPhone) {
+      if (addr.phone || addr.mobile || order.customerPhone) {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(8.5);
         doc.setTextColor(50, 50, 50);
-        doc.text(`Ph: ${addr.phone || order.customerPhone}`, pageWidth - 20, y + 27, { align: "right" });
+        doc.text(`Ph: ${addr.phone || addr.mobile || order.customerPhone}`, pageWidth - 20, y + 27, { align: "right" });
       }
 
       y += 42;
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // ITEMS TABLE
-    // ══════════════════════════════════════════════════════════════════════════
     const tableRows = (order.items || []).map((item: any, i: number) => {
       const qty   = item.qty || item.quantity || 1;
       const price = item.price || 0;
@@ -373,9 +352,6 @@ async function downloadInvoice(order: any, orderId: string) {
       margin: { left: 15, right: 15 },
     });
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // TOTALS + PAYMENT SUMMARY
-    // ══════════════════════════════════════════════════════════════════════════
     const finalY = (doc as any).lastAutoTable.finalY + 8;
 
     const totalsBoxX = pageWidth / 2 + 2;
@@ -477,9 +453,6 @@ async function downloadInvoice(order: any, orderId: string) {
 
     let postSummaryY = finalY - 4 + Math.max(totalsBoxH, psBoxH) + 10;
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // REFUND HIGHLIGHT BOX (online + cancelled only)
-    // ══════════════════════════════════════════════════════════════════════════
     if (paymentMethodRaw === "online" && type === "CANCELLED") {
       const isRefunded = order.refundStatus === "processed";
 
@@ -490,7 +463,6 @@ async function downloadInvoice(order: any, orderId: string) {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(10);
       doc.setTextColor(isRefunded ? 0 : 140, isRefunded ? 120 : 80, 0);
-      // ── FIX 2 (also here): replace \u2714 with plain text to avoid Helvetica encoding issue
       doc.text(
         isRefunded ? "Refund Processed" : "Refund Pending",
         18,
@@ -511,9 +483,6 @@ async function downloadInvoice(order: any, orderId: string) {
       postSummaryY += 22;
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // PAYMENT TIMELINE (online only)
-    // ══════════════════════════════════════════════════════════════════════════
     if (paymentMethodRaw === "online") {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(8.5);
@@ -542,7 +511,6 @@ async function downloadInvoice(order: any, orderId: string) {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(8);
       doc.setTextColor(27, 94, 32);
-      // ── FIX 2 (timeline): replace \u2714 with plain "v" checkmark safe for Helvetica
       doc.text("(v) Paid", 22, postSummaryY + 1);
 
       if (type === "CANCELLED") {
@@ -558,9 +526,6 @@ async function downloadInvoice(order: any, orderId: string) {
       postSummaryY += 12;
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // FOOTER
-    // ══════════════════════════════════════════════════════════════════════════
     doc.setFillColor(245, 245, 245);
     doc.rect(0, pageHeight - 22, pageWidth, 22, "F");
     doc.setDrawColor(215, 215, 215);
@@ -653,7 +618,6 @@ export default function OrderDetailPage() {
     });
   }
 
-  // ── UPDATED: now passes order.refundStatus as 4th arg ────────────────────
   const { label: paymentStatusLabel, color: paymentStatusColor } = order
     ? getPaymentStatusLabel(
         paymentMethod || "",
@@ -805,6 +769,14 @@ export default function OrderDetailPage() {
 
   const stepIndex = getStepIndex();
 
+  // ── Resolve phone number from all possible fields ──────────────────────────
+  const deliveryPhone =
+    order.shippingAddress?.phone ||
+    order.shippingAddress?.mobile ||
+    order.shippingAddress?.phoneNumber ||
+    order.customerPhone ||
+    null;
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
@@ -954,16 +926,22 @@ export default function OrderDetailPage() {
                   <MapPin className="h-4 w-4" /> Delivery Address
                 </h2>
                 <div className="text-sm text-foreground leading-relaxed">
-                  <p className="font-bold text-base">{order.shippingAddress.name || order.shippingAddress.fullName}</p>
-                  {order.shippingAddress.phone && (
-                    <p className="text-muted-foreground">+91 {order.shippingAddress.phone}</p>
-                  )}
+                  <p className="font-bold text-base">
+                    {order.shippingAddress.name || order.shippingAddress.fullName}
+                  </p>
                   <p className="text-muted-foreground mt-1">
                     {order.shippingAddress.fullAddress || order.shippingAddress.address}
                   </p>
                   <p className="text-muted-foreground">
                     {order.shippingAddress.city}, {order.shippingAddress.state} — {order.shippingAddress.pincode}
                   </p>
+                  {/* ── PHONE NUMBER (checks all possible field names) ── */}
+                  {deliveryPhone && (
+                    <p className="text-muted-foreground mt-2 flex items-center gap-1.5">
+                      <Phone className="h-3.5 w-3.5 text-primary" />
+                      <span>{deliveryPhone}</span>
+                    </p>
+                  )}
                 </div>
               </div>
             )}

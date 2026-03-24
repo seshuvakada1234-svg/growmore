@@ -724,12 +724,6 @@ export default function AdminOrders() {
                   </h3>
                   <div className="bg-muted/30 p-5 rounded-2xl space-y-2">
                     <p className="text-sm font-semibold text-primary leading-relaxed">
-                      {selectedOrder.shippingAddress?.name || selectedOrder.shippingAddress?.fullName}
-                    </p>
-                    {selectedOrder.shippingAddress?.phone && (
-                      <p className="text-sm text-muted-foreground font-medium">+91 {selectedOrder.shippingAddress.phone}</p>
-                    )}
-                    <p className="text-sm text-muted-foreground">
                       {selectedOrder.shippingAddress?.fullAddress || selectedOrder.shippingAddress?.address}
                     </p>
                     <p className="text-sm text-muted-foreground">

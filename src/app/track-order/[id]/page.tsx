@@ -271,12 +271,12 @@ export default function TrackOrderPage() {
                   <h4 className="font-bold text-sm uppercase tracking-wider">Delivery Address</h4>
                 </div>
                 <div className="space-y-1">
-                  <p className="font-bold text-primary">{order.shippingAddress?.name || order.shippingAddress?.fullName || order.customerName}</p>
-                  {order.shippingAddress?.phone && (
-                    <p className="text-sm text-muted-foreground">+91 {order.shippingAddress.phone}</p>
-                  )}
+                  <p className="font-bold text-primary">{order.customerName}</p>
                   <p className="text-sm text-muted-foreground leading-relaxed">
                     {order.shippingAddress?.address || order.shippingAddress?.fullAddress}, {order.shippingAddress?.city}, {order.shippingAddress?.state} - {order.shippingAddress?.pincode}
+                  </p>
+                  <p className="text-xs font-medium text-primary mt-3 flex items-center gap-2">
+                    <User className="h-3 w-3" /> {order.customerPhone || "Contact details saved"}
                   </p>
                 </div>
               </Card>

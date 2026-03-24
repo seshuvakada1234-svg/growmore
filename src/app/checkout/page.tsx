@@ -20,7 +20,10 @@ import Script from "next/script";
 import { toast } from "@/hooks/use-toast";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useUser, useFirestore } from "@/firebase";
-import { doc, setDoc, serverTimestamp, getDoc } from "firebase/firestore";
+import {
+  doc, setDoc, serverTimestamp, getDoc,
+  getDocs, writeBatch, collection,
+} from "firebase/firestore";
 import { useState, useEffect, useRef } from "react";
 import { PRODUCTS } from "@/lib/mock-data";
 import { errorEmitter } from "@/firebase/error-emitter";
@@ -135,7 +138,7 @@ function CheckoutContent() {
   const discount = subtotal > 3000 ? 200 : 0;
   const total    = subtotal + shipping - discount;
 
-  // ── Order notifications ──────────────────────────────────────
+  // ── Order notifications ───────────────────────────────────────────────────
   const sendOrderNotifications = async (orderId: string, addr: SavedAddress) => {
     try {
       const res = await fetch('/api/send-order-email', {
@@ -164,7 +167,33 @@ function CheckoutContent() {
     } catch (err) { console.error('Notification error:', err); return null; }
   };
 
-  // ── Save order to Firestore ────────────────────────────
+  // ── Clear cart everywhere (localStorage + Firestore) ─────────────────────
+  const clearCartEverywhere = async () => {
+    if (isBuyNow) {
+      sessionStorage.removeItem("buynow_cart");
+      return;
+    }
+
+    // 1. Clear localStorage immediately
+    localStorage.removeItem("plantshop_cart");
+    window.dispatchEvent(new Event("cart-updated"));
+
+    // 2. Clear Firestore cart for logged-in users
+    if (user && db) {
+      try {
+        const cartSnap = await getDocs(collection(db, "users", user.uid, "cart"));
+        if (!cartSnap.empty) {
+          const batch = writeBatch(db);
+          cartSnap.docs.forEach((d) => batch.delete(d.ref));
+          await batch.commit();
+        }
+      } catch (err) {
+        console.error("Failed to clear Firestore cart:", err);
+      }
+    }
+  };
+
+  // ── Save order to Firestore ───────────────────────────────────────────────
   const saveOrderToFirestore = async (
     orderId: string,
     addr: SavedAddress,
@@ -192,6 +221,8 @@ function CheckoutContent() {
         state:       addr.state,
         pincode:     addr.pincode,
         label:       addr.label,
+        phone:       addr.phone,
+        phone2:      addr.phone2 || null,
       },
       paymentMethod:     razorpayPaymentId ? "online"  : "cod",
       paymentStatus:     razorpayPaymentId ? "paid"    : "pending",
@@ -237,12 +268,8 @@ function CheckoutContent() {
 
       const notifications = await sendOrderNotifications(orderId, addr);
 
-      if (isBuyNow) {
-        sessionStorage.removeItem("buynow_cart");
-      } else {
-        localStorage.removeItem("plantshop_cart");
-        window.dispatchEvent(new Event("cart-updated"));
-      }
+      // ── FIXED: Clear both localStorage AND Firestore cart ────────────────
+      await clearCartEverywhere();
 
       const waParam = notifications?.customerWaLink
         ? `&wa=${encodeURIComponent(notifications.customerWaLink)}` : '';
@@ -255,13 +282,12 @@ function CheckoutContent() {
     }
   };
 
-  // ── Handle place order ───────────────────────────────────
+  // ── Handle place order ────────────────────────────────────────────────────
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
     if (!user) { router.push("/login?redirect=/checkout"); return; }
 
-    // 1. Basic Address Presence Check
     if (!selectedAddress) {
       setAddressError(true);
       toast({
@@ -273,7 +299,6 @@ function CheckoutContent() {
       return;
     }
 
-    // 2. Strict Indian Mobile Validation Check
     if (!isValidIndianMobile(selectedAddress.phone)) {
       toast({
         title: "Invalid Phone Number",
@@ -394,8 +419,8 @@ function CheckoutContent() {
     </button>
   );
 
-  const backHref     = isBuyNow ? "/plants" : "/cart";
-  const backLabel    = isBuyNow ? "Back to Product" : "Back to Cart";
+  const backHref      = isBuyNow ? "/plants" : "/cart";
+  const backLabel     = isBuyNow ? "Back to Product" : "Back to Cart";
   const canPlaceOrder = !!selectedAddress && isValidIndianMobile(selectedAddress.phone);
 
   return (
