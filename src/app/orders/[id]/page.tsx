@@ -118,12 +118,15 @@ async function downloadInvoice(order: any, orderId: string) {
     const biz   = await fetchBusinessInfo();
     const today = new Date().toISOString().split("T")[0];
 
+    // ── FIX 1: Pending/Shipped fall through to PROFORMA, only Delivered → FINAL
     const type =
       order.status === "Cancelled"
         ? "CANCELLED"
         : order.status === "Approved"
         ? "PROFORMA"
-        : "FINAL";
+        : order.status === "Delivered"
+        ? "FINAL"
+        : "PROFORMA"; // Pending, Shipped, or any other non-terminal status → PROFORMA
 
     let invoiceTitle = "INVOICE";
     if (type === "PROFORMA")  invoiceTitle = "PROFORMA INVOICE";
@@ -242,13 +245,15 @@ async function downloadInvoice(order: any, orderId: string) {
       y = 56;
 
     } else {
+      // type === "FINAL" — only reached when order.status === "Delivered"
       doc.setFillColor(235, 248, 235);
       doc.rect(0, 38, pageWidth, 14, "F");
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(10);
       doc.setTextColor(27, 94, 32);
-      doc.text("\u2714 Order successfully delivered.", pageWidth / 2, 46, { align: "center" });
+      // ── FIX 2: Replace \u2714 (renders as apostrophe in Helvetica) with plain ASCII checkmark
+      doc.text("Order successfully delivered.", pageWidth / 2, 46, { align: "center" });
 
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
@@ -485,8 +490,9 @@ async function downloadInvoice(order: any, orderId: string) {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(10);
       doc.setTextColor(isRefunded ? 0 : 140, isRefunded ? 120 : 80, 0);
+      // ── FIX 2 (also here): replace \u2714 with plain text to avoid Helvetica encoding issue
       doc.text(
-        isRefunded ? "\u2714 Refund Processed" : "\u23F3 Refund Pending",
+        isRefunded ? "Refund Processed" : "Refund Pending",
         18,
         postSummaryY + 6,
       );
@@ -536,13 +542,14 @@ async function downloadInvoice(order: any, orderId: string) {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(8);
       doc.setTextColor(27, 94, 32);
-      doc.text("\u2714 Paid", 22, postSummaryY + 1);
+      // ── FIX 2 (timeline): replace \u2714 with plain "v" checkmark safe for Helvetica
+      doc.text("(v) Paid", 22, postSummaryY + 1);
 
       if (type === "CANCELLED") {
         const refunded = order.refundStatus === "processed";
         doc.setTextColor(refunded ? 27 : 180, refunded ? 94 : 80, refunded ? 32 : 0);
         doc.text(
-          refunded ? "\u2714 Refunded" : "\u23F3 Refund Pending",
+          refunded ? "(v) Refunded" : "(...) Refund Pending",
           dot2X + 4,
           postSummaryY + 1,
         );
