@@ -150,7 +150,7 @@ async function downloadInvoice(order: any, orderId: string) {
     const shipping    = shipRaw === 0 && storedTotal > subtotal
       ? storedTotal - subtotal + discount
       : shipRaw;
-    const total = storedTotal || (subtotal + shipping - discount);
+    const total = storedTotal || (subtotal + derivedShipping - discount);
 
     const paymentMethodRaw   = order.paymentMethod?.toLowerCase();
     const paymentMethodLabel = paymentMethodRaw === "cod"
@@ -955,15 +955,15 @@ export default function OrderDetailPage() {
                 </h2>
                 <div className="text-sm text-foreground leading-relaxed">
                   <p className="font-bold text-base">{order.shippingAddress.name || order.shippingAddress.fullName}</p>
+                  {order.shippingAddress.phone && (
+                    <p className="text-muted-foreground">+91 {order.shippingAddress.phone}</p>
+                  )}
                   <p className="text-muted-foreground mt-1">
                     {order.shippingAddress.fullAddress || order.shippingAddress.address}
                   </p>
                   <p className="text-muted-foreground">
                     {order.shippingAddress.city}, {order.shippingAddress.state} — {order.shippingAddress.pincode}
                   </p>
-                  {order.shippingAddress.phone && (
-                    <p className="text-muted-foreground mt-1">📞 {order.shippingAddress.phone}</p>
-                  )}
                 </div>
               </div>
             )}
