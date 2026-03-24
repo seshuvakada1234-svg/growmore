@@ -28,6 +28,7 @@ import { FirestorePermissionError } from "@/firebase/errors";
 import { saveCommissionRecord } from "@/lib/affiliateEngine";
 import { AddressList } from "@/components/checkout/AddressList";
 import type { SavedAddress } from "@/components/checkout/AddressCard";
+import { isValidIndianMobile } from "@/components/checkout/AddressForm";
 
 declare global {
   interface Window { Razorpay: any; }
@@ -134,7 +135,7 @@ function CheckoutContent() {
   const discount = subtotal > 3000 ? 200 : 0;
   const total    = subtotal + shipping - discount;
 
-  // ── Order notifications (unchanged) ──────────────────────────────────────
+  // ── Order notifications ──────────────────────────────────────
   const sendOrderNotifications = async (orderId: string, addr: SavedAddress) => {
     try {
       const res = await fetch('/api/send-order-email', {
@@ -163,7 +164,7 @@ function CheckoutContent() {
     } catch (err) { console.error('Notification error:', err); return null; }
   };
 
-  // ── Save order to Firestore (unchanged schema) ────────────────────────────
+  // ── Save order to Firestore ────────────────────────────
   const saveOrderToFirestore = async (
     orderId: string,
     addr: SavedAddress,
@@ -190,7 +191,7 @@ function CheckoutContent() {
         district:    addr.district,
         state:       addr.state,
         pincode:     addr.pincode,
-        addressType: addr.addressType,
+        label:       addr.label,
       },
       paymentMethod:     razorpayPaymentId ? "online"  : "cod",
       paymentStatus:     razorpayPaymentId ? "paid"    : "pending",
@@ -254,13 +255,13 @@ function CheckoutContent() {
     }
   };
 
-  // ── Handle place order (unchanged flow) ───────────────────────────────────
+  // ── Handle place order ───────────────────────────────────
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
     if (!user) { router.push("/login?redirect=/checkout"); return; }
 
-    // Address guard
+    // 1. Basic Address Presence Check
     if (!selectedAddress) {
       setAddressError(true);
       toast({
@@ -269,6 +270,25 @@ function CheckoutContent() {
         variant: "destructive",
       });
       addressSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+
+    // 2. Strict Indian Mobile Validation Check
+    if (!isValidIndianMobile(selectedAddress.phone)) {
+      toast({
+        title: "Invalid Phone Number",
+        description: "Please edit your address and enter a valid Indian mobile number",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (selectedAddress.phone2 && !isValidIndianMobile(selectedAddress.phone2)) {
+      toast({
+        title: "Invalid Alternate Number",
+        description: "Please edit your address and enter a valid alternate mobile number",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -349,7 +369,6 @@ function CheckoutContent() {
     }
   };
 
-  // ── PayOption (unchanged) ─────────────────────────────────────────────────
   const PayOption = ({ id, icon, label, desc, badge, badgeCls }: {
     id: PaymentMethod; icon: React.ReactNode; label: string;
     desc: string; badge?: string; badgeCls?: string;
@@ -377,7 +396,7 @@ function CheckoutContent() {
 
   const backHref     = isBuyNow ? "/plants" : "/cart";
   const backLabel    = isBuyNow ? "Back to Product" : "Back to Cart";
-  const canPlaceOrder = !!selectedAddress;
+  const canPlaceOrder = !!selectedAddress && isValidIndianMobile(selectedAddress.phone);
 
   return (
     <form onSubmit={handlePlaceOrder} className="flex-grow flex flex-col">
@@ -403,10 +422,8 @@ function CheckoutContent() {
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
-            {/* ── LEFT COLUMN ──────────────────────────────────────────────── */}
             <div className="lg:col-span-7 space-y-5">
 
-              {/* ── DELIVERY ADDRESS CARD ─────────────────────────────────── */}
               <Card className="rounded-2xl shadow-sm bg-white border border-[#E8E8E8] overflow-hidden">
                 <div className="px-6 py-5 border-b border-[#F5F5F5]">
                   <h2 className="text-xl font-bold font-headline text-[#1A2E1A] flex items-center gap-2">
@@ -441,7 +458,6 @@ function CheckoutContent() {
                 </div>
               </Card>
 
-              {/* ── PAYMENT METHOD (unchanged) ─────────────────────────────── */}
               <Card className="rounded-2xl shadow-sm bg-white border border-[#E8E8E8] overflow-hidden">
                 <div className="px-6 py-5 border-b border-[#F5F5F5]">
                   <h2 className="text-xl font-bold font-headline text-[#1A2E1A] flex items-center gap-2">
@@ -460,7 +476,6 @@ function CheckoutContent() {
 
             </div>
 
-            {/* ── RIGHT COLUMN — Summary (unchanged) ───────────────────────── */}
             <div className="lg:col-span-5">
               <div className="sticky top-20">
                 <Card className="rounded-2xl shadow-sm bg-white border border-[#E8E8E8] overflow-hidden">
@@ -553,7 +568,7 @@ function CheckoutContent() {
 
                     {!canPlaceOrder && !isSubmitting && (
                       <p className="text-center text-[10px] text-amber-600 font-semibold">
-                        ⚠️ Select a delivery address above to continue
+                        ⚠️ {!selectedAddress ? "Select a delivery address to continue" : "Address has invalid phone number"}
                       </p>
                     )}
 
@@ -569,7 +584,6 @@ function CheckoutContent() {
         </div>
       </main>
 
-      {/* ── Mobile sticky bottom (unchanged) ─────────────────────────────── */}
       <div
         className="sm:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-[#E8E8E8] px-4 py-3 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]"
         style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}

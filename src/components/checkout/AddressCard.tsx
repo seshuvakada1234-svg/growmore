@@ -1,7 +1,8 @@
 "use client";
 
-import { Home, Briefcase, MoreHorizontal, Star, Edit2, Trash2, CheckCircle2 } from "lucide-react";
+import { Home, Briefcase, MoreHorizontal, Star, Edit2, Trash2, CheckCircle2, AlertCircle } from "lucide-react";
 import type { AddressFormData } from "./AddressForm";
+import { isValidIndianMobile } from "./AddressForm";
 
 export interface SavedAddress extends AddressFormData {
   id: string;
@@ -30,18 +31,23 @@ export function AddressCard({
   isDeleting = false, isSettingDefault = false,
 }: AddressCardProps) {
   const labelStyle = LABEL_STYLES[address.label] || LABEL_STYLES.Other;
+  
+  const isPhoneValid = isValidIndianMobile(address.phone);
+  const isPhone2Valid = !address.phone2 || isValidIndianMobile(address.phone2);
+  const isInvalid = !isPhoneValid || !isPhone2Valid;
 
   return (
     <div
-      onClick={onSelect}
-      className={`relative cursor-pointer rounded-2xl border-2 p-4 transition-all duration-200 group
-        ${isSelected
+      onClick={() => !isInvalid && onSelect()}
+      className={`relative rounded-2xl border-2 p-4 transition-all duration-200 group
+        ${isInvalid ? "border-red-100 bg-red-50/30 cursor-not-allowed opacity-80" : "cursor-pointer"}
+        ${isSelected && !isInvalid
           ? "border-[#388E3C] bg-[#F1F8E9] shadow-md shadow-emerald-100"
-          : "border-[#E8E8E8] bg-white hover:border-[#C8E6C9] hover:shadow-sm"
+          : !isInvalid ? "border-[#E8E8E8] bg-white hover:border-[#C8E6C9] hover:shadow-sm" : ""
         }`}
     >
       {/* Selected indicator */}
-      {isSelected && (
+      {isSelected && !isInvalid && (
         <CheckCircle2 className="absolute top-3 right-3 h-5 w-5 text-[#388E3C]" />
       )}
 
@@ -55,14 +61,28 @@ export function AddressCard({
             <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500" /> Default
           </span>
         )}
+        {isInvalid && (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-600 text-white">
+            <AlertCircle className="h-2.5 w-2.5" /> Invalid details
+          </span>
+        )}
       </div>
 
       {/* Name + Phone */}
       <p className="font-bold text-sm text-[#1A2E1A]">{address.fullName}</p>
-      <p className="text-xs text-muted-foreground mt-0.5">+91 {address.phone}</p>
+      <div className="flex flex-col gap-0.5 mt-1">
+        <p className={`text-xs font-semibold ${!isPhoneValid ? "text-red-600" : "text-muted-foreground"}`}>
+          +91 {address.phone} {!isPhoneValid && " (Invalid number)"}
+        </p>
+        {address.phone2 && (
+          <p className={`text-[11px] font-medium ${!isPhone2Valid ? "text-red-600" : "text-muted-foreground/70"}`}>
+            Alt: +91 {address.phone2} {!isPhone2Valid && " (Invalid)"}
+          </p>
+        )}
+      </div>
 
       {/* Address */}
-      <p className="text-xs text-[#444] mt-1.5 leading-relaxed line-clamp-2">
+      <p className="text-xs text-[#444] mt-2 leading-relaxed line-clamp-2">
         {address.address}, {address.city}, {address.state} – {address.pincode}
       </p>
 
@@ -76,7 +96,7 @@ export function AddressCard({
           danger
           disabled={isDeleting}
         />
-        {!address.isDefault && (
+        {!address.isDefault && !isInvalid && (
           <ActionBtn
             icon={<Star className="h-3.5 w-3.5" />}
             label={isSettingDefault ? "Setting…" : "Set Default"}
