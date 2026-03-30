@@ -7,9 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import {
   ShoppingBag, ChevronLeft, Loader2, Truck,
   ShieldCheck, CreditCard, Banknote, Smartphone,
   MapPin, PackageCheck, Lock,
@@ -22,7 +19,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useUser, useFirestore } from "@/firebase";
 import {
   doc, setDoc, serverTimestamp, getDoc,
-  getDocs, writeBatch, collection,
+  getDocs, writeBatch, collection, onSnapshot,
 } from "firebase/firestore";
 import { useState, useEffect, useRef } from "react";
 import { PRODUCTS } from "@/lib/mock-data";
@@ -77,24 +74,45 @@ async function fetchProduct(db: any, id: string): Promise<any | null> {
   return null;
 }
 
+// ── Real-time COD status hook ─────────────────────────────────────────────────
+function useCodEnabled(db: any): boolean {
+  const [codEnabled, setCodEnabled] = useState<boolean>(true);
+  useEffect(() => {
+    if (!db) return;
+    const ref = doc(db, "settings", "paymentMethods");
+    const unsub = onSnapshot(ref, (snap) => {
+      setCodEnabled(snap.exists() ? (snap.data().codEnabled ?? true) : true);
+    });
+    return () => unsub();
+  }, [db]);
+  return codEnabled;
+}
+
 function CheckoutContent() {
-  const router = useRouter();
+  const router       = useRouter();
   const searchParams = useSearchParams();
-  const { user } = useUser();
-  const db = useFirestore();
+  const { user }     = useUser();
+  const db           = useFirestore();
+
+  const codEnabled = useCodEnabled(db);
 
   const isBuyNow = useRef(searchParams.get("mode") === "buynow").current;
 
-  // ── Address ───────────────────────────────────────────────────────────────
   const addressSectionRef = useRef<HTMLDivElement>(null);
-  const [addressError, setAddressError] = useState(false);
+  const [addressError,    setAddressError]    = useState(false);
   const [selectedAddress, setSelectedAddress] = useState<SavedAddress | null>(null);
 
-  // ── Cart + Payment ────────────────────────────────────────────────────────
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [cartItems, setCartItems] = useState<any[]>([]);
-  const [cartLoading, setCartLoading] = useState(true);
+  const [isSubmitting,  setIsSubmitting]  = useState(false);
+  const [cartItems,     setCartItems]     = useState<any[]>([]);
+  const [cartLoading,   setCartLoading]   = useState(true);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cod");
+
+  // If COD gets disabled while user has it selected, switch to upi
+  useEffect(() => {
+    if (!codEnabled && paymentMethod === "cod") {
+      setPaymentMethod("upi");
+    }
+  }, [codEnabled, paymentMethod]);
 
   // ── Load cart ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -167,18 +185,11 @@ function CheckoutContent() {
     } catch (err) { console.error('Notification error:', err); return null; }
   };
 
-  // ── Clear cart everywhere (localStorage + Firestore) ─────────────────────
+  // ── Clear cart ────────────────────────────────────────────────────────────
   const clearCartEverywhere = async () => {
-    if (isBuyNow) {
-      sessionStorage.removeItem("buynow_cart");
-      return;
-    }
-
-    // 1. Clear localStorage immediately
+    if (isBuyNow) { sessionStorage.removeItem("buynow_cart"); return; }
     localStorage.removeItem("plantshop_cart");
     window.dispatchEvent(new Event("cart-updated"));
-
-    // 2. Clear Firestore cart for logged-in users
     if (user && db) {
       try {
         const cartSnap = await getDocs(collection(db, "users", user.uid, "cart"));
@@ -187,13 +198,11 @@ function CheckoutContent() {
           cartSnap.docs.forEach((d) => batch.delete(d.ref));
           await batch.commit();
         }
-      } catch (err) {
-        console.error("Failed to clear Firestore cart:", err);
-      }
+      } catch (err) { console.error("Failed to clear Firestore cart:", err); }
     }
   };
 
-  // ── Save order to Firestore ───────────────────────────────────────────────
+  // ── Save order ────────────────────────────────────────────────────────────
   const saveOrderToFirestore = async (
     orderId: string,
     addr: SavedAddress,
@@ -224,8 +233,8 @@ function CheckoutContent() {
         phone:       addr.phone,
         phone2:      addr.phone2 || null,
       },
-      paymentMethod:     razorpayPaymentId ? "online"  : "cod",
-      paymentStatus:     razorpayPaymentId ? "paid"    : "pending",
+      paymentMethod:     razorpayPaymentId ? "online" : "cod",
+      paymentStatus:     razorpayPaymentId ? "paid"   : "pending",
       razorpayPaymentId: razorpayPaymentId || null,
       razorpayOrderId:   razorpayOrderId   || null,
       totalAmount:  total,
@@ -251,9 +260,7 @@ function CheckoutContent() {
         try {
           for (const item of cartItems) {
             const productSnap = await getDoc(doc(db, "products", item.id));
-            const rate = productSnap.exists()
-              ? (productSnap.data().affiliateCommission ?? 5)
-              : 5;
+            const rate = productSnap.exists() ? (productSnap.data().affiliateCommission ?? 5) : 5;
             await saveCommissionRecord({
               productId:      item.id,
               orderId,
@@ -267,14 +274,11 @@ function CheckoutContent() {
       }
 
       const notifications = await sendOrderNotifications(orderId, addr);
-
-      // ── FIXED: Clear both localStorage AND Firestore cart ────────────────
       await clearCartEverywhere();
 
       const waParam = notifications?.customerWaLink
         ? `&wa=${encodeURIComponent(notifications.customerWaLink)}` : '';
       router.push(`/order-success?id=${orderId}${waParam}`);
-
     } catch (err) {
       errorEmitter.emit("permission-error", new FirestorePermissionError({
         path: orderRef.path, operation: "create", requestResourceData: orderData,
@@ -282,7 +286,7 @@ function CheckoutContent() {
     }
   };
 
-  // ── Handle place order ────────────────────────────────────────────────────
+  // ── Place order ───────────────────────────────────────────────────────────
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
@@ -300,20 +304,12 @@ function CheckoutContent() {
     }
 
     if (!isValidIndianMobile(selectedAddress.phone)) {
-      toast({
-        title: "Invalid Phone Number",
-        description: "Please edit your address and enter a valid Indian mobile number",
-        variant: "destructive",
-      });
+      toast({ title: "Invalid Phone Number", description: "Please edit your address and enter a valid Indian mobile number", variant: "destructive" });
       return;
     }
 
     if (selectedAddress.phone2 && !isValidIndianMobile(selectedAddress.phone2)) {
-      toast({
-        title: "Invalid Alternate Number",
-        description: "Please edit your address and enter a valid alternate mobile number",
-        variant: "destructive",
-      });
+      toast({ title: "Invalid Alternate Number", description: "Please edit your address and enter a valid alternate mobile number", variant: "destructive" });
       return;
     }
 
@@ -331,10 +327,15 @@ function CheckoutContent() {
 
       } else {
         const firestoreOrderId = generateOrderId("upi");
+
         const res = await fetch('/api/create-order', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ amount: total, currency: 'INR' }),
+          body: JSON.stringify({
+            amount: total,
+            currency: "INR",
+            paymentMethod
+          }),
         });
         const razorpayOrder = await res.json();
 
@@ -446,34 +447,27 @@ function CheckoutContent() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
             <div className="lg:col-span-7 space-y-5">
 
+              {/* Address */}
               <Card className="rounded-2xl shadow-sm bg-white border border-[#E8E8E8] overflow-hidden">
                 <div className="px-6 py-5 border-b border-[#F5F5F5]">
                   <h2 className="text-xl font-bold font-headline text-[#1A2E1A] flex items-center gap-2">
                     <MapPin className="h-5 w-5 text-primary" /> Delivery Address
                   </h2>
                 </div>
-
                 <div
                   ref={addressSectionRef}
-                  className={`p-5 transition-all duration-300 ${
-                    addressError ? "ring-2 ring-red-400 ring-offset-2 rounded-b-2xl" : ""
-                  }`}
+                  className={`p-5 transition-all duration-300 ${addressError ? "ring-2 ring-red-400 ring-offset-2 rounded-b-2xl" : ""}`}
                 >
                   {user && (
                     <AddressList
                       db={db}
                       userId={user.uid}
                       selectedAddressId={selectedAddress?.id ?? null}
-                      onSelect={(addr) => {
-                        setSelectedAddress(addr);
-                        setAddressError(false);
-                      }}
+                      onSelect={(addr) => { setSelectedAddress(addr); setAddressError(false); }}
                     />
                   )}
-
                   {addressError && (
                     <p className="mt-2 text-xs text-red-500 font-semibold flex items-center gap-1.5 px-1">
                       <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
@@ -483,6 +477,7 @@ function CheckoutContent() {
                 </div>
               </Card>
 
+              {/* Payment */}
               <Card className="rounded-2xl shadow-sm bg-white border border-[#E8E8E8] overflow-hidden">
                 <div className="px-6 py-5 border-b border-[#F5F5F5]">
                   <h2 className="text-xl font-bold font-headline text-[#1A2E1A] flex items-center gap-2">
@@ -490,7 +485,17 @@ function CheckoutContent() {
                   </h2>
                 </div>
                 <div className="p-6 space-y-3">
-                  <PayOption id="cod"  icon={<Banknote className="h-5 w-5" />}   label="Cash on Delivery"    desc="Pay when your order arrives"  badge="Popular" badgeCls="bg-emerald-100 text-emerald-700" />
+                  {/* COD — only shown when enabled in admin */}
+                  {codEnabled && (
+                    <PayOption
+                      id="cod"
+                      icon={<Banknote className="h-5 w-5" />}
+                      label="Cash on Delivery"
+                      desc="Pay when your order arrives"
+                      badge="Popular"
+                      badgeCls="bg-emerald-100 text-emerald-700"
+                    />
+                  )}
                   <PayOption id="upi"  icon={<Smartphone className="h-5 w-5" />} label="UPI"                 desc="GPay, PhonePe, Paytm & more"   badge="Secure"  badgeCls="bg-blue-100 text-blue-700" />
                   <PayOption id="card" icon={<CreditCard className="h-5 w-5" />} label="Credit / Debit Card" desc="Visa, Mastercard, RuPay" />
                   <p className="text-center text-[10px] text-muted-foreground flex items-center justify-center gap-1 pt-1">
@@ -501,6 +506,7 @@ function CheckoutContent() {
 
             </div>
 
+            {/* Order Summary */}
             <div className="lg:col-span-5">
               <div className="sticky top-20">
                 <Card className="rounded-2xl shadow-sm bg-white border border-[#E8E8E8] overflow-hidden">
@@ -604,7 +610,6 @@ function CheckoutContent() {
                 </Card>
               </div>
             </div>
-
           </div>
         </div>
       </main>
@@ -643,5 +648,5 @@ export default function CheckoutPage() {
       </Suspense>
       <Footer />
     </div>
-  );
+  );  
 }
