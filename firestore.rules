@@ -61,6 +61,10 @@ service cloud.firestore {
       match /wishlist/{productId} {
         allow read, write: if isOwner(userId) || isAdmin();
       }
+      
+      match /cart/{productId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
     }
 
     // --- Affiliate Applications ---

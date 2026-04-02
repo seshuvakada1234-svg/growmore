@@ -37,6 +37,31 @@ export async function POST(req: NextRequest) {
 
     await orderRef.update(updateData);
 
+    // ── Affiliate commission sync ──────────────────────────────────────────
+    // When order is marked "Delivered", approve any matching commission.
+    // onSnapshot listeners on affiliate dashboard + admin affiliate page
+    // will pick up the change in real-time automatically.
+    if (status === 'Delivered') {
+      const commissionsSnap = await adminDb
+        .collection('affiliate_commissions')
+        .where('orderId', '==', order_id)
+        .get();
+
+      if (!commissionsSnap.empty) {
+        const batch = adminDb.batch();
+
+        commissionsSnap.docs.forEach((doc) => {
+          batch.update(doc.ref, {
+            status: 'approved',
+            approvedAt: FieldValue.serverTimestamp(),
+          });
+        });
+
+        await batch.commit();
+      }
+    }
+    // ── End affiliate commission sync ──────────────────────────────────────
+
     return NextResponse.json({ success: true, order_id, status });
   } catch (error) {
     console.error('Update order error:', error);

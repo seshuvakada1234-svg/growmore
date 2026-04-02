@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { useFirestore, useCollection, useMemoFirebase, useUser, useDoc } from "@/firebase";
 import {
   collection, doc, updateDoc, serverTimestamp, query, orderBy, getDoc, getFirestore,
+  where, getDocs,
 } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { StatusChip } from "@/components/shared/StatusChip";
@@ -168,7 +169,7 @@ async function buildInvoiceDoc(
       "This is a provisional invoice. Final invoice will be generated after delivery.",
       pageWidth / 2, 45, { align: "center" },
     );
-    y = 56; // ✅ FIX: push ORDER META ROW below the banner
+    y = 56;
   }
 
   // ORDER META ROW
@@ -453,9 +454,37 @@ export default function AdminOrders() {
   const handleStatusUpdate = (orderId: string, newStatus: OrderStatus) => {
     const orderRef = doc(db, "orders", orderId);
     updateDoc(orderRef, { status: newStatus, updatedAt: serverTimestamp() })
-      .then(() => {
+      .then(async () => {
         toast({ title: "Status Updated", description: `Order #${orderId.substring(0, 6)} is now ${newStatus}.` });
         if (selectedOrder?.id === orderId) setSelectedOrder((prev: any) => ({ ...prev, status: newStatus }));
+
+        // ── Affiliate commission sync ────────────────────────────────────────
+        // When admin manually marks order as Delivered, approve the commission.
+        // onSnapshot listeners on affiliate dashboard + admin affiliate page
+        // will update automatically in real-time.
+        if (newStatus === "Delivered") {
+          try {
+            const commissionsQuery = query(
+              collection(db, "affiliate_commissions"),
+              where("orderId", "==", orderId),
+            );
+            const snapshot = await getDocs(commissionsQuery);
+
+            if (!snapshot.empty) {
+              const updates = snapshot.docs.map((commissionDoc) =>
+                updateDoc(commissionDoc.ref, {
+                  status: "approved",
+                  approvedAt: serverTimestamp(),
+                }),
+              );
+              await Promise.all(updates);
+            }
+          } catch (e) {
+            // Commission sync failure should not block the order update
+            console.error("[commission sync] Failed:", e);
+          }
+        }
+        // ── End affiliate commission sync ────────────────────────────────────
       })
       .catch(() => {
         errorEmitter.emit("permission-error", new FirestorePermissionError({

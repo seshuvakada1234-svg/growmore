@@ -1,4 +1,3 @@
-
 // Global mock data store for PlantShop
 
 export type UserRole = 'guest' | 'user' | 'affiliate' | 'admin';
@@ -14,7 +13,7 @@ export interface User {
   isAffiliate: boolean;
   affiliateCode?: string;
   affiliateEarnings?: number;
-  totalClicks?: number; // Added for tracking
+  totalClicks?: number;
 }
 
 export interface Plant {
@@ -44,8 +43,12 @@ export interface Plant {
   height: string;
 }
 
+// ── FIXED: was { plantId: string } — renamed to { id: string } to match
+//           the centralized cart system format stored in localStorage.
+//           Old format caused getPlantById(item.plantId) to receive undefined,
+//           silently returning undefined and rendering an empty cart.
 export interface CartItem {
-  plantId: string;
+  id: string;        // ← FIXED: was plantId
   quantity: number;
   addedAt: string;
 }
@@ -53,7 +56,9 @@ export interface CartItem {
 export interface Order {
   id: string;
   userId: string;
-  items: { plantId: string; quantity: number; price: number }[];
+  // ── FIXED: was { plantId: string } — renamed to { id: string } to stay
+  //           consistent with CartItem and avoid lookup failures at checkout.
+  items: { id: string; quantity: number; price: number }[];  // ← FIXED: was plantId
   total: number;
   status: 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled';
   address: string;
@@ -76,7 +81,7 @@ export interface AffiliateProfile {
   joinedAt: string;
   status: 'pending' | 'approved' | 'blocked';
   referrals: number;
-  totalClicks: number; // Added for tracking
+  totalClicks: number;
 }
 
 // ── Mock Plants Data ──
@@ -605,4 +610,78 @@ export function getRelatedPlants(plant: Plant, count = 4): Plant[] {
       p.id !== plant.id &&
       (p.category === plant.category || p.tags.some((t) => plant.tags.includes(t)))
   ).slice(0, count);
+}
+
+// ── Cart Utilities (NEW) ──
+
+/**
+ * Normalizes a raw cart item read from localStorage.
+ *
+ * WHY: The new centralized cart stores items as { id, quantity }.
+ * Older localStorage data (or any legacy code path) may still have
+ * { plantId, quantity }. Without this normalization, getPlantById(item.id)
+ * receives undefined and returns undefined, making the cart appear empty.
+ *
+ * Safe to call on already-normalized items — id ?? plantId is a no-op
+ * when id is already present.
+ */
+export function normalizeCartItem(raw: Record<string, unknown>): CartItem {
+  const id = (raw.id ?? raw.plantId) as string;
+  if (!id) {
+    console.warn('[Cart] normalizeCartItem: item has neither id nor plantId', raw);
+  }
+  return {
+    id,
+    quantity: (raw.quantity as number) ?? 1,
+    addedAt: (raw.addedAt as string) ?? new Date().toISOString(),
+  };
+}
+
+/**
+ * Loads and normalizes the cart from localStorage.
+ *
+ * Usage (in your cart store / hook / context):
+ *   const cart = loadCartFromStorage();
+ */
+export function loadCartFromStorage(): CartItem[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = JSON.parse(localStorage.getItem('cart') ?? '[]') as Record<string, unknown>[];
+    const normalized = raw.map(normalizeCartItem);
+    console.debug('[Cart] Loaded from localStorage:', normalized);
+    return normalized;
+  } catch (err) {
+    console.error('[Cart] Failed to parse cart from localStorage:', err);
+    return [];
+  }
+}
+
+/**
+ * Saves the cart to localStorage in the canonical { id, quantity } format.
+ */
+export function saveCartToStorage(cart: CartItem[]): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem('cart', JSON.stringify(cart));
+}
+
+/**
+ * Looks up a plant from a cart item, handling both new { id } and
+ * legacy { plantId } formats. Logs a warning if the product is not found
+ * so silent failures are visible during development.
+ */
+export function getPlantFromCartItem(
+  item: Partial<CartItem> & { plantId?: string }
+): Plant | undefined {
+  const plantId = item.id ?? item.plantId;
+  if (!plantId) {
+    console.warn('[Cart] getPlantFromCartItem: item has no id or plantId', item);
+    return undefined;
+  }
+  const plant = getPlantById(plantId);
+  if (!plant) {
+    console.warn('[Cart] getPlantFromCartItem: no plant found for id =', plantId);
+  } else {
+    console.debug('[Cart] getPlantFromCartItem: found', plant.name, 'for id =', plantId);
+  }
+  return plant;
 }

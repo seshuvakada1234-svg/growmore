@@ -2,41 +2,53 @@
 
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
-import { initializeFirestore, getFirestore, Firestore } from 'firebase/firestore';
+import {
+  initializeFirestore,
+  getFirestore,
+  Firestore
+} from 'firebase/firestore';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
 import { firebaseConfig } from '@/firebase/config';
 
 /**
- * Initialize Firebase App (only once)
+ * Initialize Firebase App (singleton)
  */
 export const app: FirebaseApp =
   !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
 /**
- * Initialize Firestore (SAFE + STABLE for dev environments)
+ * Firestore Singleton (VERY IMPORTANT FIX)
  */
-let firestoreInstance: Firestore;
+let firestoreInstance: Firestore | null = null;
 
-try {
-  firestoreInstance = initializeFirestore(app, {
-    experimentalForceLongPolling: true, // ✅ fixes network issues
-    useFetchStreams: false,             // ✅ required for some environments
-    ignoreUndefinedProperties: true,
-  });
-} catch (e) {
-  // Prevent crash during hot reload
-  firestoreInstance = getFirestore(app);
+export function getDB(): Firestore {
+  if (firestoreInstance) return firestoreInstance;
+
+  try {
+    firestoreInstance = initializeFirestore(app, {
+      experimentalForceLongPolling: true,
+      useFetchStreams: false,
+      ignoreUndefinedProperties: true,
+    });
+    console.log("[Firebase] Firestore initialized (custom)");
+  } catch (e) {
+    firestoreInstance = getFirestore(app);
+    console.log("[Firebase] Firestore fallback used");
+  }
+
+  return firestoreInstance;
 }
 
-export const db: Firestore = firestoreInstance;
+// ✅ Export single instance
+export const db: Firestore = getDB();
 
 /**
- * Initialize Storage
+ * Storage
  */
 export const storage: FirebaseStorage = getStorage(app);
 
 /**
- * Initialize Auth (client-only safe)
+ * Auth (client-safe)
  */
 export const auth: Auth =
   typeof window !== 'undefined'

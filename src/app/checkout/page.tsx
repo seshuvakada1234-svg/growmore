@@ -16,12 +16,13 @@ import Image from "next/image";
 import Script from "next/script";
 import { toast } from "@/hooks/use-toast";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useUser, useFirestore } from "@/firebase";
+import { useFirestore } from "@/firebase";
 import {
   doc, setDoc, serverTimestamp, getDoc,
   getDocs, writeBatch, collection, onSnapshot,
 } from "firebase/firestore";
 import { useState, useEffect, useRef } from "react";
+import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { PRODUCTS } from "@/lib/mock-data";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
@@ -29,12 +30,17 @@ import { saveCommissionRecord } from "@/lib/affiliateEngine";
 import { AddressList } from "@/components/checkout/AddressList";
 import type { SavedAddress } from "@/components/checkout/AddressCard";
 import { isValidIndianMobile } from "@/components/checkout/AddressForm";
+import ShippingCalculator from "@/components/checkout/ShippingCalculator";
+// ✅ FIX: Import cartStorage helpers instead of calling localStorage directly.
+//    lsReadCart already normalizes { plantId, productId } → { id }.
+//    lsClearCart dispatches "cart-updated" and uses the canonical CART_KEY.
+import { lsReadCart, lsClearCart, normalizeItem } from "@/lib/cartStorage";
 
-declare global {
-  interface Window { Razorpay: any; }
-}
+declare global { interface Window { Razorpay: any; } }
 
 type PaymentMethod = "cod" | "upi" | "card";
+
+interface ShippingOption { name: string; days: number; price: number; }
 
 const fmt = (n: number) => `₹${n.toLocaleString("en-IN")}`;
 
@@ -74,7 +80,7 @@ async function fetchProduct(db: any, id: string): Promise<any | null> {
   return null;
 }
 
-// ── Real-time COD status hook ─────────────────────────────────────────────────
+// ── Real-time COD status hook ──────────────────────────────────────────────
 function useCodEnabled(db: any): boolean {
   const [codEnabled, setCodEnabled] = useState<boolean>(true);
   useEffect(() => {
@@ -91,7 +97,6 @@ function useCodEnabled(db: any): boolean {
 function CheckoutContent() {
   const router       = useRouter();
   const searchParams = useSearchParams();
-  const { user }     = useUser();
   const db           = useFirestore();
 
   const codEnabled = useCodEnabled(db);
@@ -107,56 +112,119 @@ function CheckoutContent() {
   const [cartLoading,   setCartLoading]   = useState(true);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cod");
 
-  // If COD gets disabled while user has it selected, switch to upi
-  useEffect(() => {
-    if (!codEnabled && paymentMethod === "cod") {
-      setPaymentMethod("upi");
-    }
-  }, [codEnabled, paymentMethod]);
+  const [currentUser, setCurrentUser] = useState<any>(undefined);
+  const [authChecked, setAuthChecked] = useState(false);
 
-  // ── Load cart ─────────────────────────────────────────────────────────────
+  const currentUserRef = useRef<any>(undefined);
+  const cartLoadedRef  = useRef(false);
+
+  const [selectedShipping, setSelectedShipping] = useState<ShippingOption | null>(null);
+
+  // ── Auth resolution ────────────────────────────────────────────────────
   useEffect(() => {
     if (!db) return;
     let cancelled = false;
+    const { app } = require("@/lib/firebase");
+    const auth = getAuth(app);
+
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      if (cancelled) return;
+      console.log("[Checkout] Auth resolved. User:", user?.uid ?? "guest");
+
+      const nextId = user?.uid ?? null;
+      const prevId = currentUserRef.current === undefined
+        ? "UNKNOWN"
+        : (currentUserRef.current?.uid ?? null);
+
+      if (nextId !== prevId) {
+        console.log("[Checkout] Identity changed:", prevId, "→", nextId, "— resetting cartLoadedRef");
+        cartLoadedRef.current = false;
+      }
+
+      currentUserRef.current = user ?? null;
+      setCurrentUser(user ?? null);
+      setAuthChecked(true);
+    });
+
+    return () => { cancelled = true; unsubAuth(); };
+  }, [db]);
+
+  // If COD gets disabled while user has it selected, switch to upi
+  useEffect(() => {
+    if (!codEnabled && paymentMethod === "cod") setPaymentMethod("upi");
+  }, [codEnabled, paymentMethod]);
+
+  // ── Cart loading ───────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!db || !authChecked || currentUser === undefined) return;
+    if (cartLoadedRef.current) return;
+    cartLoadedRef.current = true;
+
+    let cancelled = false;
+
     (async () => {
       setCartLoading(true);
       try {
-        const raw = isBuyNow
-          ? sessionStorage.getItem("buynow_cart")
-          : localStorage.getItem("plantshop_cart");
-        const stored: any[] = JSON.parse(raw || "[]");
-        const grouped: Record<string, number> = {};
-        for (const item of stored) {
-          const id = item.id || item.productId || item.plantId;
-          if (!id) continue;
-          grouped[id] = (grouped[id] || 0) + (item.quantity || 1);
+        let stored: { id: string; quantity: number }[] = [];
+
+        if (isBuyNow) {
+          const raw = sessionStorage.getItem("buynow_cart");
+          const parsed: any[] = JSON.parse(raw || "[]");
+          // ✅ FIX: use normalizeItem from cartStorage instead of inline mapping
+          stored = parsed.map(normalizeItem).filter(Boolean) as { id: string; quantity: number }[];
+
+        } else if (currentUser) {
+          console.log("[Checkout] Loading cart from Firestore for user:", currentUser.uid);
+          const cartSnap = await getDocs(collection(db, "users", currentUser.uid, "cart"));
+          stored = cartSnap.docs.map((d) => {
+            const data = d.data();
+            console.log("[Checkout] Firestore cart item:", { productId: d.id, quantity: data.quantity });
+            return { id: d.id, quantity: data.quantity || 1 }; // ✅ reads doc key as id
+          });
+
+        } else {
+          // ✅ FIX: use lsReadCart from cartStorage — normalizes legacy formats,
+          //    handles dedup, uses canonical CART_KEY "plantshop_cart"
+          console.log("[Checkout] Loading cart from localStorage (confirmed guest)");
+          stored = lsReadCart();
         }
-        const ids = Object.keys(grouped);
-        if (ids.length === 0) { setCartItems([]); setCartLoading(false); return; }
+
+        console.log("[Checkout] Cart items before enrich:", stored);
+
+        if (stored.length === 0) {
+          if (!cancelled) { setCartItems([]); setCartLoading(false); }
+          return;
+        }
+
         const enriched = await Promise.all(
-          ids.map(async (id) => {
+          stored.map(async ({ id, quantity }) => {
             const product = await fetchProduct(db, id);
             if (!product) return null;
-            return { ...product, quantity: grouped[id] };
+            console.log(`[Checkout] Enriched: id=${id} qty=${quantity} price=${product.price}`);
+            return { ...product, quantity };
           })
         );
+
         if (!cancelled) setCartItems(enriched.filter(Boolean));
-      } catch {
+      } catch (err) {
+        console.error("[Checkout] Cart load error:", err);
         if (!cancelled) setCartItems([]);
       } finally {
         if (!cancelled) setCartLoading(false);
       }
     })();
+
     return () => { cancelled = true; };
-  }, [db, isBuyNow]);
+  }, [db, authChecked, currentUser, isBuyNow]);
 
-  // ── Totals ────────────────────────────────────────────────────────────────
-  const subtotal = cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
-  const shipping = subtotal > 999 ? 0 : 150;
-  const discount = subtotal > 3000 ? 200 : 0;
-  const total    = subtotal + shipping - discount;
+  // ── Totals ──────────────────────────────────────────────────────────────
+  const subtotal     = cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
+  const baseShipping = subtotal > 999 ? 0 : 150;
+  const shippingCost = selectedShipping ? selectedShipping.price : baseShipping;
+  const discount     = subtotal > 3000 ? 200 : 0;
+  const total        = subtotal + shippingCost - discount;
 
-  // ── Order notifications ───────────────────────────────────────────────────
+  // ── Order notifications ─────────────────────────────────────────────────
   const sendOrderNotifications = async (orderId: string, addr: SavedAddress) => {
     try {
       const res = await fetch('/api/send-order-email', {
@@ -165,7 +233,7 @@ function CheckoutContent() {
         body: JSON.stringify({
           orderId,
           customerName:   addr.fullName,
-          customerEmail:  user?.email || "",
+          customerEmail:  currentUser?.email || "",
           customerPhone:  addr.phone,
           customerPhone2: addr.phone2 || null,
           items: cartItems.map((i) => ({ name: i.name, qty: i.quantity, price: i.price })),
@@ -174,10 +242,8 @@ function CheckoutContent() {
           status: paymentMethod === 'cod' ? 'Pending' : 'Approved',
           shippingAddress: {
             fullAddress: addr.address,
-            city:        addr.city,
-            district:    addr.district,
-            state:       addr.state,
-            pincode:     addr.pincode,
+            city: addr.city, district: addr.district,
+            state: addr.state, pincode: addr.pincode,
           },
         }),
       });
@@ -185,14 +251,18 @@ function CheckoutContent() {
     } catch (err) { console.error('Notification error:', err); return null; }
   };
 
-  // ── Clear cart ────────────────────────────────────────────────────────────
+  // ── Clear cart ──────────────────────────────────────────────────────────
   const clearCartEverywhere = async () => {
     if (isBuyNow) { sessionStorage.removeItem("buynow_cart"); return; }
-    localStorage.removeItem("plantshop_cart");
-    window.dispatchEvent(new Event("cart-updated"));
-    if (user && db) {
+
+    // ✅ FIX: was localStorage.removeItem("plantshop_cart") + manual event dispatch.
+    //    lsClearCart() does both atomically, uses CART_KEY constant, dispatches
+    //    "cart-updated" so the navbar badge updates immediately.
+    lsClearCart();
+
+    if (currentUser && db) {
       try {
-        const cartSnap = await getDocs(collection(db, "users", user.uid, "cart"));
+        const cartSnap = await getDocs(collection(db, "users", currentUser.uid, "cart"));
         if (!cartSnap.empty) {
           const batch = writeBatch(db);
           cartSnap.docs.forEach((d) => batch.delete(d.ref));
@@ -202,25 +272,25 @@ function CheckoutContent() {
     }
   };
 
-  // ── Save order ────────────────────────────────────────────────────────────
+  // ── Save order ──────────────────────────────────────────────────────────
   const saveOrderToFirestore = async (
     orderId: string,
     addr: SavedAddress,
     razorpayPaymentId: string | null = null,
     razorpayOrderId:   string | null = null,
   ) => {
-    if (!user) return;
+    if (!currentUser) return;
 
     const affiliateRefId  = localStorage.getItem("monterra_referrer");
-    const isSelfReferral  = !!affiliateRefId && affiliateRefId === user.uid;
+    const isSelfReferral  = !!affiliateRefId && affiliateRefId === currentUser.uid;
     const finalReferrerId = affiliateRefId && !isSelfReferral ? affiliateRefId : null;
 
     const orderRef  = doc(db, "orders", orderId);
     const orderData = {
       id:             orderId,
-      userId:         user.uid,
+      userId:         currentUser.uid,
       customerName:   addr.fullName,
-      customerEmail:  user?.email || "",
+      customerEmail:  currentUser?.email || "",
       customerPhone:  addr.phone,
       customerPhone2: addr.phone2 || null,
       shippingAddress: {
@@ -233,6 +303,11 @@ function CheckoutContent() {
         phone:       addr.phone,
         phone2:      addr.phone2 || null,
       },
+      shippingDetails: selectedShipping ? {
+        courier: selectedShipping.name,
+        days:    selectedShipping.days,
+        price:   selectedShipping.price,
+      } : null,
       paymentMethod:     razorpayPaymentId ? "online" : "cod",
       paymentStatus:     razorpayPaymentId ? "paid"   : "pending",
       razorpayPaymentId: razorpayPaymentId || null,
@@ -240,12 +315,17 @@ function CheckoutContent() {
       totalAmount:  total,
       status:       razorpayPaymentId ? "Approved" : "Pending",
       affiliateId:  finalReferrerId,
+      // ✅ FIX [CRITICAL]: was { productId: i.id, name, qty, price, imageUrl }
+      //    Order interface requires { id } not { productId }.
+      //    Any code reading order.items[n].id was getting undefined because
+      //    the field was stored as "productId" not "id".
+      //    Renamed productId → id. "qty" also aligned to "quantity" for consistency.
       items: cartItems.map((i) => ({
-        productId: i.id,
-        name:      i.name,
-        qty:       i.quantity,
-        price:     i.price,
-        imageUrl:  i.imageUrl,
+        id:       i.id,        // ← FIXED: was productId: i.id
+        name:     i.name,
+        quantity: i.quantity,  // ← FIXED: was qty (aligns with CartItem interface)
+        price:    i.price,
+        imageUrl: i.imageUrl,
       })),
       createdAt:            serverTimestamp(),
       updatedAt:            serverTimestamp(),
@@ -286,11 +366,11 @@ function CheckoutContent() {
     }
   };
 
-  // ── Place order ───────────────────────────────────────────────────────────
+  // ── Place order ─────────────────────────────────────────────────────────
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
-    if (!user) { router.push("/login?redirect=/checkout"); return; }
+    if (!currentUser) { router.push("/login?redirect=/checkout"); return; }
 
     if (!selectedAddress) {
       setAddressError(true);
@@ -324,18 +404,12 @@ function CheckoutContent() {
         const orderId = generateOrderId("cod");
         await saveOrderToFirestore(orderId, selectedAddress);
         toast({ title: "Order Placed Successfully 🌿" });
-
       } else {
         const firestoreOrderId = generateOrderId("upi");
-
         const res = await fetch('/api/create-order', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            amount: total,
-            currency: "INR",
-            paymentMethod
-          }),
+          body: JSON.stringify({ amount: total, currency: "INR", paymentMethod }),
         });
         const razorpayOrder = await res.json();
 
@@ -365,10 +439,8 @@ function CheckoutContent() {
             const verifyData = await verifyRes.json();
             if (verifyData.success) {
               await saveOrderToFirestore(
-                firestoreOrderId,
-                selectedAddress,
-                response.razorpay_payment_id,
-                response.razorpay_order_id,
+                firestoreOrderId, selectedAddress,
+                response.razorpay_payment_id, response.razorpay_order_id,
               );
               toast({ title: "Payment Successful 🌿", description: "Your order has been recorded" });
             } else {
@@ -378,7 +450,7 @@ function CheckoutContent() {
           },
           prefill: {
             name:    selectedAddress.fullName,
-            email:   user?.email || "",
+            email:   currentUser?.email || "",
             contact: selectedAddress.phone,
           },
           theme: { color: "#1B5E20" },
@@ -424,6 +496,14 @@ function CheckoutContent() {
   const backLabel     = isBuyNow ? "Back to Product" : "Back to Cart";
   const canPlaceOrder = !!selectedAddress && isValidIndianMobile(selectedAddress.phone);
 
+  if (!authChecked) {
+    return (
+      <div className="flex-grow flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <form onSubmit={handlePlaceOrder} className="flex-grow flex flex-col">
       <main className="flex-grow pb-28 sm:pb-12">
@@ -449,23 +529,25 @@ function CheckoutContent() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div className="lg:col-span-7 space-y-5">
 
-              {/* Address */}
+              {/* ── Delivery Address ── */}
               <Card className="rounded-2xl shadow-sm bg-white border border-[#E8E8E8] overflow-hidden">
                 <div className="px-6 py-5 border-b border-[#F5F5F5]">
                   <h2 className="text-xl font-bold font-headline text-[#1A2E1A] flex items-center gap-2">
                     <MapPin className="h-5 w-5 text-primary" /> Delivery Address
                   </h2>
                 </div>
-                <div
-                  ref={addressSectionRef}
-                  className={`p-5 transition-all duration-300 ${addressError ? "ring-2 ring-red-400 ring-offset-2 rounded-b-2xl" : ""}`}
-                >
-                  {user && (
+                <div ref={addressSectionRef}
+                  className={`p-5 transition-all duration-300 ${addressError ? "ring-2 ring-red-400 ring-offset-2 rounded-b-2xl" : ""}`}>
+                  {currentUser && (
                     <AddressList
                       db={db}
-                      userId={user.uid}
+                      userId={currentUser.uid}
                       selectedAddressId={selectedAddress?.id ?? null}
-                      onSelect={(addr) => { setSelectedAddress(addr); setAddressError(false); }}
+                      onSelect={(addr) => {
+                        setSelectedAddress(addr);
+                        setAddressError(false);
+                        setSelectedShipping(null);
+                      }}
                     />
                   )}
                   {addressError && (
@@ -477,7 +559,16 @@ function CheckoutContent() {
                 </div>
               </Card>
 
-              {/* Payment */}
+              {/* ── Shipping Calculator ── */}
+              {selectedAddress && (
+                <ShippingCalculator
+                  baseOrderAmount={subtotal - discount}
+                  initialPincode={selectedAddress.pincode}
+                  onShippingSelect={(option) => setSelectedShipping(option)}
+                />
+              )}
+
+              {/* ── Payment Method ── */}
               <Card className="rounded-2xl shadow-sm bg-white border border-[#E8E8E8] overflow-hidden">
                 <div className="px-6 py-5 border-b border-[#F5F5F5]">
                   <h2 className="text-xl font-bold font-headline text-[#1A2E1A] flex items-center gap-2">
@@ -485,16 +576,10 @@ function CheckoutContent() {
                   </h2>
                 </div>
                 <div className="p-6 space-y-3">
-                  {/* COD — only shown when enabled in admin */}
                   {codEnabled && (
-                    <PayOption
-                      id="cod"
-                      icon={<Banknote className="h-5 w-5" />}
-                      label="Cash on Delivery"
-                      desc="Pay when your order arrives"
-                      badge="Popular"
-                      badgeCls="bg-emerald-100 text-emerald-700"
-                    />
+                    <PayOption id="cod" icon={<Banknote className="h-5 w-5" />}
+                      label="Cash on Delivery" desc="Pay when your order arrives"
+                      badge="Popular" badgeCls="bg-emerald-100 text-emerald-700" />
                   )}
                   <PayOption id="upi"  icon={<Smartphone className="h-5 w-5" />} label="UPI"                 desc="GPay, PhonePe, Paytm & more"   badge="Secure"  badgeCls="bg-blue-100 text-blue-700" />
                   <PayOption id="card" icon={<CreditCard className="h-5 w-5" />} label="Credit / Debit Card" desc="Visa, Mastercard, RuPay" />
@@ -503,10 +588,9 @@ function CheckoutContent() {
                   </p>
                 </div>
               </Card>
-
             </div>
 
-            {/* Order Summary */}
+            {/* ── Order Summary ── */}
             <div className="lg:col-span-5">
               <div className="sticky top-20">
                 <Card className="rounded-2xl shadow-sm bg-white border border-[#E8E8E8] overflow-hidden">
@@ -565,12 +649,17 @@ function CheckoutContent() {
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground flex items-center gap-1">
                         <Truck className="h-3.5 w-3.5" /> Shipping
+                        {selectedShipping && (
+                          <span className="text-[10px] text-emerald-600 font-semibold ml-1">
+                            ({selectedShipping.name} · {selectedShipping.days}d)
+                          </span>
+                        )}
                       </span>
-                      {shipping === 0
+                      {shippingCost === 0
                         ? <span className="font-bold text-emerald-600">FREE</span>
-                        : <span className="font-semibold">{fmt(shipping)}</span>}
+                        : <span className="font-semibold">{fmt(shippingCost)}</span>}
                     </div>
-                    {shipping > 0 && (
+                    {!selectedShipping && baseShipping > 0 && (
                       <p className="text-[10px] text-amber-700 bg-amber-50 px-3 py-2 rounded-xl">
                         🚚 Add {fmt(999 - subtotal)} more for free delivery
                       </p>
@@ -614,6 +703,7 @@ function CheckoutContent() {
         </div>
       </main>
 
+      {/* ── Mobile sticky button ── */}
       <div
         className="sm:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-[#E8E8E8] px-4 py-3 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]"
         style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}
@@ -648,5 +738,5 @@ export default function CheckoutPage() {
       </Suspense>
       <Footer />
     </div>
-  );  
+  );
 }

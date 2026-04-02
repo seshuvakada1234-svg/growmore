@@ -1,52 +1,50 @@
 "use client";
-
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
 } from "@/components/ui/select";
-import { 
-  Users, 
-  TrendingUp, 
-  Wallet, 
-  Copy, 
-  Link as LinkIcon, 
-  CheckCircle2, 
-  Clock, 
-  Zap, 
-  Loader2, 
+import {
+  Users,
+  TrendingUp,
+  Wallet,
+  Copy,
+  Link as LinkIcon,
+  CheckCircle2,
+  Clock,
+  Zap,
+  Loader2,
   Landmark,
   AlertCircle,
   UserCheck,
   BadgeCheck
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/hooks/use-toast";
-import { 
-  useUser, 
-  useFirestore, 
-  useDoc, 
-  useMemoFirebase, 
+import {
+  useUser,
+  useFirestore,
+  useDoc,
+  useMemoFirebase,
   useCollection
 } from "@/firebase";
-import { 
-  doc, 
-  setDoc,
+import {
+  doc,
   writeBatch,
-  getDoc,          // ← ADDED
-  serverTimestamp, 
-  query, 
-  collection, 
-  orderBy, 
-  where 
+  getDoc,
+  serverTimestamp,
+  query,
+  collection,
+  orderBy,
+  where
 } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { useAffiliate } from "@/context/affiliate-context";
@@ -70,13 +68,19 @@ function isValidPincode(pin: string): boolean {
   return /^[1-9][0-9]{5}$/.test(pin);
 }
 
+function getStatusClass(status: string): string {
+  const s = (status || "").toLowerCase();
+  if (s === "approved" || s === "paid") return "bg-green-100 text-green-700";
+  if (s === "cancelled" || s === "rejected") return "bg-red-100 text-red-700";
+  return "bg-yellow-100 text-yellow-700";
+}
+
 export default function AffiliateDashboard() {
   const { user, isUserLoading } = useUser();
   const db = useFirestore();
   const router = useRouter();
   const [isApplying, setIsApplying] = useState(false);
   const [timeLeft, setTimeLeft] = useState<string | null>(null);
-
   const [formData, setFormData] = useState({
     accountHolderName: "",
     bankAccountNumber: "",
@@ -89,27 +93,25 @@ export default function AffiliateDashboard() {
     state: "",
     pincode: ""
   });
-
   const [branchName, setBranchName] = useState("");
   const [ifscError, setIfscError] = useState("");
   const [isFetchingIfsc, setIsFetchingIfsc] = useState(false);
-
   const [isFetchingPincode, setIsFetchingPincode] = useState(false);
-  const [pincodeError, setPincodeError]           = useState("");
+  const [pincodeError, setPincodeError] = useState("");
   const districtManuallyEdited = useRef(false);
-  const stateManuallyEdited    = useRef(false);
+  const stateManuallyEdited = useRef(false);
   const pincodeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { isApproved, affiliateProfile, loading: isAffiliateLoading } = useAffiliate();
 
   const appRef = useMemoFirebase(
-    () => !user?.uid ? null : doc(db, 'affiliateApplications', user.uid), 
+    () => !user?.uid ? null : doc(db, "affiliateApplications", user.uid),
     [db, user?.uid]
   );
   const { data: application } = useDoc(appRef);
 
   const userProfileRef = useMemoFirebase(
-    () => !user?.uid ? null : doc(db, 'users', user.uid), 
+    () => !user?.uid ? null : doc(db, "users", user.uid),
     [db, user?.uid]
   );
   const { data: profile, isLoading: isProfileLoading } = useDoc(userProfileRef);
@@ -117,12 +119,30 @@ export default function AffiliateDashboard() {
   const commQuery = useMemoFirebase(() => {
     if (!user?.uid || !db) return null;
     return query(
-      collection(db, 'affiliate_commissions'), 
-      where('affiliateId', '==', user.uid), 
-      orderBy('createdAt', 'desc')
+      collection(db, "affiliate_commissions"),
+      where("affiliateId", "==", user.uid),
+      orderBy("createdAt", "desc")
     );
   }, [db, user?.uid]);
   const { data: commissions } = useCollection(commQuery);
+
+  const payoutQuery = useMemoFirebase(() => {
+    if (!user?.uid || !db) return null;
+    return query(
+      collection(db, "affiliateWithdrawRequests"),
+      where("affiliateId", "==", user.uid),
+      orderBy("requestedAt", "desc")
+    );
+  }, [db, user?.uid]);
+  const { data: payoutHistory } = useCollection(payoutQuery);
+
+  const referralEarnings = commissions;
+
+  useEffect(() => {
+    if (payoutHistory !== undefined) {
+      console.log("PAYOUT DATA:", payoutHistory);
+    }
+  }, [payoutHistory]);
 
   useEffect(() => {
     if (!application?.createdAt) return;
@@ -145,7 +165,7 @@ export default function AffiliateDashboard() {
   }, [application?.createdAt]);
 
   useEffect(() => {
-    if (!isUserLoading && !user) router.push('/login?redirect=/affiliate');
+    if (!isUserLoading && !user) router.push("/login?redirect=/affiliate");
   }, [user, isUserLoading, router]);
 
   const fetchBankFromIFSC = async (ifsc: string) => {
@@ -158,7 +178,7 @@ export default function AffiliateDashboard() {
       const data = await res.json();
       setFormData(prev => ({ ...prev, bankName: data.BANK }));
       setBranchName(data.BRANCH);
-    } catch (err) {
+    } catch {
       setFormData(prev => ({ ...prev, bankName: "" }));
       setBranchName("");
       setIfscError("Invalid IFSC Code");
@@ -215,23 +235,18 @@ export default function AffiliateDashboard() {
     }
   };
 
-  // ── FIXED handleApply ─────────────────────────────────────────────────────
   const handleApply = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user?.uid || !db) return;
-
     if (!isValidPincode(formData.pincode)) {
-      toast({ 
-        title: "Invalid Pincode", 
-        description: "Please enter a valid 6-digit Indian pincode", 
-        variant: "destructive" 
+      toast({
+        title: "Invalid Pincode",
+        description: "Please enter a valid 6-digit Indian pincode",
+        variant: "destructive"
       });
       return;
     }
-
     setIsApplying(true);
-
-    // Fields the user is always allowed to write
     const safeFields = {
       userId: user.uid,
       accountHolderName: formData.accountHolderName,
@@ -246,16 +261,11 @@ export default function AffiliateDashboard() {
       pincode: formData.pincode,
       updatedAt: serverTimestamp(),
     };
-
     try {
       const batch = writeBatch(db);
-
-      // ── 1. Profile ──────────────────────────────────────────────────────
-      const profileRef  = doc(db, 'affiliateProfiles', user.uid);
+      const profileRef = doc(db, "affiliateProfiles", user.uid);
       const profileSnap = await getDoc(profileRef);
-
       if (!profileSnap.exists()) {
-        // First time → CREATE with protected financial fields
         batch.set(profileRef, {
           ...safeFields,
           totalEarnings: 0,
@@ -265,16 +275,12 @@ export default function AffiliateDashboard() {
           createdAt: serverTimestamp(),
         });
       } else {
-        // Already exists → UPDATE safe fields only (rules block financial fields)
         batch.update(profileRef, safeFields);
       }
 
-      // ── 2. Application ──────────────────────────────────────────────────
-      const appDocRef = doc(db, 'affiliateApplications', user.uid);
-      const appSnap   = await getDoc(appDocRef);
-
+      const appDocRef = doc(db, "affiliateApplications", user.uid);
+      const appSnap = await getDoc(appDocRef);
       if (!appSnap.exists()) {
-        // First time → CREATE
         batch.set(appDocRef, {
           userId: user.uid,
           status: "pending",
@@ -282,54 +288,110 @@ export default function AffiliateDashboard() {
           updatedAt: serverTimestamp(),
         });
       } else {
-        // Already exists → only touch updatedAt (admin owns status)
         batch.update(appDocRef, { updatedAt: serverTimestamp() });
       }
 
       await batch.commit();
-
-      toast({ 
-        title: "Application Sent! 🎉", 
-        description: "We'll review your bank details and profile shortly." 
+      toast({
+        title: "Application Sent! 🎉",
+        description: "We'll review your bank details and profile shortly."
       });
-
     } catch (error: any) {
       console.error("Affiliate application submission error:", error);
-      toast({ 
-        title: "Submission Failed", 
+      toast({
+        title: "Submission Failed",
         description: error.message || "Could not save application data.",
-        variant: "destructive" 
+        variant: "destructive"
       });
     } finally {
       setIsApplying(false);
     }
   };
-  // ─────────────────────────────────────────────────────────────────────────
 
   const handleCopy = () => {
-    if (typeof window === 'undefined' || !user?.uid) return;
+    if (typeof window === "undefined" || !user?.uid) return;
     const link = `${window.location.origin}/?ref=${user.uid}`;
     navigator.clipboard.writeText(link);
     toast({ title: "Link Copied!" });
   };
 
   const getStepStatus = (stepId: string) => {
-    const status = application?.status || 'submitted';
-    const order = ['submitted', 'verifying', 'review', 'approved'];
-    const normalizedStatus = status === 'pending' ? 'submitted' : status;
+    const status = application?.status || "submitted";
+    const order = ["submitted", "verifying", "review", "approved"];
+    const normalizedStatus = status === "pending" ? "submitted" : status;
     const currentIndex = order.indexOf(normalizedStatus);
     const stepIndex = order.indexOf(stepId);
-    if (currentIndex > stepIndex) return 'completed';
-    if (currentIndex === stepIndex) return 'active';
-    return 'pending';
+    if (currentIndex > stepIndex) return "completed";
+    if (currentIndex === stepIndex) return "active";
+    return "pending";
   };
 
   const steps = [
-    { id: 'submitted', label: 'Application Submitted', icon: CheckCircle2 },
-    { id: 'verifying', label: 'Bank Details Verification', icon: Clock },
-    { id: 'review', label: 'Profile Review', icon: UserCheck },
-    { id: 'approved', label: 'Affiliate Activated', icon: BadgeCheck },
+    { id: "submitted", label: "Application Submitted", icon: CheckCircle2 },
+    { id: "verifying", label: "Bank Details Verification", icon: Clock },
+    { id: "review", label: "Profile Review", icon: UserCheck },
+    { id: "approved", label: "Affiliate Activated", icon: BadgeCheck },
   ];
+
+  const isDataReady = commissions !== undefined && payoutHistory !== undefined;
+
+  const earnings = useMemo(() => {
+    if (!isDataReady) return null;
+
+    const safeCommissions = Array.isArray(commissions) ? commissions : [];
+    const safePayouts = Array.isArray(payoutHistory) ? payoutHistory : [];
+
+    const normalizeStatus = (status: unknown) =>
+      String(status ?? "").trim().toLowerCase();
+
+    const getSortTime = (p: any) => {
+      const updatedAtMs = p?.updatedAt?.seconds ? p.updatedAt.seconds * 1000 : 0;
+      const requestedAtMs = p?.requestedAt?.seconds ? p.requestedAt.seconds * 1000 : 0;
+      const createdAtMs = p?.createdAt?.seconds ? p.createdAt.seconds * 1000 : 0;
+      return Math.max(updatedAtMs, requestedAtMs, createdAtMs);
+    };
+
+    const latestByRequest = new Map<string, any>();
+    for (const payout of safePayouts) {
+      const requestKey =
+        String(
+          payout?.requestId ??
+          payout?.payoutRequestId ??
+          payout?.referenceId ??
+          payout?.transactionId ??
+          payout?.id ??
+          ""
+        ).trim();
+
+      if (!requestKey) continue;
+
+      const existing = latestByRequest.get(requestKey);
+      if (!existing || getSortTime(payout) >= getSortTime(existing)) {
+        latestByRequest.set(requestKey, payout);
+      }
+    }
+
+    const uniqueLatestPayouts = Array.from(latestByRequest.values());
+
+    const totalEarnings = safeCommissions
+      .filter(c => {
+        const status = normalizeStatus(c.status);
+        return status === "approved" || status === "paid";
+      })
+      .reduce((sum, c) => sum + Number(c.commissionAmount || 0), 0);
+
+    const withdrawn = uniqueLatestPayouts
+      .filter(p => normalizeStatus(p.status) === "paid")
+      .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+    const pendingPayouts = uniqueLatestPayouts
+      .filter(p => normalizeStatus(p.status) === "pending")
+      .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+    const available = Math.max(0, totalEarnings - withdrawn);
+
+    return { totalEarnings, withdrawn, pendingPayouts, available };
+  }, [commissions, payoutHistory, isDataReady]);
 
   if (isUserLoading || isAffiliateLoading || isProfileLoading) {
     return (
@@ -346,14 +408,12 @@ export default function AffiliateDashboard() {
   if (!user) return null;
 
   if (!isApproved) {
-    const isPending = application?.status === 'pending' || profile?.role === 'affiliate' && profile?.affiliateApproved === false;
-
+    const isPending = application?.status === "pending" || (profile?.role === "affiliate" && profile?.affiliateApproved === false);
     return (
       <div className="min-h-screen flex flex-col">
         <Header />
         <main className="flex-grow bg-neutral/30 py-20">
           <div className="container mx-auto px-4 max-w-4xl">
-
             {isPending ? (
               <Card className="p-8 md:p-12 space-y-10 rounded-[3rem] border-none shadow-xl text-center overflow-hidden bg-white">
                 <div className="space-y-4">
@@ -367,11 +427,11 @@ export default function AffiliateDashboard() {
 
                 <div className="relative flex justify-between items-start max-w-2xl mx-auto mb-12 px-4">
                   <div className="absolute top-5 left-0 w-full h-0.5 bg-gray-100 -z-0">
-                    <div 
-                      className="h-full bg-emerald-400 transition-all duration-500" 
-                      style={{ 
-                        width: `${(Math.max(0, ['submitted', 'verifying', 'review', 'approved']
-                          .indexOf(application?.status === 'pending' ? 'submitted' : application?.status)) / 3) * 100}%` 
+                    <div
+                      className="h-full bg-emerald-400 transition-all duration-500"
+                      style={{
+                        width: `${(Math.max(0, ["submitted", "verifying", "review", "approved"]
+                          .indexOf(application?.status === "pending" ? "submitted" : application?.status)) / 3) * 100}%`
                       }}
                     />
                   </div>
@@ -380,18 +440,22 @@ export default function AffiliateDashboard() {
                     const Icon = step.icon;
                     return (
                       <div key={step.id} className="relative z-10 flex flex-col items-center text-center gap-3 w-1/4">
-                        <div className={cn(
-                          "w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 shadow-sm",
-                          status === 'completed' ? "bg-emerald-500 text-white" : 
-                          status === 'active' ? "bg-yellow-500 text-white animate-pulse" : 
-                          "bg-white border-2 border-gray-100 text-gray-400"
-                        )}>
+                        <div
+                          className={cn(
+                            "w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 shadow-sm",
+                            status === "completed" ? "bg-emerald-500 text-white" :
+                              status === "active" ? "bg-yellow-500 text-white animate-pulse" :
+                                "bg-white border-2 border-gray-100 text-gray-400"
+                          )}
+                        >
                           <Icon className="h-5 w-5" />
                         </div>
-                        <p className={cn(
-                          "text-[10px] font-bold uppercase tracking-tight leading-tight max-w-[80px]",
-                          status === 'pending' ? "text-gray-400" : "text-primary"
-                        )}>
+                        <p
+                          className={cn(
+                            "text-[10px] font-bold uppercase tracking-tight leading-tight max-w-[80px]",
+                            status === "pending" ? "text-gray-400" : "text-primary"
+                          )}
+                        >
                           {step.label}
                         </p>
                       </div>
@@ -426,7 +490,6 @@ export default function AffiliateDashboard() {
                   <span>Need help? Contact partners@monterra.in</span>
                 </div>
               </Card>
-
             ) : (
               <div className="space-y-12">
                 <div className="text-center space-y-4">
@@ -444,39 +507,39 @@ export default function AffiliateDashboard() {
                       <Landmark className="h-6 w-6" /> Partner Application
                     </CardTitle>
                   </CardHeader>
+
                   <CardContent className="p-8">
                     <form onSubmit={handleApply} className="space-y-8">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
                         <div className="space-y-2">
                           <Label>Account Holder Name</Label>
-                          <Input 
-                            required 
-                            value={formData.accountHolderName} 
-                            onChange={e => setFormData({...formData, accountHolderName: e.target.value})} 
-                            placeholder="As per bank records" 
-                            className="rounded-xl h-12" 
+                          <Input
+                            required
+                            value={formData.accountHolderName}
+                            onChange={e => setFormData({ ...formData, accountHolderName: e.target.value })}
+                            placeholder="As per bank records"
+                            className="rounded-xl h-12"
                           />
                         </div>
 
                         <div className="space-y-2">
                           <Label>Bank Account Number</Label>
-                          <Input 
-                            required 
-                            value={formData.bankAccountNumber} 
-                            onChange={e => setFormData({...formData, bankAccountNumber: e.target.value})} 
-                            placeholder="Your account number" 
-                            className="rounded-xl h-12" 
+                          <Input
+                            required
+                            value={formData.bankAccountNumber}
+                            onChange={e => setFormData({ ...formData, bankAccountNumber: e.target.value })}
+                            placeholder="Your account number"
+                            className="rounded-xl h-12"
                           />
                         </div>
 
                         <div className="space-y-2">
                           <Label>Bank Name</Label>
-                          <Input 
-                            readOnly 
-                            value={formData.bankName} 
-                            placeholder="Auto-filled from IFSC" 
-                            className="rounded-xl h-12 bg-muted/50" 
+                          <Input
+                            readOnly
+                            value={formData.bankName}
+                            placeholder="Auto-filled from IFSC"
+                            className="rounded-xl h-12 bg-muted/50"
                           />
                         </div>
 
@@ -485,13 +548,13 @@ export default function AffiliateDashboard() {
                             <Label>IFSC Code</Label>
                             {isFetchingIfsc && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
                           </div>
-                          <Input 
-                            required 
-                            value={formData.ifscCode} 
-                            onChange={e => handleIfscChange(e.target.value)} 
-                            placeholder="11-digit IFSC" 
-                            className="rounded-xl h-12" 
-                            maxLength={11} 
+                          <Input
+                            required
+                            value={formData.ifscCode}
+                            onChange={e => handleIfscChange(e.target.value)}
+                            placeholder="11-digit IFSC"
+                            className="rounded-xl h-12"
+                            maxLength={11}
                           />
                           {branchName && <p className="text-[10px] text-primary font-bold">{branchName}</p>}
                           {ifscError && <p className="text-[10px] text-destructive font-bold">{ifscError}</p>}
@@ -499,32 +562,32 @@ export default function AffiliateDashboard() {
 
                         <div className="space-y-2">
                           <Label>UPI ID (Optional)</Label>
-                          <Input 
-                            value={formData.upiId} 
-                            onChange={e => setFormData({...formData, upiId: e.target.value})} 
-                            placeholder="example@upi" 
-                            className="rounded-xl h-12" 
+                          <Input
+                            value={formData.upiId}
+                            onChange={e => setFormData({ ...formData, upiId: e.target.value })}
+                            placeholder="example@upi"
+                            className="rounded-xl h-12"
                           />
                         </div>
 
                         <div className="md:col-span-2 space-y-2">
                           <Label>Complete Address</Label>
-                          <Input 
-                            required 
-                            value={formData.address} 
-                            onChange={e => setFormData({...formData, address: e.target.value})} 
-                            placeholder="House, Street, Area" 
-                            className="rounded-xl h-12" 
+                          <Input
+                            required
+                            value={formData.address}
+                            onChange={e => setFormData({ ...formData, address: e.target.value })}
+                            placeholder="House, Street, Area"
+                            className="rounded-xl h-12"
                           />
                         </div>
 
                         <div className="space-y-2">
                           <Label>City</Label>
-                          <Input 
-                            required 
-                            value={formData.city} 
-                            onChange={e => setFormData({...formData, city: e.target.value})} 
-                            className="rounded-xl h-12" 
+                          <Input
+                            required
+                            value={formData.city}
+                            onChange={e => setFormData({ ...formData, city: e.target.value })}
+                            className="rounded-xl h-12"
                           />
                         </div>
 
@@ -554,11 +617,11 @@ export default function AffiliateDashboard() {
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
                             <Label>State</Label>
-                            <Select 
+                            <Select
                               onValueChange={(val) => {
                                 stateManuallyEdited.current = true;
-                                setFormData({...formData, state: val});
-                              }} 
+                                setFormData({ ...formData, state: val });
+                              }}
                               value={formData.state}
                             >
                               <SelectTrigger className="rounded-xl h-12">
@@ -578,16 +641,16 @@ export default function AffiliateDashboard() {
                               {isFetchingPincode
                                 ? <Loader2 className="h-3 w-3 animate-spin text-primary" />
                                 : isValidPincode(formData.pincode) && !pincodeError && (
-                                    <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-                                  )
+                                  <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                                )
                               }
                             </div>
-                            <Input 
-                              required 
-                              value={formData.pincode} 
-                              onChange={e => handlePincodeChange(e.target.value)} 
-                              placeholder="6 digits" 
-                              className="rounded-xl h-12" 
+                            <Input
+                              required
+                              value={formData.pincode}
+                              onChange={e => handlePincodeChange(e.target.value)}
+                              placeholder="6 digits"
+                              className="rounded-xl h-12"
                               maxLength={6}
                               inputMode="numeric"
                             />
@@ -603,15 +666,14 @@ export default function AffiliateDashboard() {
                         </div>
                       </div>
 
-                      <Button 
-                        type="submit" 
-                        disabled={isApplying} 
+                      <Button
+                        type="submit"
+                        disabled={isApplying}
                         className="w-full h-14 rounded-full text-lg font-bold shadow-xl shadow-primary/20"
                       >
-                        {isApplying 
-                          ? <><Loader2 className="animate-spin mr-2" /> Submitting...</> 
-                          : "Complete Application"
-                        }
+                        {isApplying
+                          ? <><Loader2 className="animate-spin mr-2" /> Submitting...</>
+                          : "Complete Application"}
                       </Button>
                     </form>
                   </CardContent>
@@ -626,14 +688,12 @@ export default function AffiliateDashboard() {
   }
 
   const stats = affiliateProfile;
-  const balance = stats?.withdrawableAmount || 0;
 
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
       <main className="flex-grow bg-neutral/30 py-12">
         <div className="container mx-auto px-4">
-
           <div className="flex flex-col md:flex-row items-end justify-between mb-10 gap-4">
             <div>
               <h1 className="text-3xl font-headline font-extrabold text-primary">Partner Dashboard</h1>
@@ -644,35 +704,115 @@ export default function AffiliateDashboard() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
-            {[
-              { label: "Gross Earnings", value: `₹${(stats?.totalEarnings || 0).toLocaleString()}`, icon: Wallet, color: "bg-blue-50 text-blue-600" },
-              { label: "Available", value: `₹${balance.toLocaleString()}`, icon: Zap, color: "bg-emerald-50 text-emerald-600" },
-              { label: "Referrals", value: stats?.totalReferrals || 0, icon: Users, color: "bg-purple-50 text-purple-600" },
-              { label: "Total Clicks", value: stats?.totalClicks || 0, icon: TrendingUp, color: "bg-orange-50 text-orange-600" }
-            ].map((s, i) => (
-              <Card key={i} className="rounded-3xl border-none shadow-sm p-6 bg-white flex flex-col justify-between">
-                <div className={`h-12 w-12 rounded-2xl flex items-center justify-center mb-4 ${s.color}`}>
-                  <s.icon className="h-6 w-6" />
+          {/* ── Stats Section ── */}
+          <div className="mb-12 space-y-4">
+
+            {/* 3 primary earning cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+              {/* Gross Earnings */}
+              <Card className="rounded-3xl border-none shadow-sm p-6 bg-white flex flex-col justify-between">
+                <div className="h-12 w-12 rounded-2xl flex items-center justify-center mb-4 bg-blue-50 text-blue-600">
+                  <Wallet className="h-6 w-6" />
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{s.label}</p>
-                  <h3 className="text-2xl font-extrabold text-primary mt-1">{s.value}</h3>
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                    Gross Earnings
+                  </p>
+                  <h3 className="text-2xl font-extrabold text-primary mt-1">
+                    {earnings === null ? "Loading..." : `₹${earnings.totalEarnings.toLocaleString()}`}
+                  </h3>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Total approved commissions (lifetime)
+                  </p>
                 </div>
               </Card>
-            ))}
+
+              {/* Withdrawn */}
+              <Card className="rounded-3xl border-none shadow-sm p-6 bg-white flex flex-col justify-between">
+                <div className="h-12 w-12 rounded-2xl flex items-center justify-center mb-4 bg-rose-50 text-rose-500">
+                  <Landmark className="h-6 w-6" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                    Withdrawn
+                  </p>
+                  <h3 className="text-2xl font-extrabold text-primary mt-1">
+                    {earnings === null ? "Loading..." : `₹${earnings.withdrawn.toLocaleString()}`}
+                  </h3>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Already paid out to your bank
+                  </p>
+                </div>
+              </Card>
+
+              {/* Available */}
+              <Card className="rounded-3xl border-none shadow-sm p-6 bg-white flex flex-col justify-between">
+                <div className="h-12 w-12 rounded-2xl flex items-center justify-center mb-4 bg-emerald-50 text-emerald-600">
+                  <Zap className="h-6 w-6" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                    Available
+                  </p>
+                  <h3 className="text-2xl font-extrabold text-primary mt-1">
+                    {earnings === null ? "Loading..." : `₹${earnings.available.toLocaleString()}`}
+                  </h3>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Ready to withdraw
+                  </p>
+                </div>
+              </Card>
+            </div>
+
+            {/* Formula row */}
+            {earnings !== null && (
+              <div className="flex items-center justify-center gap-3 text-sm font-bold text-muted-foreground bg-white rounded-2xl px-6 py-3 shadow-sm border border-muted/40 w-fit mx-auto flex-wrap">
+                <span className="text-blue-600">₹{earnings.totalEarnings.toLocaleString()}</span>
+                <span className="text-muted-foreground/50 font-normal text-xs">Gross</span>
+                <span>−</span>
+                <span className="text-rose-500">₹{earnings.withdrawn.toLocaleString()}</span>
+                <span className="text-muted-foreground/50 font-normal text-xs">Withdrawn</span>
+                <span>=</span>
+                <span className="text-emerald-600">₹{earnings.available.toLocaleString()}</span>
+                <span className="text-muted-foreground/50 font-normal text-xs">Available</span>
+              </div>
+            )}
+
+            {/* Referrals + Clicks secondary row */}
+            <div className="grid grid-cols-2 gap-4">
+              <Card className="rounded-3xl border-none shadow-sm p-5 bg-white flex items-center gap-4">
+                <div className="h-10 w-10 rounded-xl flex items-center justify-center bg-purple-50 text-purple-600 shrink-0">
+                  <Users className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Referrals</p>
+                  <h3 className="text-xl font-extrabold text-primary">{stats?.totalReferrals || 0}</h3>
+                </div>
+              </Card>
+              <Card className="rounded-3xl border-none shadow-sm p-5 bg-white flex items-center gap-4">
+                <div className="h-10 w-10 rounded-xl flex items-center justify-center bg-orange-50 text-orange-500 shrink-0">
+                  <TrendingUp className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Total Clicks</p>
+                  <h3 className="text-xl font-extrabold text-primary">{stats?.totalClicks || 0}</h3>
+                </div>
+              </Card>
+            </div>
+
           </div>
+          {/* ── End Stats Section ── */}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-8">
-
               <Card className="rounded-[2rem] border-none shadow-sm bg-white p-8">
                 <h3 className="text-xl font-headline font-extrabold text-primary mb-6 flex items-center gap-2">
                   <LinkIcon className="h-5 w-5" /> Your Referral Link
                 </h3>
                 <div className="flex gap-2">
                   <div className="flex-grow p-4 bg-muted rounded-2xl font-mono text-sm overflow-hidden truncate">
-                    {typeof window !== 'undefined' ? `${window.location.origin}/?ref=${user?.uid}` : ''}
+                    {typeof window !== "undefined" ? `${window.location.origin}/?ref=${user?.uid}` : ""}
                   </div>
                   <Button onClick={handleCopy} size="icon" className="h-auto w-14 rounded-2xl">
                     <Copy className="h-5 w-5" />
@@ -704,17 +844,13 @@ export default function AffiliateDashboard() {
                           </td>
                           <td className="p-6 font-extrabold">₹{c.commissionAmount.toLocaleString()}</td>
                           <td className="p-6 text-sm text-muted-foreground">
-                            {c.createdAt?.seconds 
-                              ? format(new Date(c.createdAt.seconds * 1000), 'MMM d, yyyy') 
-                              : 'Recent'}
+                            {c.createdAt?.seconds
+                              ? format(new Date(c.createdAt.seconds * 1000), "MMM d, yyyy")
+                              : "Recent"}
                           </td>
                           <td className="p-6">
-                            <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${
-                              c.status === 'paid' 
-                                ? 'bg-emerald-100 text-emerald-700' 
-                                : 'bg-blue-100 text-blue-700'
-                            }`}>
-                              {c.status.replace('"', '').replace('"', '')}
+                            <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${getStatusClass(c.status)}`}>
+                              {c.status}
                             </span>
                           </td>
                         </tr>
@@ -730,6 +866,45 @@ export default function AffiliateDashboard() {
                   </table>
                 </Card>
               </div>
+
+              <div className="space-y-4">
+                <h3 className="text-xl font-headline font-extrabold text-primary">Referral Earnings History</h3>
+                <Card className="rounded-[2rem] border-none shadow-sm bg-white overflow-hidden">
+                  {(!referralEarnings || referralEarnings.length === 0) ? (
+                    <div className="p-20 text-center text-muted-foreground italic">
+                      No referral earnings yet.
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-muted">
+                      {referralEarnings.map((c) => (
+                        <div
+                          key={c.id}
+                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-5 hover:bg-accent/30 transition-colors"
+                        >
+                          <div className="space-y-1">
+                            <p className="font-mono text-xs font-bold text-primary">
+                              #{c.orderId?.substring(0, 10) || "—"}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {c.createdAt?.seconds
+                                ? format(new Date(c.createdAt.seconds * 1000), "MMM d, yyyy")
+                                : "Recent"}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <p className="text-lg font-extrabold text-primary">
+                              ₹{(c.commissionAmount || 0).toLocaleString()}
+                            </p>
+                            <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${getStatusClass(c.status)}`}>
+                              {c.status || "pending"}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+              </div>
             </div>
 
             <div className="space-y-6">
@@ -738,19 +913,55 @@ export default function AffiliateDashboard() {
                 <div className="space-y-6">
                   <div>
                     <p className="text-xs text-white/60 uppercase font-bold tracking-widest mb-1">Withdrawable</p>
-                    <h4 className="text-4xl font-extrabold">₹{balance.toLocaleString()}</h4>
+                    <h4 className="text-4xl font-extrabold">
+                      {earnings === null ? "Loading..." : `₹${earnings.available.toLocaleString()}`}
+                    </h4>
                   </div>
                   <div className="pt-6 border-t border-white/10 space-y-4">
                     <p className="text-xs text-white/70 italic">Minimum withdrawal amount is ₹500.</p>
                     <Link href="/affiliate/payouts" className="block">
-                      <Button 
-                        disabled={balance < 500} 
+                      <Button
+                        disabled={earnings === null || earnings.available < 500}
                         className="w-full h-12 rounded-full bg-white text-primary hover:bg-emerald-50 font-bold"
                       >
                         Request Payout
                       </Button>
                     </Link>
                   </div>
+                </div>
+              </Card>
+
+              <Card className="rounded-[2rem] border-none shadow-sm bg-white p-8">
+                <h3 className="text-xl font-headline font-extrabold text-primary mb-6 flex items-center gap-2">
+                  <Landmark className="h-5 w-5" /> Payout History
+                </h3>
+                <div className="space-y-3">
+                  {(!payoutHistory || payoutHistory.length === 0) ? (
+                    <p className="text-sm text-muted-foreground italic text-center py-6">
+                      No payout requests yet.
+                    </p>
+                  ) : (
+                    payoutHistory.map((payout) => (
+                      <div
+                        key={payout.id}
+                        className="flex items-center justify-between p-4 rounded-2xl bg-muted/30 hover:bg-muted/50 transition-colors"
+                      >
+                        <div className="space-y-1">
+                          <p className="text-lg font-extrabold text-primary">
+                            ₹{(payout.amount || 0).toLocaleString()}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {payout.requestedAt?.seconds
+                              ? format(new Date(payout.requestedAt.seconds * 1000), "MMM d, yyyy")
+                              : "—"}
+                          </p>
+                        </div>
+                        <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${getStatusClass(payout.status)}`}>
+                          {payout.status || "pending"}
+                        </span>
+                      </div>
+                    ))
+                  )}
                 </div>
               </Card>
             </div>

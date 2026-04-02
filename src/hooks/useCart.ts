@@ -1,29 +1,18 @@
 "use client";
 
-/**
- * useCart — Centralized persistent cart hook
- *
- * Guest  → localStorage only
- * Login  → mergeGuestCart() runs once, then Firestore only
- * Logout → stop listener, back to localStorage
- * Real-time → onSnapshot syncs across tabs/devices for logged-in users
- *
- * FIXES:
- * - updateQty/removeFromCart now read fresh localStorage (no stale closure)
- * - Optimistic UI update for guest users (instant feedback)
- * - removeFromCart guest path fixed to update state immediately
- */
-
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
   collection, doc, setDoc, deleteDoc, onSnapshot,
   getDocs, writeBatch, serverTimestamp, getFirestore,
 } from "firebase/firestore";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
+// ✅ FIX: Import lsGetCart/lsSetCart/lsClearCart from cartStorage instead of
+// re-implementing normalization inline. cartStorage.lsReadCart already handles
+// legacy { plantId, productId, qty } → canonical { id, quantity } normalization.
+import { lsReadCart as lsGetCart, lsSetCart, lsClearCart, CART_KEY as LS_KEY } from "@/lib/cartStorage";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const LS_KEY        = "plantshop_cart";
-const LS_MERGED_KEY = "plantshop_cart_merged";
+const MERGE_FLAG_PREFIX = "plantshop_cart_merged_v1";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface CartItem {
@@ -31,51 +20,91 @@ export interface CartItem {
   quantity: number;
 }
 
-// ── localStorage helpers ──────────────────────────────────────────────────────
-export function lsGetCart(): CartItem[] {
-  try {
-    const raw = JSON.parse(localStorage.getItem(LS_KEY) || "[]");
-    return raw.map((item: any) => ({
-      id:       item.id || item.productId || item.plantId,
-      quantity: item.quantity || 1,
-    })).filter((i: CartItem) => !!i.id);
-  } catch { return []; }
+// ── session merge flag helpers ────────────────────────────────────────────────
+function mergeFlagKey(uid: string) { return `${MERGE_FLAG_PREFIX}:${uid}`; }
+function hasMergedThisSession(uid: string): boolean {
+  try { return sessionStorage.getItem(mergeFlagKey(uid)) === "1"; } catch { return false; }
 }
-
-export function lsSetCart(items: CartItem[]) {
-  try {
-    localStorage.setItem(LS_KEY, JSON.stringify(items));
-    window.dispatchEvent(new Event("cart-updated"));
-  } catch { /* ignore */ }
+function setMergedThisSession(uid: string) {
+  try { sessionStorage.setItem(mergeFlagKey(uid), "1"); } catch { /* ignore */ }
 }
-
-export function lsClearCart() {
-  try {
-    localStorage.removeItem(LS_KEY);
-    window.dispatchEvent(new Event("cart-updated"));
-  } catch { /* ignore */ }
+function clearMergedThisSession(uid: string) {
+  try { sessionStorage.removeItem(mergeFlagKey(uid)); } catch { /* ignore */ }
 }
 
 // ── Firestore path helpers ────────────────────────────────────────────────────
-function cartCol(db: any, uid: string) {
-  return collection(db, "users", uid, "cart");
-}
-function cartDoc(db: any, uid: string, productId: string) {
-  return doc(db, "users", uid, "cart", productId);
-}
+function cartCol(db: any, uid: string) { return collection(db, "users", uid, "cart"); }
+function cartDoc(db: any, uid: string, productId: string) { return doc(db, "users", uid, "cart", productId); }
 
 // ── Main Hook ─────────────────────────────────────────────────────────────────
 export function useCart() {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [userId,    setUserId]    = useState<string | null>(null);
-  const [db,        setDb]        = useState<any>(null);
-  const unsubRef                  = useRef<(() => void) | null>(null);
-  const mergedRef                 = useRef(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [db, setDb] = useState<any>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
 
-  // Keep a ref of cartItems so callbacks always have the latest value
-  // without needing cartItems in their dependency arrays (fixes stale closure)
+  const unsubRef = useRef<(() => void) | null>(null);
   const cartItemsRef = useRef<CartItem[]>([]);
+  const mergeInFlightRef = useRef<Promise<void> | null>(null);
+  const lastUidRef = useRef<string | null>(null);
+
   useEffect(() => { cartItemsRef.current = cartItems; }, [cartItems]);
+
+  const stopListener = useCallback(() => {
+    unsubRef.current?.();
+    unsubRef.current = null;
+  }, []);
+
+  const startListener = useCallback((firestoreDb: any, uid: string) => {
+    stopListener();
+    const unsub = onSnapshot(cartCol(firestoreDb, uid), (snap) => {
+      // ✅ Reads doc ID (d.id) as the product id — correct, d.data().productId is NOT read
+      const items: CartItem[] = snap.docs.map((d) => ({
+        id: d.id,
+        quantity: d.data().quantity || 1,
+      }));
+      setCartItems(items);
+    });
+    unsubRef.current = unsub;
+  }, [stopListener]);
+
+  const mergeGuestCart = useCallback(async (firestoreDb: any, uid: string) => {
+    // ✅ FIX: lsGetCart() = lsReadCart from cartStorage — already normalized
+    const guestItems = lsGetCart();
+    if (guestItems.length === 0) { setMergedThisSession(uid); return; }
+
+    try {
+      const snap = await getDocs(cartCol(firestoreDb, uid));
+      const existing: Record<string, number> = {};
+      snap.docs.forEach((d) => { existing[d.id] = d.data().quantity || 1; });
+
+      lsClearCart(); // clear guest cart before writing merged result
+
+      const batch = writeBatch(firestoreDb);
+      guestItems.forEach(({ id, quantity }) => {
+        if (!id) return;
+        batch.set(
+          cartDoc(firestoreDb, uid, id),
+          {
+            // ✅ FIX: was { productId: id } — renamed to { id } to match
+            //    canonical CartItem shape. The Firestore doc key (d.id) is
+            //    always used for lookups, but the body field should be consistent.
+            id,
+            quantity: (existing[id] || 0) + quantity,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      });
+
+      await batch.commit();
+      setMergedThisSession(uid);
+    } catch (err) {
+      console.error("Cart merge error:", err);
+      lsSetCart(guestItems); // rollback guest cart
+      throw err;
+    }
+  }, []);
 
   // ── Init Firebase + Auth listener ──────────────────────────────────────────
   useEffect(() => {
@@ -85,26 +114,45 @@ export function useCart() {
       try {
         const { app } = await import("@/lib/firebase");
         const firestoreDb = getFirestore(app);
-        const auth        = getAuth(app);
+        const auth = getAuth(app);
         setDb(firestoreDb);
 
         unsubAuth = onAuthStateChanged(auth, async (user) => {
           if (user) {
-            setUserId(user.uid);
-            if (!mergedRef.current) {
-              mergedRef.current = true;
-              await mergeGuestCart(firestoreDb, user.uid);
+            const uid = user.uid;
+            setUserId(uid);
+
+            if (lastUidRef.current && lastUidRef.current !== uid) {
+              mergeInFlightRef.current = null;
             }
-            startListener(firestoreDb, user.uid);
+            lastUidRef.current = uid;
+
+            if (!hasMergedThisSession(uid)) {
+              if (!mergeInFlightRef.current) {
+                mergeInFlightRef.current = mergeGuestCart(firestoreDb, uid)
+                  .catch(() => { /* mergeGuestCart already logs */ })
+                  .finally(() => { mergeInFlightRef.current = null; });
+              }
+              await mergeInFlightRef.current;
+            }
+
+            startListener(firestoreDb, uid);
           } else {
             stopListener();
-            mergedRef.current = false;
+            if (lastUidRef.current) clearMergedThisSession(lastUidRef.current);
+            lastUidRef.current = null;
+            mergeInFlightRef.current = null;
             setUserId(null);
+            // ✅ FIX: was inline lsGetCart with manual normalization — now uses
+            //    cartStorage.lsReadCart which already normalizes legacy formats
             setCartItems(lsGetCart());
           }
+
+          setIsAuthReady(true);
         });
       } catch (err) {
         console.error("useCart init error:", err);
+        setIsAuthReady(true);
       }
     })();
 
@@ -112,112 +160,76 @@ export function useCart() {
       unsubAuth?.();
       stopListener();
     };
-  }, []);
+  }, [mergeGuestCart, startListener, stopListener]);
 
   // ── Listen to localStorage events (guest users only) ──────────────────────
   useEffect(() => {
-    if (userId) return;
+    if (!isAuthReady || userId) return;
+    // ✅ FIX: uses lsGetCart from cartStorage (already normalized)
     const handler = () => setCartItems(lsGetCart());
     window.addEventListener("cart-updated", handler);
     setCartItems(lsGetCart());
     return () => window.removeEventListener("cart-updated", handler);
-  }, [userId]);
-
-  // ── Real-time Firestore listener ──────────────────────────────────────────
-  const startListener = useCallback((firestoreDb: any, uid: string) => {
-    stopListener();
-    const unsub = onSnapshot(cartCol(firestoreDb, uid), (snap) => {
-      const items: CartItem[] = snap.docs.map((d) => ({
-        id:       d.id,
-        quantity: d.data().quantity || 1,
-      }));
-      setCartItems(items);
-      lsSetCart(items);
-    });
-    unsubRef.current = unsub;
-  }, []);
-
-  const stopListener = useCallback(() => {
-    unsubRef.current?.();
-    unsubRef.current = null;
-  }, []);
-
-  // ── mergeGuestCart ────────────────────────────────────────────────────────
-  const mergeGuestCart = useCallback(async (firestoreDb: any, uid: string) => {
-    const guestItems = lsGetCart();
-    if (guestItems.length === 0) return;
-
-    try {
-      const snap     = await getDocs(cartCol(firestoreDb, uid));
-      const existing: Record<string, number> = {};
-      snap.docs.forEach((d) => { existing[d.id] = d.data().quantity || 1; });
-
-      const batch = writeBatch(firestoreDb);
-      guestItems.forEach(({ id, quantity }) => {
-        if (!id) return;
-        batch.set(cartDoc(firestoreDb, uid, id), {
-          productId: id,
-          quantity:  (existing[id] || 0) + quantity,
-          updatedAt: serverTimestamp(),
-        }, { merge: true });
-      });
-      await batch.commit();
-      lsClearCart();
-    } catch (err) {
-      console.error("Cart merge error:", err);
-    }
-  }, []);
+  }, [userId, isAuthReady]);
 
   // ── addToCart ─────────────────────────────────────────────────────────────
   const addToCart = useCallback(async (productId: string, quantity = 1) => {
     if (userId && db) {
       try {
-        // Use ref to avoid stale closure
         const existing = cartItemsRef.current.find((i) => i.id === productId);
-        await setDoc(cartDoc(db, userId, productId), {
-          productId,
-          quantity:  (existing?.quantity || 0) + quantity,
-          updatedAt: serverTimestamp(),
-        }, { merge: true });
+        await setDoc(
+          cartDoc(db, userId, productId),
+          {
+            // ✅ FIX: was { productId, quantity, updatedAt } — renamed field to
+            //    { id } so Firestore doc body matches CartItem { id, quantity }.
+            //    The doc key (d.id) is used for all reads, but body must stay
+            //    consistent so any direct Firestore query returns the right shape.
+            id: productId,
+            quantity: (existing?.quantity || 0) + quantity,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
       } catch (err) {
         console.error("addToCart Firestore error:", err);
       }
     } else {
-      // ── Optimistic update for guest ──────────────────────────────────────
-      const cart = lsGetCart(); // always read fresh from localStorage
-      const idx  = cart.findIndex((i) => i.id === productId);
-      if (idx !== -1) {
-        cart[idx].quantity += quantity;
-      } else {
-        cart.push({ id: productId, quantity });
-      }
+      // ✅ FIX: uses lsGetCart/lsSetCart from cartStorage
+      const cart = lsGetCart();
+      const idx = cart.findIndex((i) => i.id === productId);
+      if (idx !== -1) { cart[idx].quantity += quantity; }
+      else { cart.push({ id: productId, quantity }); }
       lsSetCart(cart);
-      setCartItems([...cart]); // immediate UI update
+      setCartItems([...cart]);
     }
   }, [userId, db]);
 
   // ── updateQty ─────────────────────────────────────────────────────────────
   const updateQty = useCallback(async (productId: string, delta: number) => {
     if (userId && db) {
-      // Use ref for latest quantity without stale closure
       const existing = cartItemsRef.current.find((i) => i.id === productId);
-      const newQty   = Math.max(1, (existing?.quantity || 1) + delta);
+      const newQty = Math.max(1, (existing?.quantity || 1) + delta);
       try {
-        await setDoc(cartDoc(db, userId, productId), {
-          productId, quantity: newQty, updatedAt: serverTimestamp(),
-        }, { merge: true });
-        // onSnapshot will update state automatically
+        await setDoc(
+          cartDoc(db, userId, productId),
+          {
+            // ✅ FIX: was { productId, quantity, updatedAt } — renamed to { id }
+            id: productId,
+            quantity: newQty,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
       } catch (err) {
         console.error("updateQty Firestore error:", err);
       }
     } else {
-      // ── Optimistic update for guest ──────────────────────────────────────
-      const cart = lsGetCart(); // fresh read — no stale closure
-      const idx  = cart.findIndex((i) => i.id === productId);
+      const cart = lsGetCart();
+      const idx = cart.findIndex((i) => i.id === productId);
       if (idx !== -1) {
         cart[idx].quantity = Math.max(1, cart[idx].quantity + delta);
-        lsSetCart(cart);
-        setCartItems([...cart]); // immediate UI update
+        lsSetCart(cart); // ✅ uses cartStorage writer (dedupes, dispatches event)
+        setCartItems([...cart]);
       }
     }
   }, [userId, db]);
@@ -227,15 +239,13 @@ export function useCart() {
     if (userId && db) {
       try {
         await deleteDoc(cartDoc(db, userId, productId));
-        // onSnapshot will update state automatically
       } catch (err) {
         console.error("removeFromCart Firestore error:", err);
       }
     } else {
-      // ── Optimistic update for guest ──────────────────────────────────────
-      const cart = lsGetCart().filter((i) => i.id !== productId); // fresh read
-      lsSetCart(cart);
-      setCartItems([...cart]); // immediate UI update
+      const cart = lsGetCart().filter((i) => i.id !== productId);
+      lsSetCart(cart); // ✅ uses cartStorage writer
+      setCartItems([...cart]);
     }
   }, [userId, db]);
 
@@ -243,7 +253,7 @@ export function useCart() {
   const clearCart = useCallback(async () => {
     if (userId && db) {
       try {
-        const snap  = await getDocs(cartCol(db, userId));
+        const snap = await getDocs(cartCol(db, userId));
         const batch = writeBatch(db);
         snap.docs.forEach((d) => batch.delete(d.ref));
         await batch.commit();
@@ -251,19 +261,12 @@ export function useCart() {
         console.error("clearCart Firestore error:", err);
       }
     } else {
-      lsClearCart();
-      setCartItems([]); // immediate UI update
+      lsClearCart(); // ✅ uses cartStorage (removes key, dispatches event)
+      setCartItems([]);
     }
   }, [userId, db]);
 
   const totalItems = cartItems.reduce((acc, i) => acc + i.quantity, 0);
 
-  return {
-    cartItems,
-    totalItems,
-    addToCart,
-    updateQty,
-    removeFromCart,
-    clearCart,
-  };
+  return { cartItems, totalItems, addToCart, updateQty, removeFromCart, clearCart };
 }
